@@ -1,0 +1,23 @@
+[versions]
+agp = "9.1.0"
+kotlin = "2.3.10"
+kotlinx-coroutines = "1.10.2"
+smali = "3.0.9"
+jadx = "1.5.5"
+logback = "1.5.32"
+shadow = "9.4.1"
+
+[libraries]
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+smali-dexlib2 = { module = "com.android.tools.smali:smali-dexlib2", version.ref = "smali" }
+smali-baksmali = { module = "com.android.tools.smali:smali-baksmali", version.ref = "smali" }
+jadx-core = { module = "io.github.skylot:jadx-core", version.ref = "jadx" }
+jadx-dex-input = { module = "io.github.skylot:jadx-dex-input", version.ref = "jadx" }
+jadx-kotlin-metadata = { module = "io.github.skylot:jadx-kotlin-metadata", version.ref = "jadx" }
+logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+
+[plugins]
+android-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
