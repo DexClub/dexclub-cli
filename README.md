@@ -57,11 +57,19 @@
 
 ## CLI 输入约束
 
+- 帮助入口
+  - `dexclub-cli --help`
+  - `dexclub-cli help <命令>`
+  - `dexclub-cli <命令> --help`
+- 导出命令
+  - `export-dex`
+  - `export-smali`
+  - `export-java`
 - `inspect`、`search-class`、`search-string`
   - 支持重复传入 `--input`
   - 单输入时支持 `apk` 或 `dex`
   - 多输入时当前仅支持多个 `dex`，不支持混合传入 `apk`
-- `extract-class-dex`、`render-smali`、`decompile-java`
+- `export-dex`、`export-smali`、`export-java`
   - 当前仍只支持单个 `dex` 输入
   - 导出请求必须显式指定来源 dex
 
