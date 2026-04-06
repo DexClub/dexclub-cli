@@ -239,6 +239,7 @@
 - 已明确 CLI 多输入边界：单输入支持 `apk|dex`，多输入当前仅支持多个 `dex`；`export-*` 仍保持单个 `dex` 输入
 - 已补齐多输入结果来源映射：搜索结果在多输入模式下可返回对应 `sourceDexPath`
 - 已同步更新 CLI 帮助文案与 README 中的输入约束说明
+- 已把导出相关 CLI 命令重命名为 `extract-class-dex`、`render-smali`、`decompile-java`，不保留旧命令别名
 - 已执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin`，验证通过
 - 已执行 `./gradlew :core:jvmTest`，验证通过
 - 已执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin :cli:fatJar`，验证通过

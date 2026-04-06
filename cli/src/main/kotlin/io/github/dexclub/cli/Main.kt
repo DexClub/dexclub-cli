@@ -19,9 +19,9 @@ fun main(args: Array<String>) {
     runCatching {
         when (val command = args.first()) {
             "inspect" -> runInspect(parseOptions(args.drop(1)))
-            "export-dex" -> runExportDex(parseOptions(args.drop(1)))
-            "export-smali" -> runExportSmali(parseOptions(args.drop(1)))
-            "export-java" -> runExportJava(parseOptions(args.drop(1)))
+            "extract-class-dex" -> runExtractClassDex(parseOptions(args.drop(1)))
+            "render-smali" -> runRenderSmali(parseOptions(args.drop(1)))
+            "decompile-java" -> runDecompileJava(parseOptions(args.drop(1)))
             "search-class" -> runSearchClass(parseOptions(args.drop(1)))
             "search-string" -> runSearchString(parseOptions(args.drop(1)))
             else -> error("不支持的命令: $command")
@@ -66,7 +66,7 @@ private fun runInspect(options: Map<String, List<String>>) {
     }
 }
 
-private fun runExportDex(options: Map<String, List<String>>) = runBlocking {
+private fun runExtractClassDex(options: Map<String, List<String>>) = runBlocking {
     val input = requireDexInput(options)
     val className = requireOption(options, "class")
     val output = requireOption(options, "output")
@@ -87,7 +87,7 @@ private fun runExportDex(options: Map<String, List<String>>) = runBlocking {
     }
 }
 
-private fun runExportSmali(options: Map<String, List<String>>) = runBlocking {
+private fun runRenderSmali(options: Map<String, List<String>>) = runBlocking {
     val input = requireDexInput(options)
     val className = requireOption(options, "class")
     val output = requireOption(options, "output")
@@ -110,7 +110,7 @@ private fun runExportSmali(options: Map<String, List<String>>) = runBlocking {
     }
 }
 
-private fun runExportJava(options: Map<String, List<String>>) = runBlocking {
+private fun runDecompileJava(options: Map<String, List<String>>) = runBlocking {
     val input = requireDexInput(options)
     val className = requireOption(options, "class")
     val output = requireOption(options, "output")
@@ -265,15 +265,15 @@ private fun printUsage() {
         用法:
           运行要求：Java 21
           inspect --input <apk|dex> [--input <dex> ...]
-          export-dex --input <dex> --class <类名> --output <输出 dex>
-          export-smali --input <dex> --class <类名> --output <输出 smali> [--auto-unicode-decode true|false]
-          export-java --input <dex> --class <类名> --output <输出 java>
+          extract-class-dex --input <dex> --class <类名> --output <输出 dex>
+          render-smali --input <dex> --class <类名> --output <输出 smali> [--auto-unicode-decode true|false]
+          decompile-java --input <dex> --class <类名> --output <输出 java>
           search-class --input <apk|dex> [--input <dex> ...] --keyword <关键词> [--limit 100]
           search-string --input <apk|dex> [--input <dex> ...] --keyword <关键词> [--limit 100]
 
         说明:
           inspect/search 在多输入模式下仅支持多个 dex 文件，不支持混合传入 apk
-          export-* 当前仍只支持单个 dex 输入
+          extract-class-dex、render-smali、decompile-java 当前仍只支持单个 dex 输入
         """.trimIndent()
     )
 }
