@@ -12,6 +12,7 @@ import io.github.dexclub.core.request.DexExportRequest
 import io.github.dexclub.core.request.JavaExportRequest
 import io.github.dexclub.core.request.SmaliExportRequest
 import io.github.dexclub.core.runtime.DexKitRuntime
+import io.github.dexclub.core.search.DexKitSearchBackend
 import io.github.dexclub.core.search.DexSearchService
 import io.github.dexclub.core.session.DexSessionLoader
 import io.github.dexclub.core.source.DexIndexedClass
@@ -59,9 +60,14 @@ actual class DexEngine actual constructor(
             readDexNumProvider = ::readDexNum,
         )
     }
+    private val dexKitSearchBackend by lazy(LazyThreadSafetyMode.NONE) {
+        DexKitSearchBackend(
+            bridgeProvider = ::getOrCreateBridge,
+        )
+    }
     private val dexSearchService by lazy(LazyThreadSafetyMode.NONE) {
         DexSearchService(
-            bridgeProvider = ::getOrCreateBridge,
+            backend = dexKitSearchBackend,
             sourceDexPathProvider = dexArchiveInspector::singleDexSourcePath,
         )
     }
@@ -98,10 +104,18 @@ actual class DexEngine actual constructor(
         return dexSearchService.searchMethodHitsByString(keyword)
     }
 
+    @Deprecated(
+        message = "请改用 searchClassHitsByName",
+        replaceWith = ReplaceWith("searchClassHitsByName(keyword)"),
+    )
     actual fun searchClassesByName(keyword: String): List<ClassData> {
         return dexSearchService.searchClassesByName(keyword)
     }
 
+    @Deprecated(
+        message = "请改用 searchMethodHitsByString",
+        replaceWith = ReplaceWith("searchMethodHitsByString(keyword)"),
+    )
     actual fun searchMethodsByString(keyword: String): List<MethodData> {
         return dexSearchService.searchMethodsByString(keyword)
     }
@@ -124,6 +138,12 @@ actual class DexEngine actual constructor(
         return dexExportService.exportJava(request)
     }
 
+    @Deprecated(
+        message = "请改用 exportDex",
+        replaceWith = ReplaceWith(
+            "exportDex(DexExportRequest(className = className, sourceDexPath = dexPath, outputPath = outputPath))",
+        ),
+    )
     actual suspend fun exportSingleDex(
         className: String,
         dexPath: String,
@@ -136,6 +156,12 @@ actual class DexEngine actual constructor(
         )
     }
 
+    @Deprecated(
+        message = "请改用 exportSmali",
+        replaceWith = ReplaceWith(
+            "exportSmali(SmaliExportRequest(className = className, sourceDexPath = dexPath, outputPath = outputPath))",
+        ),
+    )
     actual suspend fun exportSingleSmali(
         autoUnicodeDecode: Boolean,
         className: String,
@@ -150,6 +176,12 @@ actual class DexEngine actual constructor(
         )
     }
 
+    @Deprecated(
+        message = "请改用 exportJava",
+        replaceWith = ReplaceWith(
+            "exportJava(JavaExportRequest(className = className, sourceDexPath = dexPath, outputPath = outputPath))",
+        ),
+    )
     actual suspend fun exportSingleJavaSource(
         className: String,
         dexPath: String,

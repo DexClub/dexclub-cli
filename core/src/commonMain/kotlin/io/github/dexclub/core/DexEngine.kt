@@ -33,8 +33,16 @@ expect class DexEngine(
 
     fun searchMethodHitsByString(keyword: String): List<DexMethodHit>
 
+    @Deprecated(
+        message = "请改用 searchClassHitsByName",
+        replaceWith = ReplaceWith("searchClassHitsByName(keyword)"),
+    )
     fun searchClassesByName(keyword: String): List<ClassData>
 
+    @Deprecated(
+        message = "请改用 searchMethodHitsByString",
+        replaceWith = ReplaceWith("searchMethodHitsByString(keyword)"),
+    )
     fun searchMethodsByString(keyword: String): List<MethodData>
 
     suspend fun exportDex(
@@ -49,12 +57,24 @@ expect class DexEngine(
         request: JavaExportRequest,
     ): DexExportResult
 
+    @Deprecated(
+        message = "请改用 exportDex",
+        replaceWith = ReplaceWith(
+            "exportDex(DexExportRequest(className = className, sourceDexPath = dexPath, outputPath = outputPath))",
+        ),
+    )
     suspend fun exportSingleDex(
         className: String,
         dexPath: String,
         outputPath: String,
     ): String
 
+    @Deprecated(
+        message = "请改用 exportSmali",
+        replaceWith = ReplaceWith(
+            "exportSmali(SmaliExportRequest(className = className, sourceDexPath = dexPath, outputPath = outputPath))",
+        ),
+    )
     suspend fun exportSingleSmali(
         autoUnicodeDecode: Boolean,
         className: String,
@@ -62,6 +82,12 @@ expect class DexEngine(
         outputPath: String,
     ): String
 
+    @Deprecated(
+        message = "请改用 exportJava",
+        replaceWith = ReplaceWith(
+            "exportJava(JavaExportRequest(className = className, sourceDexPath = dexPath, outputPath = outputPath))",
+        ),
+    )
     suspend fun exportSingleJavaSource(
         className: String,
         dexPath: String,

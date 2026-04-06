@@ -232,6 +232,8 @@
 - 已完成 `P-01`：把 `DexExportService` 进一步拆分为 dex 导出、smali 渲染、jadx 反编译三个内部服务
 - 已确认 `P-02` 结论：`core` 必须继续保留 KMP 结构，不再评估 JVM-only 回收方案
 - 已开始 CLI 迁移：`cli` 已切到 `core` 自有 model/request 新接口，停止依赖 `DexEngine` 的旧透传搜索与导出方法
+- 已进一步收敛搜索边界：新增 `DexKitSearchBackend`，由其承接 `DexKit` 查询 DSL，`DexSearchService` 仅负责搜索语义与结果映射
+- 已开始收敛旧兼容接口：`DexEngine` 中旧搜索/导出透传方法已标记为废弃，仓库内测试主体已切到新 API
 - 已执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin`，验证通过
 - 已执行 `./gradlew :core:jvmTest`，验证通过
 - 已执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin :cli:fatJar`，验证通过
@@ -327,8 +329,18 @@
 - 说明：`cli` 已切换为使用 `DexArchiveInfo`、`DexClassHit`、`DexMethodHit`、`DexExportRequest`、`SmaliExportRequest`、`JavaExportRequest` 等 `core` 自有接口，停止依赖 `DexEngine` 的旧透传搜索与导出方法，同时保持现有输出格式不变。
 - 影响范围：`cli/src/main/kotlin/io/github/dexclub/cli/Main.kt`
 - 完成定义：`cli` 停止直接消费旧透传型搜索/导出接口，并通过 `core` 自有 model/request 完成同等行为。
-- 下一步：后续可评估是否删除 `DexEngine` 中已不再被 `cli` 使用的旧兼容方法，但这需要先确认外部调用方与兼容策略。
+- 下一步：后续可继续收敛 `DexEngine` 中已不再被仓库内调用使用的旧兼容方法，当前先通过废弃标记缩小使用面。
 - 验证：已执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin :cli:fatJar`，通过。
+
+### T-06 收敛搜索后端与旧兼容接口使用面
+
+- 状态：`已完成`
+- 更新时间：`2026-04-06`
+- 说明：已新增 `DexKitSearchBackend` 承接 `DexKit` 查询 DSL，`DexSearchService` 不再直接依赖 `DexKitBridge` 查询细节；同时将 `DexEngine` 中旧搜索/导出透传方法标记为废弃，并把仓库内测试主体切换到新 API。
+- 影响范围：`core/src/jvmMain/kotlin/io/github/dexclub/core/search/`、`core/src/commonMain/kotlin/io/github/dexclub/core/DexEngine.kt`、`core/src/jvmMain/kotlin/io/github/dexclub/core/DexEngine.jvm.kt`、`core/src/jvmTest/`
+- 完成定义：第三方搜索 DSL 已进一步下沉，仓库内不再继续放大旧透传搜索接口的使用面，旧兼容导出/搜索接口已明确进入退场路径。
+- 下一步：如果后续决定进入阶段 5，可在确认外部兼容策略后再删除这些旧接口。
+- 验证：已执行 `./gradlew :core:compileKotlinJvm :core:jvmTest :cli:compileKotlin`，通过。
 
 ### D-01 整理 `core` 重构方案文档
 

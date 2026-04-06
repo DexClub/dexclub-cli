@@ -32,19 +32,13 @@ class DexEngineJvmTest {
     }
 
     @Test
-    fun `search should return old and new result models`() {
+    fun `search should return new result models`() {
         val fixture = TestDexFixture.generated()
 
         DexEngine(listOf(fixture.dexFile.absolutePath)).use { engine ->
-            val classResults = engine.searchClassesByName("SampleSearchTarget")
-            assertTrue(classResults.any { it.name == fixture.className })
-
             val classHits = engine.searchClassHitsByName("SampleSearchTarget")
             assertTrue(classHits.any { it.name == fixture.className })
             assertTrue(classHits.all { it.sourceDexPath == fixture.dexFile.absolutePath })
-
-            val methodResults = engine.searchMethodsByString(fixture.needle)
-            assertTrue(methodResults.any { it.className == fixture.className })
 
             val methodHits = engine.searchMethodHitsByString(fixture.needle)
             assertTrue(methodHits.any { it.className == fixture.className })
