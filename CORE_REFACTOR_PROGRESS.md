@@ -230,6 +230,7 @@
 - 已完成 `T-04`：`DexEngine` 当前主要负责组合、兼容入口与生命周期管理，输入分析、搜索、导出能力均已下沉到内部服务
 - 已提交 `T-04`，提交号：`3286ccc`
 - 已完成 `P-01`：把 `DexExportService` 进一步拆分为 dex 导出、smali 渲染、jadx 反编译三个内部服务
+- 已确认 `P-02` 结论：`core` 必须继续保留 KMP 结构，不再评估 JVM-only 回收方案
 - 已执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin`，验证通过
 - 已执行 `./gradlew :core:jvmTest`，验证通过
 
@@ -247,13 +248,13 @@
 
 ### P-02 评估 `core` 是否继续保留 KMP
 
-- 状态：`已计划`
+- 状态：`已完成`
 - 更新时间：`2026-04-06`
-- 说明：待 `core` 的公共 model/config 边界稳定后，再判断是否继续保留当前 `expect/actual` 结构。
+- 说明：已确认 `core` 必须继续保留当前 KMP 结构，这一项不再继续评估 JVM-only 回收方案。
 - 影响范围：`core/src/commonMain/`、`core/src/jvmMain/`、`core/build.gradle.kts`
-- 完成定义：形成明确结论，且文档与代码结构一致；如果保留 KMP，要有明确理由；如果回收 JVM-only，要有迁移方案。
-- 下一步：等阶段 2-4 完成后再评估。
-- 验证：尚未开始。
+- 完成定义：形成明确结论，且文档与代码结构一致。
+- 下一步：后续重构默认以保留 KMP 为前提推进，不再新增“是否回收 JVM-only”的旁路线。
+- 验证：方案文档已同步更新为“必须保留 KMP”。
 
 ## 待开始
 
@@ -306,6 +307,16 @@
 - 完成定义：`DexEngine` 主要承担组合与生命周期管理职责，搜索、导出、输入分析已下沉到更清晰的内部服务。
 - 下一步：进入 `P-01`，继续拆分 `DexExportService` 内部职责，把 dex 导出、smali 渲染、jadx 反编译拆得更清晰。
 - 验证：已执行 `./gradlew :core:compileKotlinJvm :core:jvmTest :cli:compileKotlin`，通过。
+
+### P-02 评估 `core` 是否继续保留 KMP
+
+- 状态：`已完成`
+- 更新时间：`2026-04-06`
+- 说明：已确认 `core` 必须继续保留当前 KMP 结构，这一项不再继续评估 JVM-only 回收方案。
+- 影响范围：`core/src/commonMain/`、`core/src/jvmMain/`、`core/build.gradle.kts`、项目根目录文档
+- 完成定义：形成明确结论，且文档与代码结构一致。
+- 下一步：后续重构默认以保留 KMP 为前提推进，不再新增“是否回收 JVM-only”的旁路线。
+- 验证：`CORE_REFACTOR_PLAN.md` 与本进度文档已同步更新。
 
 ### D-01 整理 `core` 重构方案文档
 

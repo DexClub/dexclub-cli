@@ -10,7 +10,7 @@
 2. 先建立 `core` 自有模型与配置模型
 3. 再拆 `DexEngine`
 4. 最后迁移 `cli`
-5. 公共边界稳定后，再判断是否继续保留 KMP
+5. 在保留 KMP 结构的前提下继续收敛公共边界
 
 这份文档的目标，不是描述一个理想结构，而是给出一条能在当前仓库里逐步落地的重构路径。
 
@@ -34,7 +34,7 @@
 - 让 `core` 对上层暴露稳定、自有的数据模型与配置模型
 - 将搜索、导出、输入分析、会话管理从 `DexEngine` 中拆开
 - 在重构过程中保持 CLI 现有行为不变
-- 为后续继续保留 KMP 或回收为 JVM-only 提供判断基础
+- 在保留 KMP 结构的前提下，为后续非 JVM 消费场景预留稳定边界
 
 ## 非目标
 
@@ -495,19 +495,16 @@ data class DexKitRuntimeConfig(
 - `DexEngine` 开始从“直接干活”转向“转调服务”
 - `cli` 可以分批迁移，不需要一次性改完
 
-## 是否继续保留 KMP
+## 保留 KMP
 
-当前 `core` 的 `expect/actual` 更像“预留了 KMP 形式”，还谈不上真正的平台无关。
+`core` 必须继续保留当前 KMP 结构，这一项不再作为待评估事项。
 
-建议把判断放在中后期，而不是现在就决定：
+后续约束：
 
-- 如果 `commonMain` 最终只剩较薄的接口、model、config，且未来确实有非 JVM 消费场景，那就继续保留 KMP
-- 如果绝大多数有效实现都只能落在 JVM，且没有明确的非 JVM 消费场景，那就可以考虑把 `core` 回收为 JVM-only
-
-当前阶段建议：
-
-- 先不删 KMP 结构
-- 但不要为了保留 KMP 而继续把第三方类型塞进公共 API
+- 保留 `commonMain` / `jvmMain` 的现有结构
+- 继续把稳定的 model、config、request、facade 边界放在 `commonMain`
+- 继续把第三方适配与平台实现细节放在 `jvmMain`
+- 不为了保留 KMP 而把 `DexKitBridge`、`JadxArgs`、`BaksmaliOptions` 这类第三方原生类型暴露到 `commonMain`
 
 ## 风险与注意事项
 
