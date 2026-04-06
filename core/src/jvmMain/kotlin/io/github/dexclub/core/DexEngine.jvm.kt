@@ -16,9 +16,6 @@ import io.github.dexclub.core.search.DexKitSearchBackend
 import io.github.dexclub.core.search.DexSearchService
 import io.github.dexclub.core.session.DexSessionLoader
 import io.github.dexclub.core.source.DexIndexedClass
-import io.github.dexclub.dexkit.DexKitBridge
-import io.github.dexclub.dexkit.result.ClassData
-import io.github.dexclub.dexkit.result.MethodData
 import java.io.File
 
 actual class DexEngine actual constructor(
@@ -57,12 +54,12 @@ actual class DexEngine actual constructor(
             inputFiles = dexFiles,
             dexCountProvider = ::dexCount,
             classCountProvider = ::classCount,
-            readDexNumProvider = ::readDexNum,
+            readDexNumProvider = dexKitRuntime::readDexNum,
         )
     }
     private val dexKitSearchBackend by lazy(LazyThreadSafetyMode.NONE) {
         DexKitSearchBackend(
-            bridgeProvider = ::getOrCreateBridge,
+            bridgeProvider = dexKitRuntime::getOrCreateBridge,
         )
     }
     private val dexSearchService by lazy(LazyThreadSafetyMode.NONE) {
@@ -88,36 +85,12 @@ actual class DexEngine actual constructor(
         return dexSession.classes()
     }
 
-    actual fun getOrCreateBridge(): DexKitBridge? {
-        return dexKitRuntime.getOrCreateBridge()
-    }
-
-    actual fun readDexNum(): Int? {
-        return dexKitRuntime.readDexNum()
-    }
-
     actual fun searchClassHitsByName(keyword: String): List<DexClassHit> {
         return dexSearchService.searchClassHitsByName(keyword)
     }
 
     actual fun searchMethodHitsByString(keyword: String): List<DexMethodHit> {
         return dexSearchService.searchMethodHitsByString(keyword)
-    }
-
-    @Deprecated(
-        message = "请改用 searchClassHitsByName",
-        replaceWith = ReplaceWith("searchClassHitsByName(keyword)"),
-    )
-    actual fun searchClassesByName(keyword: String): List<ClassData> {
-        return dexSearchService.searchClassesByName(keyword)
-    }
-
-    @Deprecated(
-        message = "请改用 searchMethodHitsByString",
-        replaceWith = ReplaceWith("searchMethodHitsByString(keyword)"),
-    )
-    actual fun searchMethodsByString(keyword: String): List<MethodData> {
-        return dexSearchService.searchMethodsByString(keyword)
     }
 
     actual suspend fun exportDex(
@@ -136,62 +109,6 @@ actual class DexEngine actual constructor(
         request: JavaExportRequest,
     ): DexExportResult {
         return dexExportService.exportJava(request)
-    }
-
-    @Deprecated(
-        message = "请改用 exportDex",
-        replaceWith = ReplaceWith(
-            "exportDex(DexExportRequest(className = className, sourceDexPath = dexPath, outputPath = outputPath))",
-        ),
-    )
-    actual suspend fun exportSingleDex(
-        className: String,
-        dexPath: String,
-        outputPath: String,
-    ): String {
-        return dexExportService.exportSingleDex(
-            className = className,
-            dexPath = dexPath,
-            outputPath = outputPath,
-        )
-    }
-
-    @Deprecated(
-        message = "请改用 exportSmali",
-        replaceWith = ReplaceWith(
-            "exportSmali(SmaliExportRequest(className = className, sourceDexPath = dexPath, outputPath = outputPath))",
-        ),
-    )
-    actual suspend fun exportSingleSmali(
-        autoUnicodeDecode: Boolean,
-        className: String,
-        dexPath: String,
-        outputPath: String,
-    ): String {
-        return dexExportService.exportSingleSmali(
-            autoUnicodeDecode = autoUnicodeDecode,
-            className = className,
-            dexPath = dexPath,
-            outputPath = outputPath,
-        )
-    }
-
-    @Deprecated(
-        message = "请改用 exportJava",
-        replaceWith = ReplaceWith(
-            "exportJava(JavaExportRequest(className = className, sourceDexPath = dexPath, outputPath = outputPath))",
-        ),
-    )
-    actual suspend fun exportSingleJavaSource(
-        className: String,
-        dexPath: String,
-        outputPath: String,
-    ): String {
-        return dexExportService.exportSingleJavaSource(
-            className = className,
-            dexPath = dexPath,
-            outputPath = outputPath,
-        )
     }
 
     actual override fun close() {

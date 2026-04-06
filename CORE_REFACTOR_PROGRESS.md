@@ -234,6 +234,7 @@
 - 已开始 CLI 迁移：`cli` 已切到 `core` 自有 model/request 新接口，停止依赖 `DexEngine` 的旧透传搜索与导出方法
 - 已进一步收敛搜索边界：新增 `DexKitSearchBackend`，由其承接 `DexKit` 查询 DSL，`DexSearchService` 仅负责搜索语义与结果映射
 - 已开始收敛旧兼容接口：`DexEngine` 中旧搜索/导出透传方法已标记为废弃，仓库内测试主体已切到新 API
+- 已删除 `DexEngine` 中已不再被仓库内使用的旧透传公开接口，`core` 对外公共边界不再暴露 `DexKitBridge`、`ClassData`、`MethodData`
 - 已执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin`，验证通过
 - 已执行 `./gradlew :core:jvmTest`，验证通过
 - 已执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin :cli:fatJar`，验证通过
@@ -341,6 +342,16 @@
 - 完成定义：第三方搜索 DSL 已进一步下沉，仓库内不再继续放大旧透传搜索接口的使用面，旧兼容导出/搜索接口已明确进入退场路径。
 - 下一步：如果后续决定进入阶段 5，可在确认外部兼容策略后再删除这些旧接口。
 - 验证：已执行 `./gradlew :core:compileKotlinJvm :core:jvmTest :cli:compileKotlin`，通过。
+
+### T-07 删除仓库内已完成迁移后的旧公开接口
+
+- 状态：`已完成`
+- 更新时间：`2026-04-06`
+- 说明：在 `cli` 与仓库内测试均已迁移到 `core` 自有 model/request API 后，已删除 `DexEngine` 中旧的透传公开接口，包括 `getOrCreateBridge`、`readDexNum`、旧搜索接口以及旧单次导出接口，使 `core` 公共边界不再直接暴露 `DexKitBridge`、`ClassData`、`MethodData`。
+- 影响范围：`core/src/commonMain/kotlin/io/github/dexclub/core/DexEngine.kt`、`core/src/jvmMain/kotlin/io/github/dexclub/core/DexEngine.jvm.kt`
+- 完成定义：旧透传公开接口已从 `core` 公共边界删除，`cli` 与仓库内测试仍能通过当前新 API 正常工作。
+- 下一步：后续如需继续收敛，可补充 README 或面向外部使用者的迁移说明，明确当前 `core` 公开 API 以自有 model/request 为准。
+- 验证：已执行 `./gradlew :core:compileKotlinJvm :core:jvmTest :cli:compileKotlin :cli:fatJar`，通过。
 
 ### D-01 整理 `core` 重构方案文档
 
