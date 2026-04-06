@@ -1,4 +1,4 @@
-package io.github.dexclub.dexengine.cli
+package io.github.dexclub.cli
 
 import io.github.dexclub.core.DexEngine
 import kotlinx.coroutines.runBlocking

@@ -12,7 +12,7 @@ kotlin {
 }
 
 application {
-    mainClass = "io.github.dexclub.dexengine.cli.MainKt"
+    mainClass = "io.github.dexclub.cli.MainKt"
 }
 
 dependencies {
