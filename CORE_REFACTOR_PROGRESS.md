@@ -231,8 +231,10 @@
 - 已提交 `T-04`，提交号：`3286ccc`
 - 已完成 `P-01`：把 `DexExportService` 进一步拆分为 dex 导出、smali 渲染、jadx 反编译三个内部服务
 - 已确认 `P-02` 结论：`core` 必须继续保留 KMP 结构，不再评估 JVM-only 回收方案
+- 已开始 CLI 迁移：`cli` 已切到 `core` 自有 model/request 新接口，停止依赖 `DexEngine` 的旧透传搜索与导出方法
 - 已执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin`，验证通过
 - 已执行 `./gradlew :core:jvmTest`，验证通过
+- 已执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin :cli:fatJar`，验证通过
 
 ## 已计划
 
@@ -317,6 +319,16 @@
 - 完成定义：形成明确结论，且文档与代码结构一致。
 - 下一步：后续重构默认以保留 KMP 为前提推进，不再新增“是否回收 JVM-only”的旁路线。
 - 验证：`CORE_REFACTOR_PLAN.md` 与本进度文档已同步更新。
+
+### T-05 迁移 `cli` 到新 API
+
+- 状态：`已完成`
+- 更新时间：`2026-04-06`
+- 说明：`cli` 已切换为使用 `DexArchiveInfo`、`DexClassHit`、`DexMethodHit`、`DexExportRequest`、`SmaliExportRequest`、`JavaExportRequest` 等 `core` 自有接口，停止依赖 `DexEngine` 的旧透传搜索与导出方法，同时保持现有输出格式不变。
+- 影响范围：`cli/src/main/kotlin/io/github/dexclub/cli/Main.kt`
+- 完成定义：`cli` 停止直接消费旧透传型搜索/导出接口，并通过 `core` 自有 model/request 完成同等行为。
+- 下一步：后续可评估是否删除 `DexEngine` 中已不再被 `cli` 使用的旧兼容方法，但这需要先确认外部调用方与兼容策略。
+- 验证：已执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin :cli:fatJar`，通过。
 
 ### D-01 整理 `core` 重构方案文档
 

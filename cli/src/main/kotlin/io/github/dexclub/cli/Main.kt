@@ -1,6 +1,11 @@
 package io.github.dexclub.cli
 
 import io.github.dexclub.core.DexEngine
+import io.github.dexclub.core.config.SmaliRenderConfig
+import io.github.dexclub.core.model.DexInputKind
+import io.github.dexclub.core.request.DexExportRequest
+import io.github.dexclub.core.request.JavaExportRequest
+import io.github.dexclub.core.request.SmaliExportRequest
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import kotlin.system.exitProcess
@@ -34,21 +39,30 @@ private fun runInspect(options: Map<String, String>) {
     require(inputFile.isFile) { "输入路径必须是文件: ${inputFile.absolutePath}" }
 
     val normalizedPath = inputFile.absolutePath
-    if (normalizedPath.endsWith(".apk", ignoreCase = true)) {
-        DexEngine(listOf(normalizedPath)).useEngine { dexEngine ->
-            println("type=apk")
-            println("input=$normalizedPath")
-            println("dexCount=${dexEngine.readDexNum() ?: 0}")
-        }
-        return
-    }
-
-    require(DexEngine.isDex(normalizedPath)) { "输入文件不是有效的 dex: $normalizedPath" }
     DexEngine(listOf(normalizedPath)).useEngine { dexEngine ->
-        println("type=dex")
-        println("input=$normalizedPath")
-        println("dexCount=${dexEngine.dexCount()}")
-        println("classCount=${dexEngine.classCount()}")
+        val archiveInfo = dexEngine.inspect()
+        when (archiveInfo.kind) {
+            DexInputKind.Apk -> {
+                println("type=apk")
+                println("input=$normalizedPath")
+                println("dexCount=${archiveInfo.dexCount}")
+            }
+
+            DexInputKind.Dex -> {
+                println("type=dex")
+                println("input=$normalizedPath")
+                println("dexCount=${archiveInfo.dexCount}")
+                println("classCount=${archiveInfo.classCount ?: 0}")
+            }
+
+            DexInputKind.Unknown -> {
+                require(DexEngine.isDex(normalizedPath)) { "输入文件不是有效的 dex: $normalizedPath" }
+                println("type=dex")
+                println("input=$normalizedPath")
+                println("dexCount=${dexEngine.dexCount()}")
+                println("classCount=${dexEngine.classCount()}")
+            }
+        }
     }
 }
 
@@ -60,12 +74,14 @@ private fun runExportDex(options: Map<String, String>) = runBlocking {
 
     val dexEngine = DexEngine(listOf(input))
     try {
-        val exported = dexEngine.exportSingleDex(
-            className = className,
-            dexPath = input,
-            outputPath = output,
+        val exported = dexEngine.exportDex(
+            DexExportRequest(
+                className = className,
+                sourceDexPath = input,
+                outputPath = output,
+            ),
         )
-        println("output=$exported")
+        println("output=${exported.outputPath}")
     } finally {
         dexEngine.close()
     }
@@ -80,13 +96,15 @@ private fun runExportSmali(options: Map<String, String>) = runBlocking {
 
     val dexEngine = DexEngine(listOf(input))
     try {
-        val exported = dexEngine.exportSingleSmali(
-            autoUnicodeDecode = autoUnicodeDecode,
-            className = className,
-            dexPath = input,
-            outputPath = output,
+        val exported = dexEngine.exportSmali(
+            SmaliExportRequest(
+                className = className,
+                sourceDexPath = input,
+                outputPath = output,
+                config = SmaliRenderConfig(autoUnicodeDecode = autoUnicodeDecode),
+            ),
         )
-        println("output=$exported")
+        println("output=${exported.outputPath}")
     } finally {
         dexEngine.close()
     }
@@ -100,12 +118,14 @@ private fun runExportJava(options: Map<String, String>) = runBlocking {
 
     val dexEngine = DexEngine(listOf(input))
     try {
-        val exported = dexEngine.exportSingleJavaSource(
-            className = className,
-            dexPath = input,
-            outputPath = output,
+        val exported = dexEngine.exportJava(
+            JavaExportRequest(
+                className = className,
+                sourceDexPath = input,
+                outputPath = output,
+            ),
         )
-        println("output=$exported")
+        println("output=${exported.outputPath}")
     } finally {
         dexEngine.close()
     }
@@ -116,7 +136,7 @@ private fun runSearchClass(options: Map<String, String>) {
     val keyword = requireOption(options, "keyword")
     val limit = options["limit"]?.toIntOrNull()?.coerceAtLeast(1) ?: DEFAULT_SEARCH_LIMIT
     DexEngine(listOf(input)).useEngine { dexEngine ->
-        val results = dexEngine.searchClassesByName(keyword)
+        val results = dexEngine.searchClassHitsByName(keyword)
         println("count=${results.size}")
         println("shown=${minOf(results.size, limit)}")
         results.take(limit).forEach { result ->
@@ -130,7 +150,7 @@ private fun runSearchString(options: Map<String, String>) {
     val keyword = requireOption(options, "keyword")
     val limit = options["limit"]?.toIntOrNull()?.coerceAtLeast(1) ?: DEFAULT_SEARCH_LIMIT
     DexEngine(listOf(input)).useEngine { dexEngine ->
-        val results = dexEngine.searchMethodsByString(keyword)
+        val results = dexEngine.searchMethodHitsByString(keyword)
         println("count=${results.size}")
         println("shown=${minOf(results.size, limit)}")
         results.take(limit).forEach { result ->
