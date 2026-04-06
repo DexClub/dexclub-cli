@@ -36,22 +36,22 @@
 
 记录时间：`2026-04-06`
 
-- `AGENTS.md`
-  - 已存在未提交改动，新增 `core` 重构文档续接入口
 - `CORE_REFACTOR_PROGRESS.md`
-  - 已存在未提交改动，已回写当前工作区快照与 `T-01` 完成状态
-- `core/src/commonMain/kotlin/io/github/dexclub/core/config/`
-  - 已新增配置模型，来自本轮 `T-01`
+  - 已存在未提交改动，已回写 `T-02`、`T-03` 完成状态与当前工作区快照
+- `core/build.gradle.kts`
+  - 已存在未提交改动，新增 `jvmTest` 依赖用于 `core` JVM 测试
 - `core/src/commonMain/kotlin/io/github/dexclub/core/DexEngine.kt`
-  - 已存在未提交改动，新增 `CoreRuntimeConfig` 默认入口
-- `core/src/commonMain/kotlin/io/github/dexclub/core/runtime/DexKitRuntime.kt`
-  - 已存在未提交改动，开始从 `DexKitRuntimeConfig` 读取默认值
+  - 已存在未提交改动，新增 `inspect`、基于 `core/model` 的搜索与导出接口
+- `core/src/commonMain/kotlin/io/github/dexclub/core/model/`
+  - 已新增结果模型与结果映射，来自本轮 `T-02`
+- `core/src/commonMain/kotlin/io/github/dexclub/core/request/`
+  - 已新增导出请求模型，来自本轮 `T-02`
 - `core/src/jvmMain/kotlin/io/github/dexclub/core/DexEngine.jvm.kt`
-  - 已存在未提交改动，已把 `DexSessionLoader`、`DexExportService`、`DexKitRuntime` 接到配置模型
+  - 已存在未提交改动，已接入 `core/model` 与 `core/request` 新接口
 - `core/src/jvmMain/kotlin/io/github/dexclub/core/export/DexExportService.kt`
-  - 已存在未提交改动，已把 `jadx`、`dexlib2`、`baksmali` 默认配置迁移到 `core` 配置模型读取
-- `core/src/jvmMain/kotlin/io/github/dexclub/core/session/DexSessionLoader.kt`
-  - 已存在未提交改动，已开始从 `DexFormatConfig` 读取 opcode 配置
+  - 已存在未提交改动，已新增请求模型到导出结果模型的映射路径
+- `core/src/jvmTest/`
+  - 已新增 JVM 测试与动态生成 dex 的测试夹具源码，来自本轮 `T-03`
 - `dexkit/vendor/DexKit`
   - 当前为 dirty 状态，非本轮 `core` 重构变更，不应擅自处理
 
@@ -220,7 +220,11 @@
 - 已在 `AGENTS.md` 增加 `core` 重构文档续接入口
 - 已完成 `T-01` 第一轮落地：新增 `CoreRuntimeConfig`、`DexFormatConfig`、`SmaliRenderConfig`、`JavaDecompileConfig`、`DexKitRuntimeConfig`
 - `DexEngine`、`DexSessionLoader`、`DexExportService`、`DexKitRuntime` 已开始从配置模型读取默认值
+- 已提交 `T-01`，提交号：`bbf20f9`
+- 已完成 `T-02`：新增 `core/model`、`core/request`，并为 `DexEngine` 补充基于自有模型的新接口
+- 已完成 `T-03`：新增 `core` JVM 测试，测试时通过 `javac + d8` 动态生成最小 dex 夹具
 - 已执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin`，验证通过
+- 已执行 `./gradlew :core:jvmTest`，验证通过
 
 ## 已计划
 
@@ -245,26 +249,6 @@
 - 验证：尚未开始。
 
 ## 待开始
-
-### T-02 建立 `core` 结果模型与请求模型
-
-- 状态：`待开始`
-- 更新时间：`2026-04-06`
-- 说明：新增 `core/model` 和 `core/request`，让 `core` 开始使用自有结果模型与导出请求模型。
-- 影响范围：`core/src/commonMain/kotlin/io/github/dexclub/core/model/`、`core/src/commonMain/kotlin/io/github/dexclub/core/request/`、`DexEngine` 对外接口层。
-- 完成定义：`core` 已拥有最小可用的结果模型与导出请求模型，并存在从旧实现结果到新模型的映射路径。
-- 下一步：先定义最小模型集，再建立旧实现到新模型的映射。
-- 验证：至少执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin`。
-
-### T-03 为搜索与导出补 JVM 测试
-
-- 状态：`待开始`
-- 更新时间：`2026-04-06`
-- 说明：为 `isDex`、搜索、导出路径建立最小回归保护，降低后续拆分风险。
-- 影响范围：`core/src/jvmTest/` 及必要的测试样例输入。
-- 完成定义：至少覆盖 `isDex`、搜索、dex 导出、smali 导出、java 导出关键路径，且测试可执行。
-- 下一步：先确认测试样例输入与最小可验证路径，再补 `core` 的 JVM 测试。
-- 验证：执行 `./gradlew :core:jvmTest`。
 
 ### T-04 迁移 `DexEngine` 到 facade 方向
 
@@ -293,8 +277,28 @@
 - 说明：已新增 `CoreRuntimeConfig`、`JavaDecompileConfig`、`DexFormatConfig`、`SmaliRenderConfig`、`DexKitRuntimeConfig`，并让 `DexEngine`、`DexSessionLoader`、`DexExportService`、`DexKitRuntime` 开始从这些配置读取默认值。
 - 影响范围：`core/src/commonMain/kotlin/io/github/dexclub/core/config/`、`core/src/commonMain/kotlin/io/github/dexclub/core/DexEngine.kt`、`core/src/commonMain/kotlin/io/github/dexclub/core/runtime/DexKitRuntime.kt`、`core/src/jvmMain/`
 - 完成定义：配置类已落地到 `commonMain`，JVM 实现开始从这些配置读取默认值，现有 CLI 行为不变。
-- 下一步：进入 `T-02`，建立 `core/model` 与 `core/request`，开始形成自有结果模型和导出请求模型。
+- 下一步：已完成，后续继续配合 `T-04` 收缩 `DexEngine` 职责。
 - 验证：已执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin`，通过。
+
+### T-02 建立 `core` 结果模型与请求模型
+
+- 状态：`已完成`
+- 更新时间：`2026-04-06`
+- 说明：已新增 `DexArchiveInfo`、`DexInputRef`、`DexInputKind`、`DexClassHit`、`DexMethodHit`、`DexExportFormat`、`DexExportResult` 以及 `DexExportRequest`、`SmaliExportRequest`、`JavaExportRequest`，并为 `DexEngine` 增加新接口，保留旧接口不删。
+- 影响范围：`core/src/commonMain/kotlin/io/github/dexclub/core/model/`、`core/src/commonMain/kotlin/io/github/dexclub/core/request/`、`core/src/commonMain/kotlin/io/github/dexclub/core/DexEngine.kt`、`core/src/jvmMain/`
+- 完成定义：`core` 已拥有最小可用的结果模型与导出请求模型，并存在从旧实现结果到新模型的映射路径。
+- 下一步：进入 `T-04`，继续把搜索、导出、输入分析从 `DexEngine` 中下沉为更清晰的内部服务。
+- 验证：已执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin`，通过。
+
+### T-03 为搜索与导出补 JVM 测试
+
+- 状态：`已完成`
+- 更新时间：`2026-04-06`
+- 说明：已新增 `core` 的 JVM 测试，覆盖 `isDex`、`inspect`、旧/新搜索接口，以及 dex、smali、java 导出关键路径。测试输入通过 `javac + d8` 在测试期动态生成，避免提交二进制夹具。
+- 影响范围：`core/build.gradle.kts`、`core/src/jvmTest/`
+- 完成定义：至少覆盖 `isDex`、搜索、dex 导出、smali 导出、java 导出关键路径，且测试可执行。
+- 下一步：后续进入 `T-04` 前，可直接依赖这批测试作为回归保护。
+- 验证：已执行 `./gradlew :core:jvmTest`，通过。
 
 ### D-01 整理 `core` 重构方案文档
 

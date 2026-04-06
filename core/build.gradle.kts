@@ -18,6 +18,11 @@ kotlin {
             implementation(libs.jadx.kotlin.metadata)
             implementation(libs.logback.classic)
         }
+
+        jvmTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.core)
+        }
     }
 
     compilerOptions {

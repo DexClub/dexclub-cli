@@ -10,6 +10,11 @@ import io.github.dexclub.core.UnescapedUnicodeBaksmaliWriter
 import io.github.dexclub.core.config.DexFormatConfig
 import io.github.dexclub.core.config.JavaDecompileConfig
 import io.github.dexclub.core.config.SmaliRenderConfig
+import io.github.dexclub.core.model.DexExportFormat
+import io.github.dexclub.core.model.DexExportResult
+import io.github.dexclub.core.request.DexExportRequest
+import io.github.dexclub.core.request.JavaExportRequest
+import io.github.dexclub.core.request.SmaliExportRequest
 import io.github.dexclub.core.session.DexSession
 import jadx.api.JadxArgs
 import jadx.api.JadxDecompiler
@@ -23,6 +28,18 @@ internal class DexExportService(
     private val javaDecompileConfig: JavaDecompileConfig = JavaDecompileConfig(),
     private val smaliRenderConfig: SmaliRenderConfig = SmaliRenderConfig(),
 ) {
+    suspend fun exportDex(request: DexExportRequest): DexExportResult {
+        return DexExportResult(
+            outputPath = exportSingleDex(
+                className = request.className,
+                dexPath = request.sourceDexPath,
+                outputPath = request.outputPath,
+            ),
+            format = DexExportFormat.Dex,
+            className = request.className,
+        )
+    }
+
     @Throws(IllegalArgumentException::class)
     suspend fun exportSingleDex(
         className: String,
@@ -49,11 +66,38 @@ internal class DexExportService(
         return outputFile.absolutePath
     }
 
+    suspend fun exportSmali(request: SmaliExportRequest): DexExportResult {
+        return DexExportResult(
+            outputPath = exportSingleSmali(
+                className = request.className,
+                dexPath = request.sourceDexPath,
+                outputPath = request.outputPath,
+                renderConfig = request.config ?: smaliRenderConfig,
+            ),
+            format = DexExportFormat.Smali,
+            className = request.className,
+        )
+    }
+
     suspend fun exportSingleSmali(
         autoUnicodeDecode: Boolean,
         className: String,
         dexPath: String,
         outputPath: String,
+    ): String {
+        return exportSingleSmali(
+            className = className,
+            dexPath = dexPath,
+            outputPath = outputPath,
+            renderConfig = smaliRenderConfig.copy(autoUnicodeDecode = autoUnicodeDecode),
+        )
+    }
+
+    private suspend fun exportSingleSmali(
+        className: String,
+        dexPath: String,
+        outputPath: String,
+        renderConfig: SmaliRenderConfig,
     ): String {
         if (className.trim().isEmpty()) {
             throw IllegalArgumentException("className must not be empty")
@@ -64,12 +108,10 @@ internal class DexExportService(
             dexPath = dexPath,
         )
 
-        val effectiveSmaliRenderConfig = smaliRenderConfig
-            .copy(autoUnicodeDecode = autoUnicodeDecode)
-        val options = effectiveSmaliRenderConfig.toBaksmaliOptions(dexFormatConfig)
+        val options = renderConfig.toBaksmaliOptions(dexFormatConfig)
 
         val stringWriter = StringWriter()
-        val baksmaliWriter = if (effectiveSmaliRenderConfig.autoUnicodeDecode) {
+        val baksmaliWriter = if (renderConfig.autoUnicodeDecode) {
             UnescapedUnicodeBaksmaliWriter(stringWriter)
         } else {
             BaksmaliWriter(stringWriter)
@@ -85,10 +127,37 @@ internal class DexExportService(
         return outputFile.absolutePath
     }
 
+    suspend fun exportJava(request: JavaExportRequest): DexExportResult {
+        return DexExportResult(
+            outputPath = exportSingleJavaSource(
+                className = request.className,
+                dexPath = request.sourceDexPath,
+                outputPath = request.outputPath,
+                decompileConfig = request.config ?: javaDecompileConfig,
+            ),
+            format = DexExportFormat.JavaSource,
+            className = request.className,
+        )
+    }
+
     suspend fun exportSingleJavaSource(
         className: String,
         dexPath: String,
         outputPath: String,
+    ): String {
+        return exportSingleJavaSource(
+            className = className,
+            dexPath = dexPath,
+            outputPath = outputPath,
+            decompileConfig = javaDecompileConfig,
+        )
+    }
+
+    private suspend fun exportSingleJavaSource(
+        className: String,
+        dexPath: String,
+        outputPath: String,
+        decompileConfig: JavaDecompileConfig,
     ): String {
         val outputFile = File(outputPath)
         outputFile.parentFile?.mkdirs()
@@ -102,6 +171,7 @@ internal class DexExportService(
             decompileDexToJavaSource(
                 dexPath = tempDex.absolutePath,
                 outputPath = outputPath,
+                decompileConfig = decompileConfig,
             )
         } finally {
             tempDex.delete()
@@ -111,6 +181,7 @@ internal class DexExportService(
     private fun decompileDexToJavaSource(
         dexPath: String,
         outputPath: String,
+        decompileConfig: JavaDecompileConfig,
     ): String {
         val dexFile = File(dexPath)
         val javaFile = File(outputPath)
@@ -121,7 +192,7 @@ internal class DexExportService(
             setInputFile(dexFile)
             outDir = outputDirectory
             codeCache = NoOpCodeCache()
-            javaDecompileConfig.applyTo(this)
+            decompileConfig.applyTo(this)
         }
 
         JadxDecompiler(args).use { decompiler ->
