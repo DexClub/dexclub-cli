@@ -235,9 +235,14 @@
 - 已进一步收敛搜索边界：新增 `DexKitSearchBackend`，由其承接 `DexKit` 查询 DSL，`DexSearchService` 仅负责搜索语义与结果映射
 - 已开始收敛旧兼容接口：`DexEngine` 中旧搜索/导出透传方法已标记为废弃，仓库内测试主体已切到新 API
 - 已删除 `DexEngine` 中已不再被仓库内使用的旧透传公开接口，`core` 对外公共边界不再暴露 `DexKitBridge`、`ClassData`、`MethodData`
+- 已完成 CLI 多输入能力第一轮：`inspect`、`search-class`、`search-string` 现支持重复传入 `--input`
+- 已明确 CLI 多输入边界：单输入支持 `apk|dex`，多输入当前仅支持多个 `dex`；`export-*` 仍保持单个 `dex` 输入
+- 已补齐多输入结果来源映射：搜索结果在多输入模式下可返回对应 `sourceDexPath`
+- 已同步更新 CLI 帮助文案与 README 中的输入约束说明
 - 已执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin`，验证通过
 - 已执行 `./gradlew :core:jvmTest`，验证通过
 - 已执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin :cli:fatJar`，验证通过
+- 已额外执行多输入命令级冒烟：使用临时生成的两个最小 dex 验证 `inspect`、`search-class`、`search-string`，结果符合预期
 
 ## 已计划
 

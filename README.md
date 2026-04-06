@@ -55,6 +55,16 @@
 - `core` 公共边界不再直接暴露 `DexKitBridge`、`ClassData`、`MethodData`
 - 第三方适配与平台实现细节继续留在 `jvmMain`
 
+## CLI 输入约束
+
+- `inspect`、`search-class`、`search-string`
+  - 支持重复传入 `--input`
+  - 单输入时支持 `apk` 或 `dex`
+  - 多输入时当前仅支持多个 `dex`，不支持混合传入 `apk`
+- `export-dex`、`export-smali`、`export-java`
+  - 当前仍只支持单个 `dex` 输入
+  - 导出请求必须显式指定来源 dex
+
 ## 环境
 
 - JDK 21

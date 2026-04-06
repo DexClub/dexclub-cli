@@ -9,19 +9,18 @@ import io.github.dexclub.dexkit.result.MethodData
 
 internal class DexSearchService(
     private val backend: DexKitSearchBackend,
-    private val sourceDexPathProvider: () -> String?,
+    private val classDescriptorSourcePathProvider: (String) -> String?,
+    private val classNameSourcePathProvider: (String) -> String?,
 ) {
     fun searchClassHitsByName(keyword: String): List<DexClassHit> {
-        val sourceDexPath = sourceDexPathProvider()
         return searchClassesByName(keyword).map { result ->
-            result.toDexClassHit(sourceDexPath)
+            result.toDexClassHit(classDescriptorSourcePathProvider(result.descriptor))
         }
     }
 
     fun searchMethodHitsByString(keyword: String): List<DexMethodHit> {
-        val sourceDexPath = sourceDexPathProvider()
         return searchMethodsByString(keyword).map { result ->
-            result.toDexMethodHit(sourceDexPath)
+            result.toDexMethodHit(classNameSourcePathProvider(result.className))
         }
     }
 

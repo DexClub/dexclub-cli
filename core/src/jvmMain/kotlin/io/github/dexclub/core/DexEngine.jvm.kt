@@ -65,7 +65,8 @@ actual class DexEngine actual constructor(
     private val dexSearchService by lazy(LazyThreadSafetyMode.NONE) {
         DexSearchService(
             backend = dexKitSearchBackend,
-            sourceDexPathProvider = dexArchiveInspector::singleDexSourcePath,
+            classDescriptorSourcePathProvider = dexSession::findDexPathByClassDescriptor,
+            classNameSourcePathProvider = dexSession::findDexPathByClassName,
         )
     }
 
