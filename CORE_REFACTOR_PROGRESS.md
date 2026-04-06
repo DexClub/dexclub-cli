@@ -37,7 +37,7 @@
 记录时间：`2026-04-06`
 
 - `CORE_REFACTOR_PROGRESS.md`
-  - 已存在未提交改动，已回写 `T-04` 完成状态与当前工作区快照
+  - 已存在未提交改动，已回写 `P-01` 完成状态与当前工作区快照
 - `core/src/commonMain/kotlin/io/github/dexclub/core/DexEngine.kt`
   - 当前与已提交状态一致
 - `core/src/jvmMain/kotlin/io/github/dexclub/core/DexEngine.jvm.kt`
@@ -45,7 +45,15 @@
 - `core/src/jvmMain/kotlin/io/github/dexclub/core/input/DexArchiveInspector.kt`
   - 已新增，来自本轮 `T-04` 第一轮 facade 收缩
 - `core/src/jvmMain/kotlin/io/github/dexclub/core/search/DexSearchService.kt`
-  - 已新增，来自本轮 `T-04` 第一轮 facade 收缩
+  - 已新增，来自已提交的 `T-04`
+- `core/src/jvmMain/kotlin/io/github/dexclub/core/export/DexBinaryExportService.kt`
+  - 已新增，来自本轮 `P-01`
+- `core/src/jvmMain/kotlin/io/github/dexclub/core/export/SmaliRenderService.kt`
+  - 已新增，来自本轮 `P-01`
+- `core/src/jvmMain/kotlin/io/github/dexclub/core/export/JadxDecompilerService.kt`
+  - 已新增，来自本轮 `P-01`
+- `core/src/jvmMain/kotlin/io/github/dexclub/core/export/DexExportService.kt`
+  - 已存在未提交改动，已收缩为导出流程编排与结果包装
 - `dexkit/vendor/DexKit`
   - 当前为 dirty 状态，非本轮 `core` 重构变更，不应擅自处理
 
@@ -220,6 +228,8 @@
 - 已提交 `T-02`、`T-03`，提交号：`7ff645d`
 - 已开始 `T-04`：把 `inspect` 与搜索逻辑从 `DexEngine` 下沉到 `DexArchiveInspector`、`DexSearchService`
 - 已完成 `T-04`：`DexEngine` 当前主要负责组合、兼容入口与生命周期管理，输入分析、搜索、导出能力均已下沉到内部服务
+- 已提交 `T-04`，提交号：`3286ccc`
+- 已完成 `P-01`：把 `DexExportService` 进一步拆分为 dex 导出、smali 渲染、jadx 反编译三个内部服务
 - 已执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin`，验证通过
 - 已执行 `./gradlew :core:jvmTest`，验证通过
 
@@ -227,13 +237,13 @@
 
 ### P-01 拆分导出实现
 
-- 状态：`已计划`
+- 状态：`已完成`
 - 更新时间：`2026-04-06`
-- 说明：将当前集中在 `DexExportService` 内的 dex 导出、smali 渲染、jadx 反编译进一步拆成职责更清晰的内部服务。
+- 说明：已将当前集中在 `DexExportService` 内的 dex 导出、smali 渲染、jadx 反编译拆分为 `DexBinaryExportService`、`SmaliRenderService`、`JadxDecompilerService`，`DexExportService` 只负责流程编排与结果包装。
 - 影响范围：`core/src/jvmMain/kotlin/io/github/dexclub/core/export/` 及 `DexEngine.jvm.kt`
 - 完成定义：导出相关职责已拆分为更清晰的内部服务，`DexEngine` 不再直接承载导出细节，且 CLI 行为保持不变。
-- 下一步：在完成配置模型与请求模型落地后，再细化服务拆分边界。
-- 验证：尚未开始。
+- 下一步：后续如继续收敛，可再评估是否需要把导出流程编排从 `DexExportService` 进一步细拆，但当前边界已足够清晰。
+- 验证：已执行 `./gradlew :core:compileKotlinJvm :core:jvmTest :cli:compileKotlin`，通过。
 
 ### P-02 评估 `core` 是否继续保留 KMP
 
