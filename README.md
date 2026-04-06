@@ -17,10 +17,43 @@
 
 ## 当前结构说明
 
+- `core` 必须继续保留 KMP 结构，稳定的 facade / model / config / request 边界位于 `commonMain`，JVM 实现细节位于 `jvmMain`。
+- `core` 当前对外以自有 API 为主，不再通过公共边界透传 `DexKitBridge`、`ClassData`、`MethodData`。
 - `dexkit` 负责提供 `io.github.dexclub.dexkit` 这一层 KMP API。
 - Android 侧通过上游 `DexKit` 的 `dexkit-android` 产物提供底层实现。
 - JVM 侧通过 included build 使用本地 `vendor/DexKit`，并在 `jvmProcessResources` 时拷贝 native 库。
 - 根工程启用了 `mavenLocal()`，用于解析当前 Android 构建所需的 `dev.rikka.ndk.thirdparty:libcxx:1.3.0`。
+
+## Core 公共 API
+
+当前 `core` 的稳定入口是 `io.github.dexclub.core.DexEngine`。
+
+主要公开能力：
+
+- `inspect()`
+  - 返回 `DexArchiveInfo`
+- `searchClassHitsByName()`
+  - 返回 `List<DexClassHit>`
+- `searchMethodHitsByString()`
+  - 返回 `List<DexMethodHit>`
+- `exportDex()`
+  - 接收 `DexExportRequest`，返回 `DexExportResult`
+- `exportSmali()`
+  - 接收 `SmaliExportRequest`，返回 `DexExportResult`
+- `exportJava()`
+  - 接收 `JavaExportRequest`，返回 `DexExportResult`
+
+相关公共模型位于：
+
+- `core/src/commonMain/kotlin/io/github/dexclub/core/model/`
+- `core/src/commonMain/kotlin/io/github/dexclub/core/config/`
+- `core/src/commonMain/kotlin/io/github/dexclub/core/request/`
+
+说明：
+
+- `cli` 已迁移到这组自有 API
+- `core` 公共边界不再直接暴露 `DexKitBridge`、`ClassData`、`MethodData`
+- 第三方适配与平台实现细节继续留在 `jvmMain`
 
 ## 环境
 
@@ -70,6 +103,7 @@ cd dexkit/vendor/libcxx-prefab
 
 - 当前 `dexkit` 薄封装适合仓库内联编使用。
 - 如果要把 `dexkit` 单独发布到 Maven 仓库，还需要进一步整理发布模型和上游依赖坐标。
+- `cli` 当前已经建立在 `core` 自有 model/request API 之上；如果后续有仓库外调用方仍依赖旧透传接口，需要单独评估迁移说明，而不是再把旧接口加回公共边界。
 
 ## Android 侧环境调整（如果无法直接构建）
 
