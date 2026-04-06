@@ -37,21 +37,15 @@
 记录时间：`2026-04-06`
 
 - `CORE_REFACTOR_PROGRESS.md`
-  - 已存在未提交改动，已回写 `T-02`、`T-03` 完成状态与当前工作区快照
-- `core/build.gradle.kts`
-  - 已存在未提交改动，新增 `jvmTest` 依赖用于 `core` JVM 测试
+  - 已存在未提交改动，已回写 `T-04` 完成状态与当前工作区快照
 - `core/src/commonMain/kotlin/io/github/dexclub/core/DexEngine.kt`
-  - 已存在未提交改动，新增 `inspect`、基于 `core/model` 的搜索与导出接口
-- `core/src/commonMain/kotlin/io/github/dexclub/core/model/`
-  - 已新增结果模型与结果映射，来自本轮 `T-02`
-- `core/src/commonMain/kotlin/io/github/dexclub/core/request/`
-  - 已新增导出请求模型，来自本轮 `T-02`
+  - 当前与已提交状态一致
 - `core/src/jvmMain/kotlin/io/github/dexclub/core/DexEngine.jvm.kt`
-  - 已存在未提交改动，已接入 `core/model` 与 `core/request` 新接口
-- `core/src/jvmMain/kotlin/io/github/dexclub/core/export/DexExportService.kt`
-  - 已存在未提交改动，已新增请求模型到导出结果模型的映射路径
-- `core/src/jvmTest/`
-  - 已新增 JVM 测试与动态生成 dex 的测试夹具源码，来自本轮 `T-03`
+  - 已存在未提交改动，已把 `inspect` 与搜索职责下沉到内部服务
+- `core/src/jvmMain/kotlin/io/github/dexclub/core/input/DexArchiveInspector.kt`
+  - 已新增，来自本轮 `T-04` 第一轮 facade 收缩
+- `core/src/jvmMain/kotlin/io/github/dexclub/core/search/DexSearchService.kt`
+  - 已新增，来自本轮 `T-04` 第一轮 facade 收缩
 - `dexkit/vendor/DexKit`
   - 当前为 dirty 状态，非本轮 `core` 重构变更，不应擅自处理
 
@@ -223,6 +217,9 @@
 - 已提交 `T-01`，提交号：`bbf20f9`
 - 已完成 `T-02`：新增 `core/model`、`core/request`，并为 `DexEngine` 补充基于自有模型的新接口
 - 已完成 `T-03`：新增 `core` JVM 测试，测试时通过 `javac + d8` 动态生成最小 dex 夹具
+- 已提交 `T-02`、`T-03`，提交号：`7ff645d`
+- 已开始 `T-04`：把 `inspect` 与搜索逻辑从 `DexEngine` 下沉到 `DexArchiveInspector`、`DexSearchService`
+- 已完成 `T-04`：`DexEngine` 当前主要负责组合、兼容入口与生命周期管理，输入分析、搜索、导出能力均已下沉到内部服务
 - 已执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin`，验证通过
 - 已执行 `./gradlew :core:jvmTest`，验证通过
 
@@ -249,16 +246,6 @@
 - 验证：尚未开始。
 
 ## 待开始
-
-### T-04 迁移 `DexEngine` 到 facade 方向
-
-- 状态：`待开始`
-- 更新时间：`2026-04-06`
-- 说明：保留 `DexEngine` 入口，但逐步收缩其职责，让搜索、导出、输入分析转为内部服务组合。
-- 影响范围：`core/src/commonMain/kotlin/io/github/dexclub/core/DexEngine.kt`、`core/src/jvmMain/kotlin/io/github/dexclub/core/DexEngine.jvm.kt` 及相关 internal service。
-- 完成定义：`DexEngine` 主要承担组合与生命周期管理职责，搜索、导出、输入分析已下沉到更清晰的内部服务。
-- 下一步：依赖 T-01 与 T-02 先完成，再开始实际拆分。
-- 验证：至少执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin :cli:fatJar`。
 
 ## 进行中
 
@@ -299,6 +286,16 @@
 - 完成定义：至少覆盖 `isDex`、搜索、dex 导出、smali 导出、java 导出关键路径，且测试可执行。
 - 下一步：后续进入 `T-04` 前，可直接依赖这批测试作为回归保护。
 - 验证：已执行 `./gradlew :core:jvmTest`，通过。
+
+### T-04 迁移 `DexEngine` 到 facade 方向
+
+- 状态：`已完成`
+- 更新时间：`2026-04-06`
+- 说明：已把 `inspect` 与搜索逻辑从 `DexEngine` 下沉到 `DexArchiveInspector`、`DexSearchService`，导出能力继续由 `DexExportService` 承载，当前 `DexEngine` 主要保留组合、兼容入口与生命周期管理职责。
+- 影响范围：`core/src/jvmMain/kotlin/io/github/dexclub/core/DexEngine.jvm.kt`、`core/src/jvmMain/kotlin/io/github/dexclub/core/input/`、`core/src/jvmMain/kotlin/io/github/dexclub/core/search/`、`core/src/jvmMain/kotlin/io/github/dexclub/core/export/`
+- 完成定义：`DexEngine` 主要承担组合与生命周期管理职责，搜索、导出、输入分析已下沉到更清晰的内部服务。
+- 下一步：进入 `P-01`，继续拆分 `DexExportService` 内部职责，把 dex 导出、smali 渲染、jadx 反编译拆得更清晰。
+- 验证：已执行 `./gradlew :core:compileKotlinJvm :core:jvmTest :cli:compileKotlin`，通过。
 
 ### D-01 整理 `core` 重构方案文档
 

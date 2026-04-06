@@ -2,25 +2,20 @@ package io.github.dexclub.core
 
 import io.github.dexclub.core.config.CoreRuntimeConfig
 import io.github.dexclub.core.export.DexExportService
+import io.github.dexclub.core.input.DexArchiveInspector
 import io.github.dexclub.core.input.DexInputInspector
 import io.github.dexclub.core.model.DexArchiveInfo
 import io.github.dexclub.core.model.DexClassHit
-import io.github.dexclub.core.model.DexInputKind
-import io.github.dexclub.core.model.DexInputRef
-import io.github.dexclub.core.model.DexMethodHit
-import io.github.dexclub.core.model.toDexClassHit
-import io.github.dexclub.core.model.toDexMethodHit
 import io.github.dexclub.core.model.DexExportResult
+import io.github.dexclub.core.model.DexMethodHit
 import io.github.dexclub.core.request.DexExportRequest
 import io.github.dexclub.core.request.JavaExportRequest
 import io.github.dexclub.core.request.SmaliExportRequest
 import io.github.dexclub.core.runtime.DexKitRuntime
+import io.github.dexclub.core.search.DexSearchService
 import io.github.dexclub.core.session.DexSessionLoader
 import io.github.dexclub.core.source.DexIndexedClass
 import io.github.dexclub.dexkit.DexKitBridge
-import io.github.dexclub.dexkit.findClass
-import io.github.dexclub.dexkit.findMethod
-import io.github.dexclub.dexkit.query.StringMatchType
 import io.github.dexclub.dexkit.result.ClassData
 import io.github.dexclub.dexkit.result.MethodData
 import java.io.File
@@ -34,11 +29,6 @@ actual class DexEngine actual constructor(
         .filter(String::isNotEmpty)
     private val dexFiles by lazy(LazyThreadSafetyMode.NONE) {
         normalizedDexPaths.map(::File)
-    }
-    private val singleDexSourcePath by lazy(LazyThreadSafetyMode.NONE) {
-        dexFiles.singleOrNull()
-            ?.takeIf(DexInputInspector::isDex)
-            ?.absolutePath
     }
     private val dexSession by lazy(LazyThreadSafetyMode.NONE) {
         DexSessionLoader.loadMultiDex(
@@ -60,24 +50,24 @@ actual class DexEngine actual constructor(
             config = config.dexKit,
         )
     }
+    private val dexArchiveInspector by lazy(LazyThreadSafetyMode.NONE) {
+        DexArchiveInspector(
+            inputPaths = normalizedDexPaths,
+            inputFiles = dexFiles,
+            dexCountProvider = ::dexCount,
+            classCountProvider = ::classCount,
+            readDexNumProvider = ::readDexNum,
+        )
+    }
+    private val dexSearchService by lazy(LazyThreadSafetyMode.NONE) {
+        DexSearchService(
+            bridgeProvider = ::getOrCreateBridge,
+            sourceDexPathProvider = dexArchiveInspector::singleDexSourcePath,
+        )
+    }
 
     actual fun inspect(): DexArchiveInfo {
-        val kind = inferInputKind()
-        return DexArchiveInfo(
-            kind = kind,
-            inputs = normalizedDexPaths.map(::DexInputRef),
-            dexCount = when (kind) {
-                DexInputKind.Apk -> readDexNum() ?: 0
-                DexInputKind.Dex -> dexCount()
-                DexInputKind.Unknown -> 0
-            },
-            classCount = when (kind) {
-                DexInputKind.Dex -> classCount()
-                DexInputKind.Apk,
-                DexInputKind.Unknown,
-                -> null
-            },
-        )
+        return dexArchiveInspector.inspect()
     }
 
     actual fun dexCount(): Int {
@@ -101,43 +91,19 @@ actual class DexEngine actual constructor(
     }
 
     actual fun searchClassHitsByName(keyword: String): List<DexClassHit> {
-        return searchClassesByName(keyword).map { result ->
-            result.toDexClassHit(singleDexSourcePath)
-        }
+        return dexSearchService.searchClassHitsByName(keyword)
     }
 
     actual fun searchMethodHitsByString(keyword: String): List<DexMethodHit> {
-        return searchMethodsByString(keyword).map { result ->
-            result.toDexMethodHit(singleDexSourcePath)
-        }
+        return dexSearchService.searchMethodHitsByString(keyword)
     }
 
     actual fun searchClassesByName(keyword: String): List<ClassData> {
-        val bridge = getOrCreateBridge()
-            ?: return emptyList()
-        return bridge.findClass {
-            matcher {
-                className(
-                    value = keyword,
-                    matchType = StringMatchType.Contains,
-                    ignoreCase = true,
-                )
-            }
-        }
+        return dexSearchService.searchClassesByName(keyword)
     }
 
     actual fun searchMethodsByString(keyword: String): List<MethodData> {
-        val bridge = getOrCreateBridge()
-            ?: return emptyList()
-        return bridge.findMethod {
-            matcher {
-                addUsingString(
-                    value = keyword,
-                    matchType = StringMatchType.Contains,
-                    ignoreCase = true,
-                )
-            }
-        }
+        return dexSearchService.searchMethodsByString(keyword)
     }
 
     actual suspend fun exportDex(
@@ -203,16 +169,6 @@ actual class DexEngine actual constructor(
     actual companion object {
         actual fun isDex(path: String): Boolean {
             return DexInputInspector.isDex(File(path))
-        }
-    }
-
-    private fun inferInputKind(): DexInputKind {
-        val inputFile = dexFiles.singleOrNull()
-            ?: return if (dexFiles.isEmpty()) DexInputKind.Unknown else DexInputKind.Dex
-        return when {
-            inputFile.extension.equals("apk", ignoreCase = true) -> DexInputKind.Apk
-            DexInputInspector.isDex(inputFile) -> DexInputKind.Dex
-            else -> DexInputKind.Unknown
         }
     }
 }
