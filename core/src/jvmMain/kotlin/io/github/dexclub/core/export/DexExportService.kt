@@ -7,6 +7,9 @@ import com.android.tools.smali.dexlib2.Opcodes
 import com.android.tools.smali.dexlib2.writer.io.MemoryDataStore
 import com.android.tools.smali.dexlib2.writer.pool.DexPool
 import io.github.dexclub.core.UnescapedUnicodeBaksmaliWriter
+import io.github.dexclub.core.config.DexFormatConfig
+import io.github.dexclub.core.config.JavaDecompileConfig
+import io.github.dexclub.core.config.SmaliRenderConfig
 import io.github.dexclub.core.session.DexSession
 import jadx.api.JadxArgs
 import jadx.api.JadxDecompiler
@@ -16,6 +19,9 @@ import java.io.StringWriter
 
 internal class DexExportService(
     private val session: DexSession,
+    private val dexFormatConfig: DexFormatConfig = DexFormatConfig(),
+    private val javaDecompileConfig: JavaDecompileConfig = JavaDecompileConfig(),
+    private val smaliRenderConfig: SmaliRenderConfig = SmaliRenderConfig(),
 ) {
     @Throws(IllegalArgumentException::class)
     suspend fun exportSingleDex(
@@ -33,7 +39,7 @@ internal class DexExportService(
         )
 
         val dataStore = MemoryDataStore()
-        val dexPool = DexPool(Opcodes.getDefault())
+        val dexPool = DexPool(dexFormatConfig.toOpcodes())
         dexPool.internClass(findClassDef)
         dexPool.writeTo(dataStore)
 
@@ -58,15 +64,12 @@ internal class DexExportService(
             dexPath = dexPath,
         )
 
-        val options = BaksmaliOptions().apply {
-            parameterRegisters = true
-            localsDirective = true
-            debugInfo = true
-            accessorComments = true
-        }
+        val effectiveSmaliRenderConfig = smaliRenderConfig
+            .copy(autoUnicodeDecode = autoUnicodeDecode)
+        val options = effectiveSmaliRenderConfig.toBaksmaliOptions(dexFormatConfig)
 
         val stringWriter = StringWriter()
-        val baksmaliWriter = if (autoUnicodeDecode) {
+        val baksmaliWriter = if (effectiveSmaliRenderConfig.autoUnicodeDecode) {
             UnescapedUnicodeBaksmaliWriter(stringWriter)
         } else {
             BaksmaliWriter(stringWriter)
@@ -111,20 +114,15 @@ internal class DexExportService(
     ): String {
         val dexFile = File(dexPath)
         val javaFile = File(outputPath)
-        val outDir = javaFile.parentFile
+        val outputDirectory = javaFile.parentFile
             ?: throw IllegalArgumentException("output must have a parent directory")
 
-        val args = JadxArgs()
-        args.setInputFile(dexFile)
-        args.outDir = outDir
-        args.codeCache = NoOpCodeCache()
-        args.setUseDxInput(true)
-        args.isRenameValid = false
-        args.isRenameCaseSensitive = true
-        args.isShowInconsistentCode = false
-        args.isDebugInfo = false
-        args.isMoveInnerClasses = false
-        args.isInlineAnonymousClasses = false
+        val args = JadxArgs().apply {
+            setInputFile(dexFile)
+            outDir = outputDirectory
+            codeCache = NoOpCodeCache()
+            javaDecompileConfig.applyTo(this)
+        }
 
         JadxDecompiler(args).use { decompiler ->
             decompiler.load()
@@ -138,5 +136,31 @@ internal class DexExportService(
         }
 
         return javaFile.absolutePath
+    }
+
+    private fun DexFormatConfig.toOpcodes(): Opcodes {
+        return opcodeApiLevel?.let(Opcodes::forApi) ?: Opcodes.getDefault()
+    }
+
+    private fun SmaliRenderConfig.toBaksmaliOptions(
+        dexFormatConfig: DexFormatConfig,
+    ): BaksmaliOptions {
+        return BaksmaliOptions().apply {
+            apiLevel = dexFormatConfig.toOpcodes().api
+            parameterRegisters = this@toBaksmaliOptions.parameterRegisters
+            localsDirective = this@toBaksmaliOptions.localsDirective
+            debugInfo = this@toBaksmaliOptions.debugInfo
+            accessorComments = this@toBaksmaliOptions.accessorComments
+        }
+    }
+
+    private fun JavaDecompileConfig.applyTo(args: JadxArgs) {
+        args.setUseDxInput(useDxInput)
+        args.isRenameValid = renameValid
+        args.isRenameCaseSensitive = renameCaseSensitive
+        args.isShowInconsistentCode = showInconsistentCode
+        args.isDebugInfo = debugInfo
+        args.isMoveInnerClasses = moveInnerClasses
+        args.isInlineAnonymousClasses = inlineAnonymousClasses
     }
 }

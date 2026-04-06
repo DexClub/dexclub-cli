@@ -1,5 +1,6 @@
 package io.github.dexclub.core
 
+import io.github.dexclub.core.config.CoreRuntimeConfig
 import io.github.dexclub.core.export.DexExportService
 import io.github.dexclub.core.input.DexInputInspector
 import io.github.dexclub.core.runtime.DexKitRuntime
@@ -15,6 +16,7 @@ import java.io.File
 
 actual class DexEngine actual constructor(
     dexPaths: List<String>,
+    private val config: CoreRuntimeConfig,
 ) : AutoCloseable {
     private val normalizedDexPaths = dexPaths
         .map(String::trim)
@@ -23,13 +25,24 @@ actual class DexEngine actual constructor(
         normalizedDexPaths.map(::File)
     }
     private val dexSession by lazy(LazyThreadSafetyMode.NONE) {
-        DexSessionLoader.loadMultiDex(dexFiles)
+        DexSessionLoader.loadMultiDex(
+            dexFiles = dexFiles,
+            config = config.dexFormat,
+        )
     }
     private val dexExportService by lazy(LazyThreadSafetyMode.NONE) {
-        DexExportService(dexSession)
+        DexExportService(
+            session = dexSession,
+            dexFormatConfig = config.dexFormat,
+            javaDecompileConfig = config.javaDecompile,
+            smaliRenderConfig = config.smaliRender,
+        )
     }
     private val dexKitRuntime by lazy(LazyThreadSafetyMode.NONE) {
-        DexKitRuntime(normalizedDexPaths)
+        DexKitRuntime(
+            dexPaths = normalizedDexPaths,
+            config = config.dexKit,
+        )
     }
 
     actual fun dexCount(): Int {

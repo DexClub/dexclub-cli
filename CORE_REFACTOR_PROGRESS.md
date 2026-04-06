@@ -36,12 +36,22 @@
 
 记录时间：`2026-04-06`
 
-- `cli/build.gradle.kts`
-  - 已存在未提交改动，来自本轮 `cli` 包名调整
-- `cli/src/main/kotlin/io/github/dexclub/dexengine/cli/Main.kt`
-  - 已删除，来自本轮 `cli` 包名调整
-- `cli/src/main/kotlin/io/github/dexclub/cli/`
-  - 已新增，来自本轮 `cli` 包名调整
+- `AGENTS.md`
+  - 已存在未提交改动，新增 `core` 重构文档续接入口
+- `CORE_REFACTOR_PROGRESS.md`
+  - 已存在未提交改动，已回写当前工作区快照与 `T-01` 完成状态
+- `core/src/commonMain/kotlin/io/github/dexclub/core/config/`
+  - 已新增配置模型，来自本轮 `T-01`
+- `core/src/commonMain/kotlin/io/github/dexclub/core/DexEngine.kt`
+  - 已存在未提交改动，新增 `CoreRuntimeConfig` 默认入口
+- `core/src/commonMain/kotlin/io/github/dexclub/core/runtime/DexKitRuntime.kt`
+  - 已存在未提交改动，开始从 `DexKitRuntimeConfig` 读取默认值
+- `core/src/jvmMain/kotlin/io/github/dexclub/core/DexEngine.jvm.kt`
+  - 已存在未提交改动，已把 `DexSessionLoader`、`DexExportService`、`DexKitRuntime` 接到配置模型
+- `core/src/jvmMain/kotlin/io/github/dexclub/core/export/DexExportService.kt`
+  - 已存在未提交改动，已把 `jadx`、`dexlib2`、`baksmali` 默认配置迁移到 `core` 配置模型读取
+- `core/src/jvmMain/kotlin/io/github/dexclub/core/session/DexSessionLoader.kt`
+  - 已存在未提交改动，已开始从 `DexFormatConfig` 读取 opcode 配置
 - `dexkit/vendor/DexKit`
   - 当前为 dirty 状态，非本轮 `core` 重构变更，不应擅自处理
 
@@ -207,8 +217,10 @@
 
 - 已完成 `core` 重构方案文档整理，形成 `CORE_REFACTOR_PLAN.md`
 - 已建立本进度文档，并补充状态、续接、未提交改动与会话恢复规则
-- 当前尚未开始 `core` 实现改动
-- 当前工作区已存在 `cli` 包名调整相关未提交代码，以及 `dexkit/vendor/DexKit` 的既有 dirty 状态
+- 已在 `AGENTS.md` 增加 `core` 重构文档续接入口
+- 已完成 `T-01` 第一轮落地：新增 `CoreRuntimeConfig`、`DexFormatConfig`、`SmaliRenderConfig`、`JavaDecompileConfig`、`DexKitRuntimeConfig`
+- `DexEngine`、`DexSessionLoader`、`DexExportService`、`DexKitRuntime` 已开始从配置模型读取默认值
+- 已执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin`，验证通过
 
 ## 已计划
 
@@ -233,16 +245,6 @@
 - 验证：尚未开始。
 
 ## 待开始
-
-### T-01 建立 `core` 配置模型
-
-- 状态：`待开始`
-- 更新时间：`2026-04-06`
-- 说明：新增 `CoreRuntimeConfig`、`JavaDecompileConfig`、`DexFormatConfig`、`SmaliRenderConfig`、`DexKitRuntimeConfig`，把当前散落在实现中的默认配置收口。
-- 影响范围：`core/src/commonMain/kotlin/io/github/dexclub/core/config/`，以及 `core/src/jvmMain/` 中使用 `jadx`、`dexlib2`、`baksmali`、`DexKit` 的实现。
-- 完成定义：配置类已落地到 `commonMain`，JVM 实现开始从这些配置读取默认值，现有 CLI 行为不变。
-- 下一步：先在 `commonMain` 建配置对象，再把 JVM 实现中的硬编码迁移到这些对象。
-- 验证：至少执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin`。
 
 ### T-02 建立 `core` 结果模型与请求模型
 
@@ -283,6 +285,16 @@
 - 当前无。
 
 ## 已完成
+
+### T-01 建立 `core` 配置模型
+
+- 状态：`已完成`
+- 更新时间：`2026-04-06`
+- 说明：已新增 `CoreRuntimeConfig`、`JavaDecompileConfig`、`DexFormatConfig`、`SmaliRenderConfig`、`DexKitRuntimeConfig`，并让 `DexEngine`、`DexSessionLoader`、`DexExportService`、`DexKitRuntime` 开始从这些配置读取默认值。
+- 影响范围：`core/src/commonMain/kotlin/io/github/dexclub/core/config/`、`core/src/commonMain/kotlin/io/github/dexclub/core/DexEngine.kt`、`core/src/commonMain/kotlin/io/github/dexclub/core/runtime/DexKitRuntime.kt`、`core/src/jvmMain/`
+- 完成定义：配置类已落地到 `commonMain`，JVM 实现开始从这些配置读取默认值，现有 CLI 行为不变。
+- 下一步：进入 `T-02`，建立 `core/model` 与 `core/request`，开始形成自有结果模型和导出请求模型。
+- 验证：已执行 `./gradlew :core:compileKotlinJvm :cli:compileKotlin`，通过。
 
 ### D-01 整理 `core` 重构方案文档
 

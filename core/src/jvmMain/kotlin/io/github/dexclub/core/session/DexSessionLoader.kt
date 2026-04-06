@@ -3,18 +3,23 @@ package io.github.dexclub.core.session
 import com.android.tools.smali.dexlib2.Opcodes
 import com.android.tools.smali.dexlib2.dexbacked.DexBackedDexFile
 import com.android.tools.smali.dexlib2.iface.DexFile
+import io.github.dexclub.core.config.DexFormatConfig
 import io.github.dexclub.core.input.DexInputInspector
 import java.io.File
 
 internal object DexSessionLoader {
     private const val TAG = "DexSessionLoader"
 
-    fun loadMultiDex(dexFiles: List<File>): DexSession {
+    fun loadMultiDex(
+        dexFiles: List<File>,
+        config: DexFormatConfig = DexFormatConfig(),
+    ): DexSession {
         val backedDexs = mutableMapOf<String, DexFile>()
+        val opcodes = config.opcodeApiLevel?.let(Opcodes::forApi) ?: Opcodes.getDefault()
         for (dex in dexFiles) {
             if (DexInputInspector.isDex(dex)) {
                 val byteArray = dex.readBytes()
-                val backedDexFile = DexBackedDexFile(Opcodes.getDefault(), byteArray)
+                val backedDexFile = DexBackedDexFile(opcodes, byteArray)
                 backedDexs[dex.absolutePath] = backedDexFile
             } else {
                 System.err.println("[$TAG] Dex 文件校验失败: ${dex.absolutePath}")

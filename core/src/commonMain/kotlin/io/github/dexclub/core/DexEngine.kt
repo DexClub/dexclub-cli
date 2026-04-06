@@ -1,5 +1,6 @@
 package io.github.dexclub.core
 
+import io.github.dexclub.core.config.CoreRuntimeConfig
 import io.github.dexclub.core.source.DexIndexedClass
 import io.github.dexclub.dexkit.DexKitBridge
 import io.github.dexclub.dexkit.result.ClassData
@@ -7,6 +8,7 @@ import io.github.dexclub.dexkit.result.MethodData
 
 expect class DexEngine(
     dexPaths: List<String>,
+    config: CoreRuntimeConfig = CoreRuntimeConfig(),
 ) : AutoCloseable {
     fun dexCount(): Int
 
