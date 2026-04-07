@@ -1,11 +1,19 @@
 package io.github.dexclub.cli
 
 import io.github.dexclub.core.DexEngine
+import io.github.dexclub.core.parseCoreJson
+import io.github.dexclub.core.request.DexClassQueryRequest
 import io.github.dexclub.core.config.SmaliRenderConfig
 import io.github.dexclub.core.model.DexInputKind
+import io.github.dexclub.core.model.DexClassHit
+import io.github.dexclub.core.model.DexFieldHit
+import io.github.dexclub.core.model.DexMethodHit
 import io.github.dexclub.core.request.DexExportRequest
+import io.github.dexclub.core.request.DexFieldQueryRequest
 import io.github.dexclub.core.request.JavaExportRequest
+import io.github.dexclub.core.request.DexMethodQueryRequest
 import io.github.dexclub.core.request.SmaliExportRequest
+import io.github.dexclub.core.toCoreJsonString
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.io.PrintStream
@@ -18,6 +26,11 @@ private data class CommandSpec(
     val details: List<String> = emptyList(),
     val handler: (Map<String, List<String>>) -> Unit,
 )
+
+private enum class OutputFormat {
+    Text,
+    Json,
+}
 
 fun main(args: Array<String>) {
     if (args.isEmpty()) {
@@ -161,6 +174,24 @@ private fun runSearchString(options: Map<String, List<String>>) {
     }
 }
 
+private fun runFindClass(options: Map<String, List<String>>) {
+    runAdvancedSearch(options) { dexEngine ->
+        dexEngine.findClassHits(requireQueryText(options).parseCoreJson<DexClassQueryRequest>())
+    }
+}
+
+private fun runFindMethod(options: Map<String, List<String>>) {
+    runAdvancedSearch(options) { dexEngine ->
+        dexEngine.findMethodHits(requireQueryText(options).parseCoreJson<DexMethodQueryRequest>())
+    }
+}
+
+private fun runFindField(options: Map<String, List<String>>) {
+    runAdvancedSearch(options) { dexEngine ->
+        dexEngine.findFieldHits(requireQueryText(options).parseCoreJson<DexFieldQueryRequest>())
+    }
+}
+
 private fun parseOptions(args: List<String>): Map<String, List<String>> {
     if (args.isEmpty()) return emptyMap()
 
@@ -193,6 +224,18 @@ private fun findOptionalOption(
     if (values.isEmpty()) return null
     require(values.size == 1) { "参数 --$key 只能传一次" }
     return values.single()
+}
+
+private fun requireQueryText(options: Map<String, List<String>>): String {
+    val queryFile = findOptionalOption(options, "query-file")
+    val queryJson = findOptionalOption(options, "query-json")
+    require((queryFile == null) != (queryJson == null)) { "参数 --query-file 与 --query-json 必须且只能传一个" }
+
+    return when {
+        queryFile != null -> requireExistingFile(queryFile).readText(Charsets.UTF_8)
+        queryJson != null -> queryJson
+        else -> error("缺少查询参数")
+    }
 }
 
 private fun requireDexInput(options: Map<String, List<String>>): String {
@@ -232,6 +275,28 @@ private fun requireInspectOrSearchInputs(options: Map<String, List<String>>): Li
     return normalizedInputs
 }
 
+private inline fun <reified T> runAdvancedSearch(
+    options: Map<String, List<String>>,
+    executor: (DexEngine) -> List<T>,
+) {
+    val inputs = requireInspectOrSearchInputs(options)
+    val outputFormat = requireOutputFormat(options, default = OutputFormat.Json)
+    val limit = requireOptionalPositiveLimit(options)
+
+    DexEngine(inputs).useEngine { dexEngine ->
+        val results = executor(dexEngine)
+        val limitedResults = limit?.let(results::take) ?: results
+        val outputText = when (outputFormat) {
+            OutputFormat.Json -> limitedResults.toCoreJsonString()
+            OutputFormat.Text -> formatAdvancedSearchResults(limitedResults, inputs.size)
+        }
+        writeOutput(
+            text = outputText,
+            outputPath = findOptionalOption(options, "output-file"),
+        )
+    }
+}
+
 private inline fun <T> DexEngine.useEngine(block: (DexEngine) -> T): T {
     try {
         return block(this)
@@ -249,6 +314,119 @@ private fun requireExistingFile(path: String): File {
 
 private fun ensureParentDirectory(path: String) {
     File(path).absoluteFile.parentFile?.mkdirs()
+}
+
+private fun requireOutputFormat(
+    options: Map<String, List<String>>,
+    default: OutputFormat = OutputFormat.Text,
+): OutputFormat {
+    val value = findOptionalOption(options, "output-format") ?: return default
+    return when (value.lowercase()) {
+        "text" -> OutputFormat.Text
+        "json" -> OutputFormat.Json
+        else -> error("不支持的输出格式: $value")
+    }
+}
+
+private fun requireOptionalPositiveLimit(options: Map<String, List<String>>): Int? {
+    val value = findOptionalOption(options, "limit") ?: return null
+    return value.toIntOrNull()?.takeIf { it > 0 } ?: error("参数 --limit 必须是正整数")
+}
+
+private fun formatAdvancedSearchResults(
+    results: List<*>,
+    inputCount: Int,
+): String {
+    val rows = when {
+        results.isEmpty() -> emptyList()
+        results.first() is DexClassHit -> {
+            @Suppress("UNCHECKED_CAST")
+            formatClassRows(results as List<DexClassHit>, inputCount)
+        }
+        results.first() is DexMethodHit -> {
+            @Suppress("UNCHECKED_CAST")
+            formatMethodRows(results as List<DexMethodHit>, inputCount)
+        }
+        results.first() is DexFieldHit -> {
+            @Suppress("UNCHECKED_CAST")
+            formatFieldRows(results as List<DexFieldHit>, inputCount)
+        }
+        else -> error("不支持的结果类型")
+    }
+
+    return buildString {
+        appendLine("count=${results.size}")
+        appendLine("shown=${results.size}")
+        rows.forEach { row ->
+            appendLine(row)
+        }
+    }.trimEnd()
+}
+
+private fun formatClassRows(
+    results: List<DexClassHit>,
+    inputCount: Int,
+): List<String> {
+    return results.map { result ->
+        formatHitRow(
+            inputCount = inputCount,
+            columns = listOf(result.name, result.descriptor),
+            sourceDexPath = result.sourceDexPath,
+        )
+    }
+}
+
+private fun formatMethodRows(
+    results: List<DexMethodHit>,
+    inputCount: Int,
+): List<String> {
+    return results.map { result ->
+        formatHitRow(
+            inputCount = inputCount,
+            columns = listOf(result.className, result.name, result.descriptor),
+            sourceDexPath = result.sourceDexPath,
+        )
+    }
+}
+
+private fun formatFieldRows(
+    results: List<DexFieldHit>,
+    inputCount: Int,
+): List<String> {
+    return results.map { result ->
+        formatHitRow(
+            inputCount = inputCount,
+            columns = listOf(result.className, result.name, result.descriptor),
+            sourceDexPath = result.sourceDexPath,
+        )
+    }
+}
+
+private fun formatHitRow(
+    inputCount: Int,
+    columns: List<String>,
+    sourceDexPath: String?,
+): String {
+    return if (inputCount == 1) {
+        columns.joinToString(separator = "\t")
+    } else {
+        (columns + sourceDexPath.orEmpty()).joinToString(separator = "\t")
+    }
+}
+
+private fun writeOutput(
+    text: String,
+    outputPath: String?,
+) {
+    if (outputPath == null) {
+        println(text)
+        return
+    }
+
+    ensureParentDirectory(outputPath)
+    val outputFile = File(outputPath).absoluteFile
+    outputFile.writeText(text, Charsets.UTF_8)
+    println("output=${outputFile.absolutePath}")
 }
 
 private fun handleHelpCommand(args: List<String>) {
@@ -315,7 +493,7 @@ private fun rootUsageText(): String {
         appendLine()
         appendLine("全局说明:")
         appendLine("  运行要求：Java 21")
-        appendLine("  inspect/search 在多输入模式下仅支持多个 dex 文件，不支持混合传入 apk")
+        appendLine("  inspect/search/find 在多输入模式下仅支持多个 dex 文件，不支持混合传入 apk")
         appendLine("  导出命令当前仍只支持单个 dex 输入")
     }.trimEnd()
 }
@@ -441,8 +619,41 @@ private val COMMANDS = listOf(
         handler = ::runSearchString,
     ),
     CommandSpec(
+        name = "find-class",
+        summary = "按 JSON 查询条件查找类",
+        argumentsUsage = "--input <apk|dex> [--input <dex> ...] (--query-file <文件> | --query-json <JSON>) [--output-format text|json] [--output-file <文件>] [--limit <数量>]",
+        details = listOf(
+            "--query-file 与 --query-json 必须且只能传一个。",
+            "--output-format 默认为 json。",
+            "--limit 未指定时输出全部结果。",
+        ),
+        handler = ::runFindClass,
+    ),
+    CommandSpec(
+        name = "find-method",
+        summary = "按 JSON 查询条件查找方法",
+        argumentsUsage = "--input <apk|dex> [--input <dex> ...] (--query-file <文件> | --query-json <JSON>) [--output-format text|json] [--output-file <文件>] [--limit <数量>]",
+        details = listOf(
+            "--query-file 与 --query-json 必须且只能传一个。",
+            "--output-format 默认为 json。",
+            "--limit 未指定时输出全部结果。",
+        ),
+        handler = ::runFindMethod,
+    ),
+    CommandSpec(
+        name = "find-field",
+        summary = "按 JSON 查询条件查找字段",
+        argumentsUsage = "--input <apk|dex> [--input <dex> ...] (--query-file <文件> | --query-json <JSON>) [--output-format text|json] [--output-file <文件>] [--limit <数量>]",
+        details = listOf(
+            "--query-file 与 --query-json 必须且只能传一个。",
+            "--output-format 默认为 json。",
+            "--limit 未指定时输出全部结果。",
+        ),
+        handler = ::runFindField,
+    ),
+    CommandSpec(
         name = "export-dex",
-        summary = "导出目标类所在 dex",
+        summary = "导出目标类为单类 dex",
         argumentsUsage = "--input <dex> --class <类名> --output <输出 dex>",
         details = listOf(
             "当前仅支持单个 dex 输入。",

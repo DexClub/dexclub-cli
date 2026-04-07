@@ -4,9 +4,13 @@ import io.github.dexclub.core.config.CoreRuntimeConfig
 import io.github.dexclub.core.model.DexArchiveInfo
 import io.github.dexclub.core.model.DexClassHit
 import io.github.dexclub.core.model.DexExportResult
+import io.github.dexclub.core.model.DexFieldHit
 import io.github.dexclub.core.model.DexMethodHit
+import io.github.dexclub.core.request.DexClassQueryRequest
 import io.github.dexclub.core.request.DexExportRequest
+import io.github.dexclub.core.request.DexFieldQueryRequest
 import io.github.dexclub.core.request.JavaExportRequest
+import io.github.dexclub.core.request.DexMethodQueryRequest
 import io.github.dexclub.core.request.SmaliExportRequest
 import io.github.dexclub.core.source.DexIndexedClass
 
@@ -25,6 +29,12 @@ expect class DexEngine(
     fun searchClassHitsByName(keyword: String): List<DexClassHit>
 
     fun searchMethodHitsByString(keyword: String): List<DexMethodHit>
+
+    fun findClassHits(request: DexClassQueryRequest): List<DexClassHit>
+
+    fun findMethodHits(request: DexMethodQueryRequest): List<DexMethodHit>
+
+    fun findFieldHits(request: DexFieldQueryRequest): List<DexFieldHit>
 
     suspend fun exportDex(
         request: DexExportRequest,

@@ -1,9 +1,13 @@
 package io.github.dexclub.core
 
+import io.github.dexclub.core.query.DexStringMatchType
+import io.github.dexclub.core.request.DexClassQueryRequest
 import io.github.dexclub.core.model.DexExportFormat
 import io.github.dexclub.core.model.DexInputKind
 import io.github.dexclub.core.request.DexExportRequest
+import io.github.dexclub.core.request.DexFieldQueryRequest
 import io.github.dexclub.core.request.JavaExportRequest
+import io.github.dexclub.core.request.DexMethodQueryRequest
 import io.github.dexclub.core.request.SmaliExportRequest
 import kotlinx.coroutines.runBlocking
 import java.io.File
@@ -43,6 +47,86 @@ class DexEngineJvmTest {
             val methodHits = engine.searchMethodHitsByString(fixture.needle)
             assertTrue(methodHits.any { it.className == fixture.className })
             assertTrue(methodHits.all { it.sourceDexPath == fixture.dexFile.absolutePath })
+        }
+    }
+
+    @Test
+    fun `advanced query requests should support json round trip`() {
+        val classQuery = DexClassQueryRequest().apply {
+            searchPackages = listOf("fixture.samples")
+            matcher {
+                className("SampleSearchTarget")
+                addUsingString(TEST_NEEDLE)
+                fieldCount(1)
+            }
+        }
+        val methodQuery = DexMethodQueryRequest().apply {
+            matcher {
+                name("exposeNeedle")
+                declaredClass("fixture.samples.SampleSearchTarget")
+                returnType("java.lang.String")
+                addUsingString(TEST_NEEDLE)
+            }
+        }
+        val fieldQuery = DexFieldQueryRequest().apply {
+            matcher {
+                name("NEEDLE")
+                declaredClass("fixture.samples.SampleSearchTarget")
+                type("java.lang.String", DexStringMatchType.Equals)
+            }
+        }
+
+        val restoredClassQuery = classQuery.toCoreJsonString().parseCoreJson<DexClassQueryRequest>()
+        val restoredMethodQuery = methodQuery.toCoreJsonString().parseCoreJson<DexMethodQueryRequest>()
+        val restoredFieldQuery = fieldQuery.toCoreJsonString().parseCoreJson<DexFieldQueryRequest>()
+
+        assertEquals(classQuery, restoredClassQuery)
+        assertEquals(methodQuery, restoredMethodQuery)
+        assertEquals(fieldQuery, restoredFieldQuery)
+    }
+
+    @Test
+    fun `advanced query should return class method and field hits`() {
+        val fixture = TestDexFixture.generated()
+
+        DexEngine(listOf(fixture.dexFile.absolutePath)).use { engine ->
+            val classHits = engine.findClassHits(
+                DexClassQueryRequest().apply {
+                    searchPackages = listOf("fixture.samples")
+                    matcher {
+                        className(fixture.className)
+                        fieldCount(1)
+                        methodCount(min = 1)
+                    }
+                },
+            )
+            assertTrue(classHits.any { it.name == fixture.className })
+            assertTrue(classHits.all { it.sourceDexPath == fixture.dexFile.absolutePath })
+
+            val methodHits = engine.findMethodHits(
+                DexMethodQueryRequest().apply {
+                    matcher {
+                        name("exposeNeedle")
+                        declaredClass(fixture.className)
+                        returnType("java.lang.String")
+                        addUsingString(fixture.needle)
+                    }
+                },
+            )
+            assertTrue(methodHits.any { it.className == fixture.className && it.name == "exposeNeedle" })
+            assertTrue(methodHits.all { it.sourceDexPath == fixture.dexFile.absolutePath })
+
+            val fieldHits = engine.findFieldHits(
+                DexFieldQueryRequest().apply {
+                    matcher {
+                        name("NEEDLE")
+                        declaredClass(fixture.className)
+                        type("java.lang.String")
+                    }
+                },
+            )
+            assertTrue(fieldHits.any { it.className == fixture.className && it.name == "NEEDLE" })
+            assertTrue(fieldHits.all { it.sourceDexPath == fixture.dexFile.absolutePath })
         }
     }
 
@@ -191,3 +275,5 @@ class DexEngineJvmTest {
         }
     }
 }
+
+private const val TEST_NEEDLE = "dexclub-needle-string"

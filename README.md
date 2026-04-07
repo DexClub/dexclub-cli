@@ -73,6 +73,11 @@ CLI 入口支持以下帮助与版本命令：
   - `search-class`
   - `search-string`
   - 用于按类名关键词或字符串常量搜索目标
+- 高级查询命令
+  - `find-class`
+  - `find-method`
+  - `find-field`
+  - 用于按 JSON 查询条件查找类、方法或字段
 - 导出命令
   - `export-dex`
   - `export-smali`
@@ -88,6 +93,11 @@ CLI 入口支持以下帮助与版本命令：
 - `search-class`、`search-string`
   - 必须传入 `--keyword`
   - `--limit` 可选，默认值为 `100`
+- `find-class`、`find-method`、`find-field`
+  - 必须二选一传入 `--query-file` 或 `--query-json`
+  - `--output-format` 可选，支持 `text` 与 `json`，默认值为 `json`
+  - `--output-file` 可选；未指定时输出到终端
+  - `--limit` 可选；未指定时输出全部结果
 - `export-dex`、`export-smali`、`export-java`
   - 仅支持单个 `dex` 输入
   - 必须显式传入 `--class` 与 `--output`
@@ -140,6 +150,24 @@ java -jar cli/build/libs/dexclub-cli-all.jar search-class \
 java -jar cli/build/libs/dexclub-cli-all.jar search-string \
   --input /path/to/classes.dex \
   --keyword dexclub-needle-string
+```
+
+按 JSON 文件查找类：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar find-class \
+  --input /path/to/classes.dex \
+  --query-file /path/to/find-class.json \
+  --output-format json
+```
+
+按 JSON 字符串查找方法并写入文件：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar find-method \
+  --input /path/to/classes.dex \
+  --query-json '{"matcher":{"nameMatcher":{"value":"exposeNeedle","matchType":"Equals"},"declaredClassMatcher":{"classNameMatcher":{"value":"fixture.samples.SampleSearchTarget","matchType":"Equals"}}}}' \
+  --output-file /tmp/find-method.json
 ```
 
 导出目标类为单类 dex：

@@ -7,9 +7,13 @@ import io.github.dexclub.core.input.DexInputInspector
 import io.github.dexclub.core.model.DexArchiveInfo
 import io.github.dexclub.core.model.DexClassHit
 import io.github.dexclub.core.model.DexExportResult
+import io.github.dexclub.core.model.DexFieldHit
 import io.github.dexclub.core.model.DexMethodHit
+import io.github.dexclub.core.request.DexClassQueryRequest
 import io.github.dexclub.core.request.DexExportRequest
+import io.github.dexclub.core.request.DexFieldQueryRequest
 import io.github.dexclub.core.request.JavaExportRequest
+import io.github.dexclub.core.request.DexMethodQueryRequest
 import io.github.dexclub.core.request.SmaliExportRequest
 import io.github.dexclub.core.runtime.DexKitRuntime
 import io.github.dexclub.core.search.DexKitSearchBackend
@@ -92,6 +96,18 @@ actual class DexEngine actual constructor(
 
     actual fun searchMethodHitsByString(keyword: String): List<DexMethodHit> {
         return dexSearchService.searchMethodHitsByString(keyword)
+    }
+
+    actual fun findClassHits(request: DexClassQueryRequest): List<DexClassHit> {
+        return dexSearchService.findClassHits(request)
+    }
+
+    actual fun findMethodHits(request: DexMethodQueryRequest): List<DexMethodHit> {
+        return dexSearchService.findMethodHits(request)
+    }
+
+    actual fun findFieldHits(request: DexFieldQueryRequest): List<DexFieldHit> {
+        return dexSearchService.findFieldHits(request)
     }
 
     actual suspend fun exportDex(
