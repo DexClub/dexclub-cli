@@ -1,6 +1,6 @@
 # dexclub-cli
 
-`dexclub-cli` 是一个基于 DexKit 的 Kotlin 多模块工程，当前包含 CLI、核心能力层，以及一层面向 KMP 的 DexKit 薄封装。
+`dexclub-cli` 是一个用于 dex/apk 检索、解析与导出的 Kotlin 多模块工程，包含 CLI、核心能力层，以及一层面向 KMP 的 DexKit 薄封装。导出相关能力使用 `dexlib2` / `baksmali` 和 `jadx`。
 
 ## 模块
 
@@ -23,6 +23,18 @@
 - Android 侧通过上游 `DexKit` 的 `dexkit-android` 产物提供底层实现。
 - JVM 侧通过 included build 使用本地 `vendor/DexKit`，并在 `jvmProcessResources` 时拷贝 native 库。
 - 根工程启用了 `mavenLocal()`，用于解析当前 Android 构建所需的 `dev.rikka.ndk.thirdparty:libcxx:1.3.0`。
+
+## 技术工具链
+
+- `DexKit`
+  - 用于类、方法、字段检索，以及 `find-class`、`find-method`、`find-field`
+  - 仓库内通过 `dexkit/` 这一层 KMP API 封装上游能力
+- `dexlib2` / `baksmali`
+  - 用于 JVM 侧 dex 读取、单类 dex 导出与 smali 生成
+  - `inspect`、`export-dex`、`export-smali` 使用这组工具链
+- `jadx`
+  - 用于将导出的单类 dex 反编译为 Java 源码
+  - `export-java` 先导出临时单类 dex，再调用 `jadx` 生成 `.java` 文件
 
 ## Core 公共 API
 
