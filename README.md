@@ -18,7 +18,7 @@
 ## 当前结构说明
 
 - `core` 必须继续保留 KMP 结构，稳定的 facade / model / config / request 边界位于 `commonMain`，JVM 实现细节位于 `jvmMain`。
-- `core` 当前对外以自有 API 为主，不再通过公共边界透传 `DexKitBridge`、`ClassData`、`MethodData`。
+- `core` 当前对外以自有 API 为主，公共边界围绕 `DexEngine` 及其自有 model/request 组织。
 - `dexkit` 负责提供 `io.github.dexclub.dexkit` 这一层 KMP API。
 - Android 侧通过上游 `DexKit` 的 `dexkit-android` 产物提供底层实现。
 - JVM 侧通过 included build 使用本地 `vendor/DexKit`，并在 `jvmProcessResources` 时拷贝 native 库。
@@ -51,27 +51,123 @@
 
 说明：
 
-- `cli` 已迁移到这组自有 API
-- `core` 公共边界不再直接暴露 `DexKitBridge`、`ClassData`、`MethodData`
+- `cli` 通过这组自有 API 访问 `core`
+- `core` 公共边界保持在自有 model/request 与 `DexEngine` 这一层
 - 第三方适配与平台实现细节继续留在 `jvmMain`
 
-## CLI 输入约束
+## CLI 命令结构
 
-- 帮助入口
-  - `dexclub-cli --help`
-  - `dexclub-cli help <命令>`
-  - `dexclub-cli <命令> --help`
+CLI 入口支持以下帮助与版本命令：
+
+- `dexclub-cli --help`
+- `dexclub-cli help <命令>`
+- `dexclub-cli <命令> --help`
+- `dexclub-cli --version`
+
+当前命令按职责分为三组：
+
+- 检查命令
+  - `inspect`
+  - 用于检查 `apk` 或 `dex` 输入，并输出基本统计信息
+- 搜索命令
+  - `search-class`
+  - `search-string`
+  - 用于按类名关键词或字符串常量搜索目标
 - 导出命令
   - `export-dex`
   - `export-smali`
   - `export-java`
+  - 用于按类名导出单类 dex、smali 或 Java 源码
+
+输入与参数规则：
+
 - `inspect`、`search-class`、`search-string`
   - 支持重复传入 `--input`
-  - 单输入时支持 `apk` 或 `dex`
-  - 多输入时当前仅支持多个 `dex`，不支持混合传入 `apk`
+  - 单输入支持 `apk` 或 `dex`
+  - 多输入仅支持多个 `dex` 文件，不支持混合传入 `apk`
+- `search-class`、`search-string`
+  - 必须传入 `--keyword`
+  - `--limit` 可选，默认值为 `100`
 - `export-dex`、`export-smali`、`export-java`
-  - 当前仍只支持单个 `dex` 输入
-  - 导出请求必须显式指定来源 dex
+  - 仅支持单个 `dex` 输入
+  - 必须显式传入 `--class` 与 `--output`
+- `export-smali`
+  - 额外支持 `--auto-unicode-decode true|false`
+  - 默认值为 `true`
+
+## CLI 使用案例
+
+以下示例默认使用 fat jar 入口：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar <命令> [参数]
+```
+
+查看帮助：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar --help
+java -jar cli/build/libs/dexclub-cli-all.jar help search-string
+```
+
+检查单个 apk：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar inspect \
+  --input /path/to/app.apk
+```
+
+检查多个 dex：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar inspect \
+  --input /path/to/classes.dex \
+  --input /path/to/classes2.dex
+```
+
+按类名搜索：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar search-class \
+  --input /path/to/classes.dex \
+  --keyword SampleSearchTarget \
+  --limit 20
+```
+
+按字符串常量搜索：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar search-string \
+  --input /path/to/classes.dex \
+  --keyword dexclub-needle-string
+```
+
+导出目标类为单类 dex：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar export-dex \
+  --input /path/to/classes.dex \
+  --class fixture.samples.SampleSearchTarget \
+  --output /tmp/SampleSearchTarget.dex
+```
+
+导出目标类为 smali：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar export-smali \
+  --input /path/to/classes.dex \
+  --class fixture.samples.SampleSearchTarget \
+  --output /tmp/SampleSearchTarget.smali
+```
+
+导出目标类为 Java 源码：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar export-java \
+  --input /path/to/classes.dex \
+  --class fixture.samples.SampleSearchTarget \
+  --output /tmp/SampleSearchTarget.java
+```
 
 ## 环境
 
@@ -157,7 +253,7 @@ android {
     externalNativeBuild {
         cmake {
             path file("CMakeLists.txt")
-            // 不再锁死某个 SDK CMake 版本，让当前环境自行解析
+            // 由当前环境自行解析 SDK CMake 版本
         }
     }
 }
