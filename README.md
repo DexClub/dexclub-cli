@@ -269,6 +269,8 @@ cd dexkit/vendor/libcxx-prefab
 - 推送匹配 `v*` 的 tag 时触发
 - 在 GitHub Actions 页面手动触发
 
+tag 构建成功后，会自动创建或更新对应的 GitHub Release，并上传各平台的 zip 与 sha256 资产。
+
 当前矩阵包含：
 
 - `linux-x64`

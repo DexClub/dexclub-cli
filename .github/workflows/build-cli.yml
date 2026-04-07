@@ -203,3 +203,45 @@ jobs:
           name: dexclub-cli-${{ matrix.os_name }}-${{ matrix.arch }}
           path: artifacts/
           if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    name: release
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dexclub-cli-*
+          path: .release-artifacts
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${GITHUB_REF#refs/tags/}"
+
+          shopt -s nullglob
+          assets=(.release-artifacts/*.zip .release-artifacts/*.sha256)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "No release assets found."
+            exit 1
+          fi
+
+          if gh release view "$tag" --repo "$GH_REPO" >/dev/null 2>&1; then
+            gh release upload "$tag" "${assets[@]}" --repo "$GH_REPO" --clobber
+          else
+            gh release create "$tag" "${assets[@]}" \
+              --repo "$GH_REPO" \
+              --title "$tag" \
+              --generate-notes
+          fi
