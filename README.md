@@ -253,6 +253,49 @@ cd dexkit/vendor/libcxx-prefab
 ./gradlew :cli:fatJar
 ```
 
+打包带启动脚本的 CLI 分发目录与 zip：
+
+```bash
+./gradlew :cli:shadowDistZip :cli:installShadowDist
+```
+
+## GitHub Actions
+
+仓库内提供了 `.github/workflows/build-cli.yml` workflow，用于按 `OS + 架构` 构建 CLI 分发包。
+
+当前矩阵包含：
+
+- `linux-x64`
+- `linux-arm64`
+- `windows-x64`
+- `windows-arm64`
+- `macos-x64`
+- `macos-arm64`
+
+workflow 构建的每个 artifact 都会包含：
+
+- `dexclub-cli-<os>-<arch>.zip`
+- `dexclub-cli-<os>-<arch>.sha256`
+
+zip 内部目录结构为：
+
+```text
+cli-shadow/
+├── bin/
+│   ├── cli
+│   └── cli.bat
+└── lib/
+    └── dexclub-cli-all.jar
+```
+
+说明：
+
+- `bin/cli` 适用于 Linux / macOS 等 POSIX 环境
+- `bin/cli.bat` 适用于 Windows
+- 使用者仍需自行准备 Java 21 运行环境
+- 当前桌面 native 库由宿主机构建，不能在单一 runner 上交叉产出所有架构；因此 workflow 使用多 job matrix 分别构建各目标平台
+- 如果当前仓库所在账号或计划无法调度某些 ARM GitHub-hosted runner，需要把对应 job 的 `runs-on` 改成可用的 self-hosted runner 标签
+
 ## 说明
 
 - 当前 `dexkit` 薄封装适合仓库内联编使用。

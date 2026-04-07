@@ -1,0 +1,100 @@
+name: Build CLI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-cli-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x64
+            runner: ubuntu-24.04
+            os_name: linux
+            arch: x64
+            gradle_cmd: ./gradlew
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+            os_name: linux
+            arch: arm64
+            gradle_cmd: ./gradlew
+          - target: windows-x64
+            runner: windows-2022
+            os_name: windows
+            arch: x64
+            gradle_cmd: .\gradlew.bat
+          - target: windows-arm64
+            runner: windows-11-arm
+            os_name: windows
+            arch: arm64
+            gradle_cmd: .\gradlew.bat
+          - target: macos-x64
+            runner: macos-15-intel
+            os_name: macos
+            arch: x64
+            gradle_cmd: ./gradlew
+          - target: macos-arm64
+            runner: macos-15
+            os_name: macos
+            arch: arm64
+            gradle_cmd: ./gradlew
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build CLI shadow distribution
+        shell: pwsh
+        run: |
+          & "${{ matrix.gradle_cmd }}" --no-daemon :cli:shadowDistZip
+
+      - name: Package artifact
+        shell: pwsh
+        run: |
+          $distDir = Join-Path $PWD "cli/build/distributions"
+          $sourceZip = Join-Path $distDir "cli-shadow.zip"
+          if (!(Test-Path $sourceZip)) {
+            throw "Missing distribution archive: $sourceZip"
+          }
+
+          $artifactDir = Join-Path $PWD "artifacts"
+          New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
+
+          $targetBaseName = "dexclub-cli-${{ matrix.os_name }}-${{ matrix.arch }}"
+          $targetZip = Join-Path $artifactDir "$targetBaseName.zip"
+          Copy-Item $sourceZip $targetZip
+
+          $hash = (Get-FileHash -Path $targetZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $targetBaseName.zip" | Out-File -FilePath (Join-Path $artifactDir "$targetBaseName.sha256") -Encoding ascii
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dexclub-cli-${{ matrix.os_name }}-${{ matrix.arch }}
+          path: artifacts/
+          if-no-files-found: error
