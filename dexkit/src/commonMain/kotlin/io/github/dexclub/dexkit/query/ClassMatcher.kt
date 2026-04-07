@@ -1,15 +1,21 @@
 package io.github.dexclub.dexkit.query
 
-class ClassMatcher {
+import io.github.dexclub.dexkit.IntRangeSerializer
+import kotlinx.serialization.Serializable
 
-    var classNameMatcher: StringMatcher? = null
-    var superClassMatcher: ClassMatcher? = null
-    val interfaceMatchers: MutableList<StringMatcher> = mutableListOf()
-    val usingStringMatchers: MutableList<StringMatcher> = mutableListOf()
-    val annotationMatchers: MutableList<StringMatcher> = mutableListOf()
-    var methodCountRange: IntRange? = null
-    var fieldCountRange: IntRange? = null
-    var modifiers: Int? = null
+@Serializable
+class ClassMatcher(
+    var classNameMatcher: StringMatcher? = null,
+    var superClassMatcher: ClassMatcher? = null,
+    val interfaceMatchers: MutableList<StringMatcher> = mutableListOf(),
+    val usingStringMatchers: MutableList<StringMatcher> = mutableListOf(),
+    val annotationMatchers: MutableList<StringMatcher> = mutableListOf(),
+    @Serializable(with = IntRangeSerializer::class)
+    var methodCountRange: IntRange? = null,
+    @Serializable(with = IntRangeSerializer::class)
+    var fieldCountRange: IntRange? = null,
+    var modifiers: Int? = null,
+) {
 
     fun className(value: String, matchType: StringMatchType = StringMatchType.Equals, ignoreCase: Boolean = false) {
         classNameMatcher = StringMatcher(value, matchType, ignoreCase)

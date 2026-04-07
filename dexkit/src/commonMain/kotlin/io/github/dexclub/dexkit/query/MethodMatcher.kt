@@ -1,15 +1,18 @@
 package io.github.dexclub.dexkit.query
 
-class MethodMatcher {
+import kotlinx.serialization.Serializable
 
-    var nameMatcher: StringMatcher? = null
-    var declaredClassMatcher: ClassMatcher? = null
-    var returnTypeMatcher: StringMatcher? = null
-    val paramTypeMatchers: MutableList<StringMatcher?> = mutableListOf()
-    var paramCount: Int? = null
-    val usingStringMatchers: MutableList<StringMatcher> = mutableListOf()
-    val opCodes: MutableList<Int> = mutableListOf()
-    var modifiers: Int? = null
+@Serializable
+class MethodMatcher(
+    var nameMatcher: StringMatcher? = null,
+    var declaredClassMatcher: ClassMatcher? = null,
+    var returnTypeMatcher: StringMatcher? = null,
+    val paramTypeMatchers: MutableList<StringMatcher?> = mutableListOf(),
+    var paramCount: Int? = null,
+    val usingStringMatchers: MutableList<StringMatcher> = mutableListOf(),
+    val opCodes: MutableList<Int> = mutableListOf(),
+    var modifiers: Int? = null,
+) {
 
     fun name(value: String, matchType: StringMatchType = StringMatchType.Equals, ignoreCase: Boolean = false) {
         nameMatcher = StringMatcher(value, matchType, ignoreCase)

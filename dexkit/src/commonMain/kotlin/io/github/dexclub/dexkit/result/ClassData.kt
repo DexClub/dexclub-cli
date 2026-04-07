@@ -1,5 +1,8 @@
 package io.github.dexclub.dexkit.result
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class ClassData(
     val descriptor: String,
     val name: String,
