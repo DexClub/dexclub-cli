@@ -263,6 +263,12 @@ cd dexkit/vendor/libcxx-prefab
 
 仓库内提供了 `.github/workflows/build-cli.yml` workflow，用于按 `OS + 架构` 构建 CLI 分发包。
 
+触发方式：
+
+- 提交到指向 `master` 的 Pull Request 时触发
+- 推送匹配 `v*` 的 tag 时触发
+- 在 GitHub Actions 页面手动触发
+
 当前矩阵包含：
 
 - `linux-x64`
