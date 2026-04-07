@@ -16,7 +16,72 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  prepare-libcxx:
+    name: prepare-libcxx
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: >-
+            platform-tools
+            build-tools;36.0.0
+            platforms;android-36
+            ndk;28.2.13676358
+            cmake;3.31.6
+
+      - name: Prepare libcxx local.properties
+        shell: pwsh
+        run: |
+          $sdkDir = $env:ANDROID_SDK_ROOT
+          if ([string]::IsNullOrWhiteSpace($sdkDir)) {
+            throw "ANDROID_SDK_ROOT is empty after setup-android"
+          }
+
+          $sdkDir = $sdkDir -replace '\\', '/'
+          "sdk.dir=$sdkDir" | Out-File -FilePath (Join-Path $PWD "dexkit/vendor/libcxx-prefab/local.properties") -Encoding ascii
+
+      - name: Publish libcxx prefab to mavenLocal
+        shell: pwsh
+        run: |
+          & "./gradlew" --no-daemon -p "dexkit/vendor/libcxx-prefab" :cxx:publishToMavenLocal
+
+      - name: Stage libcxx mavenLocal files
+        shell: pwsh
+        run: |
+          $sourceDir = Join-Path $HOME ".m2/repository/dev/rikka/ndk/thirdparty/libcxx"
+          if (!(Test-Path $sourceDir)) {
+            throw "Missing published libcxx mavenLocal directory: $sourceDir"
+          }
+
+          $stageDir = Join-Path $PWD "artifacts/m2/dev/rikka/ndk/thirdparty/libcxx"
+          New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
+          Copy-Item -Recurse -Force (Join-Path $sourceDir "*") $stageDir
+
+      - name: Upload libcxx mavenLocal files
+        uses: actions/upload-artifact@v4
+        with:
+          name: libcxx-m2
+          path: artifacts/m2/
+          if-no-files-found: error
+
   build:
+    needs: prepare-libcxx
     name: ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -63,6 +128,24 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Download libcxx mavenLocal files
+        uses: actions/download-artifact@v4
+        with:
+          name: libcxx-m2
+          path: .ci/libcxx-m2
+
+      - name: Restore libcxx mavenLocal files
+        shell: pwsh
+        run: |
+          $sourceDir = Join-Path $PWD ".ci/libcxx-m2/dev"
+          if (!(Test-Path $sourceDir)) {
+            throw "Missing downloaded libcxx mavenLocal files: $sourceDir"
+          }
+
+          $targetDir = Join-Path $HOME ".m2/repository/dev"
+          New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+          Copy-Item -Recurse -Force (Join-Path $sourceDir "*") $targetDir
+
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
         with:
@@ -84,15 +167,6 @@ jobs:
           $sdkDir = $sdkDir -replace '\\', '/'
           "sdk.dir=$sdkDir" | Out-File -FilePath (Join-Path $PWD "local.properties") -Encoding ascii
           "sdk.dir=$sdkDir" | Out-File -FilePath (Join-Path $PWD "dexkit/vendor/DexKit/local.properties") -Encoding ascii
-
-      - name: Publish libcxx prefab to mavenLocal
-        shell: pwsh
-        run: |
-          if ($env:RUNNER_OS -eq 'Windows') {
-            & ".\gradlew.bat" --no-daemon -p "dexkit/vendor/libcxx-prefab" :cxx:publishToMavenLocal
-          } else {
-            & "./gradlew" --no-daemon -p "dexkit/vendor/libcxx-prefab" :cxx:publishToMavenLocal
-          }
 
       - name: Build CLI shadow distribution
         shell: pwsh
