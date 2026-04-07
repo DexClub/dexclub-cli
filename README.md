@@ -44,10 +44,12 @@
 
 - `inspect()`
   - 返回 `DexArchiveInfo`
-- `searchClassHitsByName()`
-  - 返回 `List<DexClassHit>`
-- `searchMethodHitsByString()`
-  - 返回 `List<DexMethodHit>`
+- `findClassHits()`
+  - 接收 `DexClassQueryRequest`，返回 `List<DexClassHit>`
+- `findMethodHits()`
+  - 接收 `DexMethodQueryRequest`，返回 `List<DexMethodHit>`
+- `findFieldHits()`
+  - 接收 `DexFieldQueryRequest`，返回 `List<DexFieldHit>`
 - `exportDex()`
   - 接收 `DexExportRequest`，返回 `DexExportResult`
 - `exportSmali()`
@@ -85,7 +87,7 @@ CLI 入口支持以下帮助与版本命令：
   - `find-class`
   - `find-method`
   - `find-field`
-  - 用于按 JSON 查询条件查找类、方法或字段，包括类名和字符串相关检索
+  - 用于按 JSON 查询条件查找类、方法或字段
 - 导出命令
   - `export-dex`
   - `export-smali`
@@ -140,7 +142,7 @@ java -jar cli/build/libs/dexclub-cli-all.jar inspect \
   --input /path/to/classes2.dex
 ```
 
-按 JSON 字符串查找类名包含 `SampleSearchTarget` 的类：
+按 JSON 查询类名包含 `SampleSearchTarget` 的类：
 
 ```bash
 java -jar cli/build/libs/dexclub-cli-all.jar find-class \
@@ -150,7 +152,7 @@ java -jar cli/build/libs/dexclub-cli-all.jar find-class \
   --limit 20
 ```
 
-按 JSON 字符串查找使用指定字符串的方法：
+按 JSON 查询使用指定字符串的方法：
 
 ```bash
 java -jar cli/build/libs/dexclub-cli-all.jar find-method \
@@ -167,7 +169,7 @@ java -jar cli/build/libs/dexclub-cli-all.jar find-class \
   --output-format json
 ```
 
-按 JSON 字符串查找方法并写入文件：
+按 JSON 查询方法并写入文件：
 
 ```bash
 java -jar cli/build/libs/dexclub-cli-all.jar find-method \

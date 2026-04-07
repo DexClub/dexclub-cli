@@ -1,0 +1,4 @@
+interface:
+  display_name: "DexClub CLI Release Launcher"
+  short_description: "Prepare and run the cached dexclub-cli release"
+  default_prompt: "Use $dexclub-cli-release-launcher to prepare the cached dexclub-cli release, run the CLI directly, and perform class/string/method/field searches. Prefer Contains with ignoreCase=true for string queries unless exact matching is explicitly requested."
