@@ -27,32 +27,26 @@ jobs:
             runner: ubuntu-24.04
             os_name: linux
             arch: x64
-            gradle_cmd: ./gradlew
           - target: linux-arm64
             runner: ubuntu-24.04-arm
             os_name: linux
             arch: arm64
-            gradle_cmd: ./gradlew
           - target: windows-x64
             runner: windows-2022
             os_name: windows
             arch: x64
-            gradle_cmd: .\gradlew.bat
           - target: windows-arm64
             runner: windows-11-arm
             os_name: windows
             arch: arm64
-            gradle_cmd: .\gradlew.bat
           - target: macos-x64
             runner: macos-15-intel
             os_name: macos
             arch: x64
-            gradle_cmd: ./gradlew
           - target: macos-arm64
             runner: macos-15
             os_name: macos
             arch: arm64
-            gradle_cmd: ./gradlew
 
     steps:
       - name: Checkout
@@ -69,10 +63,45 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: >-
+            platform-tools
+            build-tools;36.0.0
+            platforms;android-36
+            ndk;28.2.13676358
+            cmake;3.31.6
+
+      - name: Prepare Android local.properties
+        shell: pwsh
+        run: |
+          $sdkDir = $env:ANDROID_SDK_ROOT
+          if ([string]::IsNullOrWhiteSpace($sdkDir)) {
+            throw "ANDROID_SDK_ROOT is empty after setup-android"
+          }
+
+          $sdkDir = $sdkDir -replace '\\', '/'
+          "sdk.dir=$sdkDir" | Out-File -FilePath (Join-Path $PWD "local.properties") -Encoding ascii
+          "sdk.dir=$sdkDir" | Out-File -FilePath (Join-Path $PWD "dexkit/vendor/DexKit/local.properties") -Encoding ascii
+
+      - name: Publish libcxx prefab to mavenLocal
+        shell: pwsh
+        run: |
+          if ($env:RUNNER_OS -eq 'Windows') {
+            & ".\gradlew.bat" --no-daemon -p "dexkit/vendor/libcxx-prefab" :cxx:publishToMavenLocal
+          } else {
+            & "./gradlew" --no-daemon -p "dexkit/vendor/libcxx-prefab" :cxx:publishToMavenLocal
+          }
+
       - name: Build CLI shadow distribution
         shell: pwsh
         run: |
-          & "${{ matrix.gradle_cmd }}" --no-daemon :cli:shadowDistZip
+          if ($env:RUNNER_OS -eq 'Windows') {
+            & ".\gradlew.bat" --no-daemon :cli:shadowDistZip
+          } else {
+            & "./gradlew" --no-daemon :cli:shadowDistZip
+          }
 
       - name: Package artifact
         shell: pwsh
