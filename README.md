@@ -81,15 +81,11 @@ CLI 入口支持以下帮助与版本命令：
 - 检查命令
   - `inspect`
   - 用于检查 `apk` 或 `dex` 输入，并输出基本统计信息
-- 搜索命令
-  - `search-class`
-  - `search-string`
-  - 用于按类名关键词或字符串常量搜索目标
 - 高级查询命令
   - `find-class`
   - `find-method`
   - `find-field`
-  - 用于按 JSON 查询条件查找类、方法或字段
+  - 用于按 JSON 查询条件查找类、方法或字段，包括类名和字符串相关检索
 - 导出命令
   - `export-dex`
   - `export-smali`
@@ -98,13 +94,10 @@ CLI 入口支持以下帮助与版本命令：
 
 输入与参数规则：
 
-- `inspect`、`search-class`、`search-string`
+- `inspect`
   - 支持重复传入 `--input`
   - 单输入支持 `apk` 或 `dex`
   - 多输入仅支持多个 `dex` 文件，不支持混合传入 `apk`
-- `search-class`、`search-string`
-  - 必须传入 `--keyword`
-  - `--limit` 可选，默认值为 `100`
 - `find-class`、`find-method`、`find-field`
   - 必须二选一传入 `--query-file` 或 `--query-json`
   - `--output-format` 可选，支持 `text` 与 `json`，默认值为 `json`
@@ -129,7 +122,7 @@ java -jar cli/build/libs/dexclub-cli-all.jar <命令> [参数]
 
 ```bash
 java -jar cli/build/libs/dexclub-cli-all.jar --help
-java -jar cli/build/libs/dexclub-cli-all.jar help search-string
+java -jar cli/build/libs/dexclub-cli-all.jar help find-method
 ```
 
 检查单个 apk：
@@ -147,21 +140,22 @@ java -jar cli/build/libs/dexclub-cli-all.jar inspect \
   --input /path/to/classes2.dex
 ```
 
-按类名搜索：
+按 JSON 字符串查找类名包含 `SampleSearchTarget` 的类：
 
 ```bash
-java -jar cli/build/libs/dexclub-cli-all.jar search-class \
+java -jar cli/build/libs/dexclub-cli-all.jar find-class \
   --input /path/to/classes.dex \
-  --keyword SampleSearchTarget \
+  --query-json '{"matcher":{"className":{"value":"SampleSearchTarget","matchType":"Contains","ignoreCase":true}}}' \
+  --output-format json \
   --limit 20
 ```
 
-按字符串常量搜索：
+按 JSON 字符串查找使用指定字符串的方法：
 
 ```bash
-java -jar cli/build/libs/dexclub-cli-all.jar search-string \
+java -jar cli/build/libs/dexclub-cli-all.jar find-method \
   --input /path/to/classes.dex \
-  --keyword dexclub-needle-string
+  --query-json '{"matcher":{"usingStrings":[{"value":"dexclub-needle-string","matchType":"Equals"}]}}'
 ```
 
 按 JSON 文件查找类：
@@ -178,7 +172,7 @@ java -jar cli/build/libs/dexclub-cli-all.jar find-class \
 ```bash
 java -jar cli/build/libs/dexclub-cli-all.jar find-method \
   --input /path/to/classes.dex \
-  --query-json '{"matcher":{"nameMatcher":{"value":"exposeNeedle","matchType":"Equals"},"declaredClassMatcher":{"classNameMatcher":{"value":"fixture.samples.SampleSearchTarget","matchType":"Equals"}}}}' \
+  --query-json '{"matcher":{"name":{"value":"exposeNeedle","matchType":"Equals"},"declaredClass":{"className":{"value":"fixture.samples.SampleSearchTarget","matchType":"Equals"}}}}' \
   --output-file /tmp/find-method.json
 ```
 
@@ -258,6 +252,12 @@ cd dexkit/vendor/libcxx-prefab
 ```bash
 ./gradlew :cli:shadowDistZip :cli:installShadowDist
 ```
+
+## Codex Skill
+
+仓库内提供了本地 skill：`skills/dexclub-cli-release-launcher/`。
+
+详细说明见 `skills/dexclub-cli-release-launcher/README.md` 与 `skills/dexclub-cli-release-launcher/SKILL.md`。
 
 ## GitHub Actions
 

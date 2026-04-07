@@ -11,8 +11,4 @@ data class FindClass(
     var matcher: ClassMatcher? = null,
     var findFirst: Boolean = false,
     var searchInClasses: List<ClassData> = emptyList(),
-) {
-    fun matcher(init: ClassMatcher.() -> Unit) {
-        matcher = ClassMatcher().apply(init)
-    }
-}
+)

@@ -13,8 +13,4 @@ data class FindField(
     var findFirst: Boolean = false,
     var searchInClasses: List<ClassData> = emptyList(),
     var searchInFields: List<FieldData> = emptyList(),
-) {
-    fun matcher(init: FieldMatcher.() -> Unit) {
-        matcher = FieldMatcher().apply(init)
-    }
-}
+)

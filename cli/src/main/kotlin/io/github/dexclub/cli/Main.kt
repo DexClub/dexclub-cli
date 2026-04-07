@@ -144,36 +144,6 @@ private fun runExportJava(options: Map<String, List<String>>) = runBlocking {
     }
 }
 
-private fun runSearchClass(options: Map<String, List<String>>) {
-    runSearch(options) { dexEngine, inputs, keyword, limit ->
-        printSearchResults(
-            results = dexEngine.searchClassHitsByName(keyword),
-            limit = limit,
-        ) { result ->
-            if (inputs.size == 1) {
-                "${result.name}\t${result.descriptor}"
-            } else {
-                "${result.name}\t${result.descriptor}\t${result.sourceDexPath.orEmpty()}"
-            }
-        }
-    }
-}
-
-private fun runSearchString(options: Map<String, List<String>>) {
-    runSearch(options) { dexEngine, inputs, keyword, limit ->
-        printSearchResults(
-            results = dexEngine.searchMethodHitsByString(keyword),
-            limit = limit,
-        ) { result ->
-            if (inputs.size == 1) {
-                "${result.className}\t${result.name}\t${result.descriptor}"
-            } else {
-                "${result.className}\t${result.name}\t${result.descriptor}\t${result.sourceDexPath.orEmpty()}"
-            }
-        }
-    }
-}
-
 private fun runFindClass(options: Map<String, List<String>>) {
     runAdvancedSearch(options) { dexEngine ->
         dexEngine.findClassHits(requireQueryText(options).parseCoreJson<DexClassQueryRequest>())
@@ -493,7 +463,7 @@ private fun rootUsageText(): String {
         appendLine()
         appendLine("全局说明:")
         appendLine("  运行要求：Java 21")
-        appendLine("  inspect/search/find 在多输入模式下仅支持多个 dex 文件，不支持混合传入 apk")
+        appendLine("  inspect/find 在多输入模式下仅支持多个 dex 文件，不支持混合传入 apk")
         appendLine("  导出命令当前仍只支持单个 dex 输入")
     }.trimEnd()
 }
@@ -532,37 +502,6 @@ private suspend fun runSingleDexExport(
     println("output=$outputPath")
 }
 
-private inline fun runSearch(
-    options: Map<String, List<String>>,
-    block: (dexEngine: DexEngine, inputs: List<String>, keyword: String, limit: Int) -> Unit,
-) {
-    val inputs = requireInspectOrSearchInputs(options)
-    val keyword = requireOption(options, "keyword")
-    val limit = requirePositiveLimit(options)
-    DexEngine(inputs).useEngine { dexEngine ->
-        block(dexEngine, inputs, keyword, limit)
-    }
-}
-
-private fun requirePositiveLimit(options: Map<String, List<String>>): Int {
-    return findOptionalOption(options, "limit")
-        ?.toIntOrNull()
-        ?.coerceAtLeast(1)
-        ?: DEFAULT_SEARCH_LIMIT
-}
-
-private inline fun <T> printSearchResults(
-    results: List<T>,
-    limit: Int,
-    rowFormatter: (T) -> String,
-) {
-    println("count=${results.size}")
-    println("shown=${minOf(results.size, limit)}")
-    results.take(limit).forEach { result ->
-        println(rowFormatter(result))
-    }
-}
-
 private fun findCommand(token: String): CommandSpec? = COMMANDS.firstOrNull { it.name == token }
 
 private fun currentVersion(): String {
@@ -597,26 +536,6 @@ private val COMMANDS = listOf(
             "--input 可以重复传入；单输入支持 apk 或 dex，多输入仅支持多个 dex。",
         ),
         handler = ::runInspect,
-    ),
-    CommandSpec(
-        name = "search-class",
-        summary = "按类名关键词搜索类",
-        argumentsUsage = "--input <apk|dex> [--input <dex> ...] --keyword <关键词> [--limit <数量>]",
-        details = listOf(
-            "--input 可以重复传入；单输入支持 apk 或 dex，多输入仅支持多个 dex。",
-            "--limit 默认为 100。",
-        ),
-        handler = ::runSearchClass,
-    ),
-    CommandSpec(
-        name = "search-string",
-        summary = "按字符串常量搜索方法",
-        argumentsUsage = "--input <apk|dex> [--input <dex> ...] --keyword <关键词> [--limit <数量>]",
-        details = listOf(
-            "--input 可以重复传入；单输入支持 apk 或 dex，多输入仅支持多个 dex。",
-            "--limit 默认为 100。",
-        ),
-        handler = ::runSearchString,
     ),
     CommandSpec(
         name = "find-class",
@@ -681,5 +600,4 @@ private val COMMANDS = listOf(
     ),
 )
 
-private const val DEFAULT_SEARCH_LIMIT = 100
 private const val CLI_NAME = "dexclub-cli"

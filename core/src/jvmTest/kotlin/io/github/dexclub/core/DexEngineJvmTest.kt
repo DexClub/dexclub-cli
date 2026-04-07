@@ -1,6 +1,5 @@
 package io.github.dexclub.core
 
-import io.github.dexclub.core.query.DexStringMatchType
 import io.github.dexclub.core.request.DexClassQueryRequest
 import io.github.dexclub.core.model.DexExportFormat
 import io.github.dexclub.core.model.DexInputKind
@@ -9,9 +8,20 @@ import io.github.dexclub.core.request.DexFieldQueryRequest
 import io.github.dexclub.core.request.JavaExportRequest
 import io.github.dexclub.core.request.DexMethodQueryRequest
 import io.github.dexclub.core.request.SmaliExportRequest
+import io.github.dexclub.dexkit.query.ClassMatcher
+import io.github.dexclub.dexkit.query.FieldMatcher
+import io.github.dexclub.dexkit.query.FieldsMatcher
+import io.github.dexclub.dexkit.query.MethodMatcher
+import io.github.dexclub.dexkit.query.MethodsMatcher
+import io.github.dexclub.dexkit.query.StringMatchType
+import io.github.dexclub.dexkit.query.StringMatcher
 import kotlinx.coroutines.runBlocking
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
+import java.io.PrintStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -51,28 +61,55 @@ class DexEngineJvmTest {
     }
 
     @Test
+    fun `apk query should not report dex validation failure and should use apk source path`() {
+        val fixture = TestDexFixture.generated()
+        val originalErr = System.err
+        val errBuffer = ByteArrayOutputStream()
+        System.setErr(PrintStream(errBuffer, true, Charsets.UTF_8))
+
+        try {
+            DexEngine(listOf(fixture.apkFile.absolutePath)).use { engine ->
+                val classHits = engine.findClassHits(
+                    DexClassQueryRequest(
+                        matcher = ClassMatcher(
+                            className = StringMatcher(fixture.className, StringMatchType.Equals),
+                        ),
+                    ),
+                )
+                assertTrue(classHits.any { it.name == fixture.className })
+                assertTrue(classHits.all { it.sourceDexPath == fixture.apkFile.absolutePath })
+            }
+        } finally {
+            System.setErr(originalErr)
+        }
+
+        val stderrText = errBuffer.toString(Charsets.UTF_8)
+        assertTrue(!stderrText.contains("Dex 文件校验失败"), stderrText)
+    }
+
+    @Test
     fun `advanced query requests should support json round trip`() {
         val classQuery = DexClassQueryRequest().apply {
             searchPackages = listOf("fixture.samples")
-            matcher {
-                className("SampleSearchTarget")
-                addUsingString(TEST_NEEDLE)
-                fieldCount(1)
+            matcher = ClassMatcher().apply {
+                className = StringMatcher("SampleSearchTarget")
+                usingStrings += StringMatcher(TEST_NEEDLE)
+                fields = FieldsMatcher(count = 1..1)
             }
         }
         val methodQuery = DexMethodQueryRequest().apply {
-            matcher {
-                name("exposeNeedle")
-                declaredClass("fixture.samples.SampleSearchTarget")
-                returnType("java.lang.String")
-                addUsingString(TEST_NEEDLE)
+            matcher = MethodMatcher().apply {
+                name = StringMatcher("exposeNeedle")
+                declaredClass = ClassMatcher(className = StringMatcher("fixture.samples.SampleSearchTarget"))
+                returnType = ClassMatcher(className = StringMatcher("java.lang.String"))
+                usingStrings += StringMatcher(TEST_NEEDLE)
             }
         }
         val fieldQuery = DexFieldQueryRequest().apply {
-            matcher {
-                name("NEEDLE")
-                declaredClass("fixture.samples.SampleSearchTarget")
-                type("java.lang.String", DexStringMatchType.Equals)
+            matcher = FieldMatcher().apply {
+                name = StringMatcher("NEEDLE")
+                declaredClass = ClassMatcher(className = StringMatcher("fixture.samples.SampleSearchTarget"))
+                type = ClassMatcher(className = StringMatcher("java.lang.String", StringMatchType.Equals))
             }
         }
 
@@ -93,10 +130,10 @@ class DexEngineJvmTest {
             val classHits = engine.findClassHits(
                 DexClassQueryRequest().apply {
                     searchPackages = listOf("fixture.samples")
-                    matcher {
-                        className(fixture.className)
-                        fieldCount(1)
-                        methodCount(min = 1)
+                    matcher = ClassMatcher().apply {
+                        className = StringMatcher(fixture.className)
+                        fields = FieldsMatcher(count = 1..1)
+                        methods = MethodsMatcher(count = 1..Int.MAX_VALUE)
                     }
                 },
             )
@@ -105,11 +142,11 @@ class DexEngineJvmTest {
 
             val methodHits = engine.findMethodHits(
                 DexMethodQueryRequest().apply {
-                    matcher {
-                        name("exposeNeedle")
-                        declaredClass(fixture.className)
-                        returnType("java.lang.String")
-                        addUsingString(fixture.needle)
+                    matcher = MethodMatcher().apply {
+                        name = StringMatcher("exposeNeedle")
+                        declaredClass = ClassMatcher(className = StringMatcher(fixture.className))
+                        returnType = ClassMatcher(className = StringMatcher("java.lang.String"))
+                        usingStrings += StringMatcher(fixture.needle)
                     }
                 },
             )
@@ -118,10 +155,10 @@ class DexEngineJvmTest {
 
             val fieldHits = engine.findFieldHits(
                 DexFieldQueryRequest().apply {
-                    matcher {
-                        name("NEEDLE")
-                        declaredClass(fixture.className)
-                        type("java.lang.String")
+                    matcher = FieldMatcher().apply {
+                        name = StringMatcher("NEEDLE")
+                        declaredClass = ClassMatcher(className = StringMatcher(fixture.className))
+                        type = ClassMatcher(className = StringMatcher("java.lang.String"))
                     }
                 },
             )
@@ -174,6 +211,7 @@ class DexEngineJvmTest {
 
     private data class TestDexFixture(
         val dexFile: File,
+        val apkFile: File,
         val invalidFile: File,
         val className: String,
         val needle: String,
@@ -223,9 +261,13 @@ class DexEngineJvmTest {
                 val invalidFile = File(tempDirectory, "not-a-dex.bin").apply {
                     writeText("not a dex", Charsets.UTF_8)
                 }
+                val apkFile = File(tempDirectory, "fixture.apk").apply {
+                    createPseudoApk(sourceDex = File(dexDirectory, "classes.dex"), outputApk = this)
+                }
 
                 return TestDexFixture(
                     dexFile = File(dexDirectory, "classes.dex"),
+                    apkFile = apkFile,
                     invalidFile = invalidFile,
                     className = CLASS_NAME,
                     needle = NEEDLE,
@@ -270,6 +312,17 @@ class DexEngineJvmTest {
                         appendLine("命令执行失败: ${command.joinToString(" ")}")
                         append(output)
                     }
+                }
+            }
+
+            private fun createPseudoApk(
+                sourceDex: File,
+                outputApk: File,
+            ) {
+                ZipOutputStream(outputApk.outputStream().buffered()).use { zip ->
+                    zip.putNextEntry(ZipEntry("classes.dex"))
+                    sourceDex.inputStream().use { input -> input.copyTo(zip) }
+                    zip.closeEntry()
                 }
             }
         }

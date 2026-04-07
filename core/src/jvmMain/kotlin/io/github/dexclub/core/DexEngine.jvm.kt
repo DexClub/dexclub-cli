@@ -32,6 +32,11 @@ actual class DexEngine actual constructor(
     private val dexFiles by lazy(LazyThreadSafetyMode.NONE) {
         normalizedDexPaths.map(::File)
     }
+    private val singleApkInputPath by lazy(LazyThreadSafetyMode.NONE) {
+        dexFiles.singleOrNull()
+            ?.takeIf { it.extension.equals("apk", ignoreCase = true) }
+            ?.absolutePath
+    }
     private val dexSession by lazy(LazyThreadSafetyMode.NONE) {
         DexSessionLoader.loadMultiDex(
             dexFiles = dexFiles,
@@ -69,9 +74,17 @@ actual class DexEngine actual constructor(
     private val dexSearchService by lazy(LazyThreadSafetyMode.NONE) {
         DexSearchService(
             backend = dexKitSearchBackend,
-            classDescriptorSourcePathProvider = dexSession::findDexPathByClassDescriptor,
-            classNameSourcePathProvider = dexSession::findDexPathByClassName,
+            classDescriptorSourcePathProvider = ::findSourcePathByClassDescriptor,
+            classNameSourcePathProvider = ::findSourcePathByClassName,
         )
+    }
+
+    private fun findSourcePathByClassDescriptor(descriptor: String): String? {
+        return singleApkInputPath ?: dexSession.findDexPathByClassDescriptor(descriptor)
+    }
+
+    private fun findSourcePathByClassName(className: String): String? {
+        return singleApkInputPath ?: dexSession.findDexPathByClassName(className)
     }
 
     actual fun inspect(): DexArchiveInfo {
