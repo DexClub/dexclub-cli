@@ -31,6 +31,8 @@ JAVA_METHOD_DECL_RE = re.compile(
 )
 SMALI_BRANCH_RE = re.compile(r"^(if-[^\s]+|goto(?:/[^\s]+)?|packed-switch|sparse-switch)\b")
 JAVA_BRANCH_RE = re.compile(r"^(if\b|else if\b|switch\b|for\b|while\b|catch\b)")
+SMALI_LABEL_RE = re.compile(r"^(:[A-Za-z0-9_]+)\b")
+SMALI_LABEL_TARGET_RE = re.compile(r":[A-Za-z0-9_]+")
 
 LARGE_METHOD_LINE_THRESHOLD = 120
 HOTSPOT_CLUSTER_LINE_GAP = 8
@@ -38,6 +40,11 @@ HOTSPOT_CLUSTER_PADDING = 2
 HOTSPOT_PREVIEW_LIMIT = 5
 HOTSPOT_CLUSTER_ITEM_LIMIT = 8
 HOTSPOT_CLUSTER_LIMIT = 6
+STRUCTURED_BLOCK_LIMIT = 24
+STRUCTURED_CLUSTER_LIMIT = 8
+STRUCTURED_VALUE_LIMIT = 6
+STRUCTURED_FOCUS_SNIPPET_LIMIT = 6
+STRUCTURED_FOCUS_SNIPPET_LINE_LIMIT = 18
 
 
 def read_text(path: str | Path) -> str:
@@ -515,6 +522,517 @@ def build_large_method_analysis(
     return analysis
 
 
+def _occurrence_line_map(items: list[dict[str, object]]) -> dict[int, list[str]]:
+    line_map: dict[int, list[str]] = {}
+    for item in items:
+        value = item.get("value")
+        lines = item.get("lines")
+        if value is None or not isinstance(lines, list):
+            continue
+        for line_no in lines:
+            if not isinstance(line_no, int):
+                continue
+            bucket = line_map.setdefault(line_no, [])
+            if value not in bucket:
+                bucket.append(str(value))
+    return line_map
+
+
+def _branch_line_map(items: list[dict[str, object]]) -> dict[int, list[dict[str, str]]]:
+    line_map: dict[int, list[dict[str, str]]] = {}
+    for item in items:
+        line_no = item.get("line")
+        opcode = item.get("opcode")
+        text = item.get("text")
+        if not isinstance(line_no, int) or not isinstance(opcode, str) or not isinstance(text, str):
+            continue
+        line_map.setdefault(line_no, []).append(
+            {
+                "opcode": opcode,
+                "text": text,
+            }
+        )
+    return line_map
+
+
+def _unique_preserving_order(values: list[str], *, limit: int | None = None) -> list[str]:
+    result: list[str] = []
+    for value in values:
+        if value in result:
+            continue
+        result.append(value)
+        if limit is not None and len(result) >= limit:
+            break
+    return result
+
+
+def _collect_block_values(line_numbers: list[int], line_map: dict[int, list[str]], *, limit: int) -> list[str]:
+    values: list[str] = []
+    for line_no in line_numbers:
+        values.extend(line_map.get(line_no, []))
+    return _unique_preserving_order(values, limit=limit)
+
+
+def _line_matches_smali_leader(stripped: str) -> bool:
+    return bool(SMALI_LABEL_RE.match(stripped))
+
+
+def _line_starts_new_smali_block(stripped: str) -> bool:
+    if not stripped:
+        return False
+    if _line_matches_smali_leader(stripped):
+        return True
+    return False
+
+
+def _is_smali_transfer_instruction(stripped: str) -> bool:
+    if not stripped:
+        return False
+    if stripped.startswith(("return", "throw", "goto", "if-", "packed-switch", "sparse-switch")):
+        return True
+    return False
+
+
+def _build_smali_basic_blocks(
+    line_entries: list[tuple[int, str]],
+    *,
+    strings: list[dict[str, object]],
+    numbers: list[dict[str, object]],
+    method_calls: list[dict[str, object]],
+    field_accesses: list[dict[str, object]],
+    branch_hotspots: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    effective_entries = [
+        (line_no, line)
+        for line_no, line in line_entries
+        if line.strip() != ".end method"
+    ]
+    if not effective_entries:
+        return []
+
+    string_map = _occurrence_line_map(strings)
+    number_map = _occurrence_line_map(numbers)
+    call_map = _occurrence_line_map(method_calls)
+    field_map = _occurrence_line_map(field_accesses)
+    branch_map = _branch_line_map(branch_hotspots)
+
+    leaders = {0}
+    for index, (_, line) in enumerate(effective_entries):
+        stripped = line.strip()
+        if index > 0 and _line_starts_new_smali_block(stripped):
+            leaders.add(index)
+        if index + 1 < len(effective_entries) and _is_smali_transfer_instruction(stripped):
+            leaders.add(index + 1)
+
+    ordered_leaders = sorted(leaders)
+    basic_blocks: list[dict[str, object]] = []
+    line_to_block_id: dict[int, str] = {}
+
+    for block_index, start_index in enumerate(ordered_leaders):
+        end_index = (
+            ordered_leaders[block_index + 1] - 1
+            if block_index + 1 < len(ordered_leaders)
+            else len(effective_entries) - 1
+        )
+        block_entries = effective_entries[start_index:end_index + 1]
+        line_numbers = [line_no for line_no, _ in block_entries]
+        labels = [
+            match.group(1)
+            for _, line in block_entries
+            for match in [SMALI_LABEL_RE.match(line.strip())]
+            if match
+        ]
+        branch_entries = [
+            {
+                "line": line_no,
+                **branch,
+            }
+            for line_no in line_numbers
+            for branch in branch_map.get(line_no, [])
+        ]
+        branch_opcodes = _unique_preserving_order(
+            [entry["opcode"] for entry in branch_entries],
+            limit=STRUCTURED_VALUE_LIMIT,
+        )
+        last_meaningful_line = ""
+        for _, line in reversed(block_entries):
+            stripped = line.strip()
+            if stripped:
+                last_meaningful_line = stripped
+                break
+        terminator_kind = "fallthrough"
+        if last_meaningful_line.startswith("return"):
+            terminator_kind = "return"
+        elif last_meaningful_line.startswith("throw"):
+            terminator_kind = "throw"
+        elif last_meaningful_line.startswith("goto"):
+            terminator_kind = "goto"
+        elif last_meaningful_line.startswith("if-"):
+            terminator_kind = "branch"
+        elif last_meaningful_line.startswith(("packed-switch", "sparse-switch")):
+            terminator_kind = "switch"
+
+        if terminator_kind in {"goto", "branch", "switch"}:
+            branch_targets = _unique_preserving_order(
+                SMALI_LABEL_TARGET_RE.findall(last_meaningful_line),
+                limit=STRUCTURED_VALUE_LIMIT,
+            )
+        else:
+            branch_targets = []
+        block_id = f"bb-{block_index + 1}"
+        next_block_id = f"bb-{block_index + 2}" if block_index + 1 < len(ordered_leaders) else None
+        for line_no in line_numbers:
+            line_to_block_id[line_no] = block_id
+        basic_blocks.append(
+            {
+                "blockId": block_id,
+                "startLine": line_numbers[0],
+                "endLine": line_numbers[-1],
+                "lineCount": len(line_numbers),
+                "labels": labels,
+                "terminatorKind": terminator_kind,
+                "branchTargets": branch_targets,
+                "nextBlockId": next_block_id,
+                "methodCalls": _collect_block_values(line_numbers, call_map, limit=STRUCTURED_VALUE_LIMIT),
+                "strings": _collect_block_values(line_numbers, string_map, limit=STRUCTURED_VALUE_LIMIT),
+                "numbers": _collect_block_values(line_numbers, number_map, limit=STRUCTURED_VALUE_LIMIT),
+                "fieldAccesses": _collect_block_values(line_numbers, field_map, limit=STRUCTURED_VALUE_LIMIT),
+                "branchOpcodes": branch_opcodes,
+                "summaryTags": _unique_preserving_order(
+                    [
+                        *(
+                            ["calls"]
+                            if _collect_block_values(line_numbers, call_map, limit=1)
+                            else []
+                        ),
+                        *(
+                            ["constants"]
+                            if (
+                                _collect_block_values(line_numbers, string_map, limit=1)
+                                or _collect_block_values(line_numbers, number_map, limit=1)
+                            )
+                            else []
+                        ),
+                        *(
+                            ["fields"]
+                            if _collect_block_values(line_numbers, field_map, limit=1)
+                            else []
+                        ),
+                        *(["branches"] if branch_opcodes else []),
+                        *(["entry"] if block_index == 0 else []),
+                        *(
+                            ["exit"]
+                            if terminator_kind in {"return", "throw"}
+                            else []
+                        ),
+                    ],
+                    limit=STRUCTURED_VALUE_LIMIT,
+                ),
+            }
+        )
+
+    label_to_block_id = {
+        label: block["blockId"]
+        for block in basic_blocks
+        for label in block["labels"]
+    }
+    for block in basic_blocks:
+        branch_target_block_ids = [
+            label_to_block_id[label]
+            for label in block["branchTargets"]
+            if label in label_to_block_id
+        ]
+        if block["terminatorKind"] in {"return", "throw"}:
+            successor_block_ids: list[str] = []
+        elif block["terminatorKind"] == "goto":
+            successor_block_ids = branch_target_block_ids
+        elif block["terminatorKind"] in {"branch", "switch"}:
+            successor_block_ids = list(branch_target_block_ids)
+            next_block_id = block.get("nextBlockId")
+            if isinstance(next_block_id, str) and next_block_id not in successor_block_ids:
+                successor_block_ids.append(next_block_id)
+        else:
+            next_block_id = block.get("nextBlockId")
+            successor_block_ids = [next_block_id] if isinstance(next_block_id, str) else []
+        block["successorBlockIds"] = successor_block_ids
+
+    return basic_blocks
+
+
+def _cluster_relevant_blocks(
+    basic_blocks: list[dict[str, object]],
+    *,
+    relevance: Callable[[dict[str, object]], bool],
+) -> list[list[dict[str, object]]]:
+    relevant_blocks = [block for block in basic_blocks if relevance(block)]
+    if not relevant_blocks:
+        return []
+    clusters: list[list[dict[str, object]]] = []
+    current: list[dict[str, object]] = []
+    last_block_number: int | None = None
+    for block in relevant_blocks:
+        block_id = str(block["blockId"])
+        block_number = int(block_id.split("-")[-1])
+        if last_block_number is None or block_number - last_block_number <= 1:
+            current.append(block)
+        else:
+            clusters.append(current)
+            current = [block]
+        last_block_number = block_number
+    if current:
+        clusters.append(current)
+    return clusters
+
+
+def _summarize_block_cluster(
+    blocks: list[dict[str, object]],
+    *,
+    cluster_id: str,
+    value_keys: list[tuple[str, str]],
+) -> dict[str, object]:
+    start_line = min(int(block["startLine"]) for block in blocks)
+    end_line = max(int(block["endLine"]) for block in blocks)
+    payload: dict[str, object] = {
+        "clusterId": cluster_id,
+        "startLine": start_line,
+        "endLine": end_line,
+        "blockIds": [str(block["blockId"]) for block in blocks],
+        "blockCount": len(blocks),
+        "terminatorKinds": _unique_preserving_order(
+            [str(block["terminatorKind"]) for block in blocks],
+            limit=STRUCTURED_VALUE_LIMIT,
+        ),
+        "branchOpcodes": _unique_preserving_order(
+            [opcode for block in blocks for opcode in block.get("branchOpcodes", [])],
+            limit=STRUCTURED_VALUE_LIMIT,
+        ),
+    }
+    for output_key, block_key in value_keys:
+        payload[output_key] = _unique_preserving_order(
+            [value for block in blocks for value in block.get(block_key, [])],
+            limit=STRUCTURED_VALUE_LIMIT,
+        )
+    return payload
+
+
+def _build_focus_snippet(
+    line_entries: list[tuple[int, str]],
+    *,
+    source_kind: str,
+    source_id: str,
+    start_line: int,
+    end_line: int,
+) -> dict[str, object]:
+    scoped_entries = [
+        (line_no, line)
+        for line_no, line in line_entries
+        if start_line <= line_no <= end_line and line.strip() != ".end method"
+    ]
+    total_line_count = len(scoped_entries)
+    if total_line_count <= STRUCTURED_FOCUS_SNIPPET_LINE_LIMIT:
+        selected_entries = scoped_entries
+        truncated = False
+    else:
+        head_count = STRUCTURED_FOCUS_SNIPPET_LINE_LIMIT // 2
+        tail_count = STRUCTURED_FOCUS_SNIPPET_LINE_LIMIT - head_count
+        selected_entries = scoped_entries[:head_count] + [(-1, "...")] + scoped_entries[-tail_count:]
+        truncated = True
+
+    code_lines: list[str] = []
+    selected_start_line: int | None = None
+    selected_end_line: int | None = None
+    for line_no, line in selected_entries:
+        if line_no == -1:
+            code_lines.append("...")
+            continue
+        if selected_start_line is None:
+            selected_start_line = line_no
+        selected_end_line = line_no
+        code_lines.append(f"{line_no}: {line}")
+
+    return {
+        "sourceKind": source_kind,
+        "sourceId": source_id,
+        "startLine": start_line,
+        "endLine": end_line,
+        "selectedStartLine": selected_start_line,
+        "selectedEndLine": selected_end_line,
+        "lineCount": total_line_count,
+        "truncated": truncated,
+        "code": "\n".join(code_lines),
+    }
+
+
+def _build_focus_snippets(
+    *,
+    line_entries: list[tuple[int, str]],
+    basic_blocks: list[dict[str, object]],
+    call_clusters: list[dict[str, object]],
+    constant_clusters: list[dict[str, object]],
+) -> tuple[list[dict[str, object]], bool]:
+    focus_requests: list[tuple[str, str, int, int]] = []
+    for block in basic_blocks:
+        summary_tags = block.get("summaryTags", [])
+        if not isinstance(summary_tags, list):
+            continue
+        if "branches" in summary_tags or ("calls" in summary_tags and "entry" in summary_tags):
+            focus_requests.append(
+                (
+                    "basic_block",
+                    str(block["blockId"]),
+                    int(block["startLine"]),
+                    int(block["endLine"]),
+                )
+            )
+        if len(focus_requests) >= 2:
+            break
+
+    for cluster in call_clusters[:2]:
+        focus_requests.append(
+            (
+                "call_cluster",
+                str(cluster["clusterId"]),
+                int(cluster["startLine"]),
+                int(cluster["endLine"]),
+            )
+        )
+    for cluster in constant_clusters[:2]:
+        focus_requests.append(
+            (
+                "constant_cluster",
+                str(cluster["clusterId"]),
+                int(cluster["startLine"]),
+                int(cluster["endLine"]),
+            )
+        )
+
+    snippets: list[dict[str, object]] = []
+    seen_keys: set[tuple[str, int, int]] = set()
+    truncated = False
+    for source_kind, source_id, start_line, end_line in focus_requests:
+        key = (source_kind, start_line, end_line)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        snippets.append(
+            _build_focus_snippet(
+                line_entries,
+                source_kind=source_kind,
+                source_id=source_id,
+                start_line=start_line,
+                end_line=end_line,
+            )
+        )
+        if len(snippets) >= STRUCTURED_FOCUS_SNIPPET_LIMIT:
+            truncated = len(focus_requests) > STRUCTURED_FOCUS_SNIPPET_LIMIT
+            break
+    return snippets, truncated
+
+
+def build_structured_summary(
+    *,
+    kind: str,
+    line_entries: list[tuple[int, str]],
+    strings: list[dict[str, object]],
+    numbers: list[dict[str, object]],
+    method_calls: list[dict[str, object]],
+    field_accesses: list[dict[str, object]],
+    branch_hotspots: list[dict[str, object]],
+) -> dict[str, object]:
+    if kind != "smali":
+        return {
+            "kind": "none",
+            "supported": False,
+            "reason": "structured summary currently only supports smali",
+            "basicBlockCount": 0,
+            "basicBlocks": [],
+            "callClusterCount": 0,
+            "callClusters": [],
+            "constantClusterCount": 0,
+            "constantClusters": [],
+            "focusSnippetCount": 0,
+            "focusSnippets": [],
+        }
+
+    basic_blocks = _build_smali_basic_blocks(
+        line_entries,
+        strings=strings,
+        numbers=numbers,
+        method_calls=method_calls,
+        field_accesses=field_accesses,
+        branch_hotspots=branch_hotspots,
+    )
+    call_cluster_groups = _cluster_relevant_blocks(
+        basic_blocks,
+        relevance=lambda block: bool(block.get("methodCalls")),
+    )
+    constant_cluster_groups = _cluster_relevant_blocks(
+        basic_blocks,
+        relevance=lambda block: bool(block.get("strings") or block.get("numbers")),
+    )
+    call_clusters = [
+        _summarize_block_cluster(
+            blocks,
+            cluster_id=f"call-cluster-{index}",
+            value_keys=[
+                ("methodCalls", "methodCalls"),
+                ("strings", "strings"),
+                ("numbers", "numbers"),
+                ("fieldAccesses", "fieldAccesses"),
+            ],
+        )
+        for index, blocks in enumerate(
+            call_cluster_groups[:STRUCTURED_CLUSTER_LIMIT],
+            start=1,
+        )
+    ]
+    constant_clusters = [
+        _summarize_block_cluster(
+            blocks,
+            cluster_id=f"constant-cluster-{index}",
+            value_keys=[
+                ("strings", "strings"),
+                ("numbers", "numbers"),
+                ("methodCalls", "methodCalls"),
+                ("fieldAccesses", "fieldAccesses"),
+            ],
+        )
+        for index, blocks in enumerate(
+            constant_cluster_groups[:STRUCTURED_CLUSTER_LIMIT],
+            start=1,
+        )
+    ]
+    exit_block_ids = [
+        str(block["blockId"])
+        for block in basic_blocks
+        if block.get("terminatorKind") in {"return", "throw"}
+    ]
+    focus_snippets, focus_snippets_truncated = _build_focus_snippets(
+        line_entries=line_entries,
+        basic_blocks=basic_blocks,
+        call_clusters=call_clusters,
+        constant_clusters=constant_clusters,
+    )
+    return {
+        "kind": "smali_block_outline_v1",
+        "supported": True,
+        "basicBlockCount": len(basic_blocks),
+        "basicBlocksTruncated": len(basic_blocks) > STRUCTURED_BLOCK_LIMIT,
+        "basicBlocks": basic_blocks[:STRUCTURED_BLOCK_LIMIT],
+        "entryBlockId": str(basic_blocks[0]["blockId"]) if basic_blocks else None,
+        "exitBlockIds": exit_block_ids,
+        "callClusterCount": len(call_cluster_groups),
+        "callClustersTruncated": len(call_cluster_groups) > STRUCTURED_CLUSTER_LIMIT,
+        "callClusters": call_clusters,
+        "constantClusterCount": len(constant_cluster_groups),
+        "constantClustersTruncated": len(constant_cluster_groups) > STRUCTURED_CLUSTER_LIMIT,
+        "constantClusters": constant_clusters,
+        "focusSnippetCount": len(focus_snippets),
+        "focusSnippetsTruncated": focus_snippets_truncated,
+        "focusSnippets": focus_snippets,
+    }
+
+
 def analyze_code(
     path: str | Path,
     method_name: str | None = None,
@@ -544,6 +1062,15 @@ def analyze_code(
         "branchHotspots": branch_hotspots,
         "branchLineCount": count_branch_lines(kind, line_entries),
         "returnLineCount": count_return_lines(kind, line_entries),
+        "structuredSummary": build_structured_summary(
+            kind=kind,
+            line_entries=line_entries,
+            strings=strings,
+            numbers=numbers,
+            method_calls=method_calls,
+            field_accesses=field_accesses,
+            branch_hotspots=branch_hotspots,
+        ),
         "largeMethodAnalysis": build_large_method_analysis(
             kind=kind,
             scope=scope,

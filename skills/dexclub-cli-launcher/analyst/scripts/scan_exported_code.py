@@ -47,6 +47,7 @@ def select_payload(report: dict[str, object], mode: str) -> dict[str, object]:
             "methodCalls": report["methodCalls"],
             "fieldAccesses": report["fieldAccesses"],
             "branchHotspots": report["branchHotspots"],
+            "structuredSummary": report["structuredSummary"],
             "largeMethodAnalysis": report["largeMethodAnalysis"],
         }
     if mode == "strings":
@@ -81,6 +82,14 @@ def format_text(payload: dict[str, object], mode: str) -> str:
             lines.append(f"branchLineCount={payload['branchLineCount']}")
         if "returnLineCount" in payload:
             lines.append(f"returnLineCount={payload['returnLineCount']}")
+        structured_summary = payload.get("structuredSummary")
+        if isinstance(structured_summary, dict):
+            lines.append(f"structuredSummaryKind={structured_summary.get('kind')}")
+            if structured_summary.get("supported"):
+                lines.append(f"basicBlockCount={structured_summary.get('basicBlockCount')}")
+                lines.append(f"callClusterCount={structured_summary.get('callClusterCount')}")
+                lines.append(f"constantClusterCount={structured_summary.get('constantClusterCount')}")
+                lines.append(f"focusSnippetCount={structured_summary.get('focusSnippetCount')}")
         large_method_analysis = payload.get("largeMethodAnalysis")
         if isinstance(large_method_analysis, dict):
             lines.append(f"isLargeMethod={large_method_analysis.get('isLargeMethod')}")

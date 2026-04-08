@@ -31,6 +31,10 @@
   - overloaded 方法在 relaxed anchor 下返回 `ambiguous`
   - descriptor-aware 的 `trace_*`
   - descriptor-aware 的 `summarize_method_logic`，当前只支持 `smali`
+  - `smali` summarize 的结构化摘要
+    - 输出：`structured_summary`
+    - 当前包含：`basic_blocks / call_clusters / constant_clusters`
+    - 当前包含：`focus_snippets`
   - 大方法 `smali` summarize 的结构化压缩
     - 固定阈值：`line_count >= 120`
     - 压缩输出：`large_method_analysis`
@@ -40,12 +44,17 @@
 - 最近一次通过验证的命令
   - `bash ./skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh`
 - 最近一次通过验证的结果目录
-  - `/tmp/dexclub-analyst-v1.8pPbfd/results`
+  - `/tmp/dexclub-analyst-v1.8tFAAZ/results`
 
 ## 当前边界
 
 - `summarize_method_logic` 的 descriptor-aware 精确切片目前只支持 `smali`
 - `language=java` 的普通 summarize 可以用，但“descriptor-aware + java”当前明确返回 `unsupported`
+- `structured_summary` 当前只支持 `smali`
+  - `java` summarize 不报错，但会返回 `kind=none` 和 `supported=false`
+- `focus_snippets` 当前是受控预览
+  - 只抽高信号 block / cluster
+  - 会做截断，不保证覆盖每个 block
 - `large_method_analysis` 当前只对 `smali` 大方法启用；`java` 和非大方法会保留 `is_large_method=false`
 - 当前仍然是 analyst 层编排，不是主仓库 `cli / core / dexkit` 的正式产品化能力扩展
 - 当前工作区存在无关状态，继续开发时不要混入
@@ -115,8 +124,9 @@
 | A-03 | APK 输入下自动定位目标 dex 后 summarize | 已完成 | 提交 `a51c692` |
 | A-04 | descriptor-aware 的 trace/summarize 最小闭环 | 已完成 | 提交 `7007464` |
 | A-05 | 大方法 smali 的二级拆解与上下文压缩 | 已完成 | 本次会话完成。新增 `large_method_analysis`，阈值 `120`，并补了样例验证 |
-| A-06 | descriptor-aware + `java` summarize | 待开始 | 当前明确不优先做 |
-| A-07 | 更强的 summary 结构化输出 | 待开始 | 例如按基本块、调用簇、常量簇输出 |
+| A-06 | descriptor-aware + `java` summarize | 待开始 | 当前变成下一项主缺口 |
+| A-07 | 更强的 summary 结构化输出 | 已完成 | 本次会话完成。新增 `structured_summary`，包含 `basic_blocks / call_clusters / constant_clusters` |
+| A-08 | 基于结构化摘要的局部片段提取 | 已完成 | 本次会话完成。新增 `focus_snippets`，按高信号 block / cluster 回抽原始 smali 片段 |
 
 ## 最近一次状态流转
 
@@ -127,16 +137,32 @@
     - 目标代码已落地
     - `validate_v1_sample.sh` 已补充大方法压缩断言
     - `README` 与样例文档已同步 `large_method_analysis`
+- `A-07`
+  - `待开始 -> 进行中`
+  - `进行中 -> 已完成`
+  - 完成依据
+    - 目标代码已落地
+    - `validate_v1_sample.sh` 已补充 `structured_summary` 断言
+    - `README`、workflow 与样例文档已同步新 contract
+- `A-08`
+  - `待开始 -> 进行中`
+  - `进行中 -> 已完成`
+  - 完成依据
+    - 目标代码已落地
+    - `validate_v1_sample.sh` 已补充 `focus_snippets` 断言
+    - `README`、workflow 与样例文档已同步新 contract
 
 ## 下一步推荐入口
 
-下一个对话优先做 `A-07`，不要先做 `A-06`。
+下一个对话优先做 `A-06`。
 
 原因：
 
-- `A-05` 已经把“大方法全文直接喂模型”的问题降下来了
-- 下一步更值得做的是把现有热点分组再继续结构化，例如基本块级摘要、调用簇和常量簇
-- `java exact summarize` 仍然不是当前最痛点
+- 当前 `smali` summarize 路径已经有：
+  - `structured_summary`
+  - `large_method_analysis`
+  - `focus_snippets`
+- 下一步更明显的缺口回到了 `descriptor-aware + java summarize`
 
 ## A-05 完成记录
 
@@ -170,7 +196,7 @@
    - `git status --short`
 4. 确认最近相关提交
    - `git log --oneline -n 6`
-5. 直接进入 `A-07`
+5. 直接进入 `A-06`
    - 重点看：
      - [code_analysis.py](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/code_analysis.py)
      - [export_and_scan.py](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py)
@@ -182,7 +208,7 @@
 如果下次会话要最快恢复，可以直接用这句：
 
 ```text
-先阅读仓库根目录的 ANALYST_PROGRESS.md，按其中“下次会话快速开始”执行，然后继续推进 A-07，不要先做 java exact summarize。
+先阅读仓库根目录的 ANALYST_PROGRESS.md，按其中“下次会话快速开始”执行，然后继续推进 A-06。
 ```
 
 ## 文档维护规则

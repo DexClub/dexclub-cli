@@ -11,6 +11,9 @@ Goal: explain what a target method is doing.
    - string and numeric constants
    - field reads and writes
    - direct callees
+   - smali basic blocks
+   - call clusters and constant clusters
+   - focused local smali snippets for high-signal blocks and clusters
    - return value behavior
 
 ## Interpretation rule

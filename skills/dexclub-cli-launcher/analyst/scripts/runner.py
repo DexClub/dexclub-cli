@@ -134,6 +134,7 @@ def normalize_export_and_scan_payload(raw_payload: object) -> dict[str, object]:
         "methodCalls": "method_calls",
         "fieldAccesses": "field_accesses",
         "branchHotspots": "branch_hotspots",
+        "structuredSummary": "structured_summary",
         "methodDescriptor": "method_descriptor",
     }
     for key, value in raw_payload.items():
@@ -151,6 +152,9 @@ def normalize_export_and_scan_payload(raw_payload: object) -> dict[str, object]:
             continue
         if key == "largeMethodAnalysis" and isinstance(value, dict):
             normalized["large_method_analysis"] = normalize_nested_object_keys(value)
+            continue
+        if key == "structuredSummary" and isinstance(value, dict):
+            normalized["structured_summary"] = normalize_nested_object_keys(value)
             continue
         normalized[key_map.get(key, key)] = value
     return normalized
@@ -621,6 +625,15 @@ def finalize_run_result(
             else:
                 step_result = export_step
                 export_path = step_result["result"].get("export_path")
+                structured_summary = step_result["result"].get("structured_summary", {})
+                has_structured_summary = bool(
+                    isinstance(structured_summary, dict)
+                    and structured_summary.get("supported")
+                )
+                has_focus_snippets = bool(
+                    isinstance(structured_summary, dict)
+                    and structured_summary.get("focus_snippet_count")
+                )
                 large_method_analysis = step_result["result"].get("large_method_analysis", {})
                 has_large_method_summary = bool(
                     isinstance(large_method_analysis, dict)
@@ -650,6 +663,10 @@ def finalize_run_result(
                             if exact_anchor
                             else "Resolved one APK dex and summarized one exported method body."
                         )
+                        if has_structured_summary:
+                            summary_text += " Included a smali block outline."
+                        if has_focus_snippets:
+                            summary_text += " Included focused smali snippets."
                         if has_large_method_summary:
                             summary_text += " Attached grouped hotspot compression for the large smali body."
                         summary_style = "partial_support"
@@ -661,6 +678,15 @@ def finalize_run_result(
             step_result = export_step or step_results[0]
             if step_result["status"] == "ok":
                 export_path = step_result["result"].get("export_path")
+                structured_summary = step_result["result"].get("structured_summary", {})
+                has_structured_summary = bool(
+                    isinstance(structured_summary, dict)
+                    and structured_summary.get("supported")
+                )
+                has_focus_snippets = bool(
+                    isinstance(structured_summary, dict)
+                    and structured_summary.get("focus_snippet_count")
+                )
                 large_method_analysis = step_result["result"].get("large_method_analysis", {})
                 has_large_method_summary = bool(
                     isinstance(large_method_analysis, dict)
@@ -690,6 +716,10 @@ def finalize_run_result(
                             if exact_anchor
                             else "Summarized one exported method body."
                         )
+                        if has_structured_summary:
+                            summary_text += " Included a smali block outline."
+                        if has_focus_snippets:
+                            summary_text += " Included focused smali snippets."
                         if has_large_method_summary:
                             summary_text += " Attached grouped hotspot compression for the large smali body."
                         summary_style = "partial_support"

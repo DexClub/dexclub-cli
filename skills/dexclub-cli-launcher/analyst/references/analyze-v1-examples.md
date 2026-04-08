@@ -273,6 +273,14 @@ Observed result excerpt:
         "number_count": 4,
         "method_call_count": 4,
         "field_access_count": 0,
+        "structured_summary": {
+          "kind": "smali_block_outline_v1",
+          "supported": true,
+          "basic_block_count": 1,
+          "call_cluster_count": 1,
+          "constant_cluster_count": 1,
+          "focus_snippet_count": 3
+        },
         "large_method_analysis": {
           "is_large_method": false,
           "line_threshold": 120
@@ -326,7 +334,7 @@ Observed result excerpt:
     }
   ],
   "summary": {
-    "text": "Summarized one exported method body.",
+    "text": "Summarized one exported method body. Included a smali block outline. Included focused smali snippets.",
     "style": "partial_support"
   }
 }
@@ -409,6 +417,14 @@ Observed result excerpt:
         },
         "method_descriptor": "Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V",
         "method_call_count": 9,
+        "structured_summary": {
+          "kind": "smali_block_outline_v1",
+          "supported": true,
+          "basic_block_count": 25,
+          "call_cluster_count": 4,
+          "constant_cluster_count": 2,
+          "focus_snippet_count": 6
+        },
         "large_method_analysis": {
           "is_large_method": true,
           "line_threshold": 120,
@@ -427,7 +443,7 @@ Observed result excerpt:
     }
   ],
   "summary": {
-    "text": "Summarized one exact method body. Attached grouped hotspot compression for the large smali body.",
+    "text": "Summarized one exact method body. Included a smali block outline. Included focused smali snippets. Attached grouped hotspot compression for the large smali body.",
     "style": "partial_support"
   }
 }

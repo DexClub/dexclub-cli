@@ -92,6 +92,7 @@ Current exact-anchor limits:
 - `trace_callers` and `trace_callees` accept either a relaxed `ClassName#methodName` anchor or a descriptor-aware anchor.
 - `summarize_method_logic` accepts a descriptor-aware anchor only on the `smali` export path.
 - Descriptor-aware summarize with `language=java` still returns `unsupported`.
+- `summarize_method_logic` on `smali` now also includes `structured_summary`, with basic blocks, call/constant clusters, and `focus_snippets`.
 - Large `smali` summarize results now include `large_method_analysis`, which groups method-call, string, number, field, and branch hotspots without removing the exported raw code artifact.
 
 Observed result excerpts:
