@@ -26,3 +26,13 @@ For that task, the current workflow is:
 - narrow the target
 - export code
 - inspect or scan the exported artifact outside the query layer
+
+## Helper path
+
+When you already have an exported Java or smali file, use:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/scan_exported_code.py \
+  --input /path/to/TargetClass.java \
+  --mode numbers
+```

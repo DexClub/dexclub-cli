@@ -17,3 +17,13 @@ Treat full string extraction as a multi-step process:
 - narrow the class or method
 - query for strong string evidence when known
 - export code when exhaustive inspection is needed
+
+## Helper path
+
+When you already have an exported Java or smali file, use:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/scan_exported_code.py \
+  --input /path/to/TargetClass.java \
+  --mode strings
+```

@@ -16,6 +16,17 @@ It does not replace the launcher. Instead, it assumes the launcher can already e
 - `workflows/`: problem-oriented multi-step analysis playbooks
 - `scripts/`: maintenance or helper scripts owned by the analysis layer
 
+## Current helper scripts
+
+- `scripts/scan_exported_code.py`
+  - scan exported Java or smali for strings, numbers, calls, and field access
+  - optionally narrow the scan to a single method
+- `scripts/export_and_scan.py`
+  - call the launcher layer to export a target class from a dex file
+  - immediately run the exported-code scanner on the result
+- `scripts/generate_query_reference.py`
+  - maintenance helper for regenerating the matcher reference
+
 ## Current scope
 
 Today the analyst layer is workflow-driven. It documents how to combine the released CLI commands that already exist:

@@ -28,3 +28,15 @@ bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- exp
   --class com.example.TargetClass \
   --output /tmp/TargetClass.java
 ```
+
+## Analyst helpers
+
+If you already have a dex input and want export plus immediate scanning, use:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py \
+  --input-dex /path/to/classes.dex \
+  --class com.example.TargetClass \
+  --language java \
+  --mode summary
+```

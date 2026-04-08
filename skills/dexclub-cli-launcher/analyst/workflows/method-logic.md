@@ -19,3 +19,25 @@ Prefer `export-smali` when bytecode-level behavior matters.
 Prefer `export-java` when a higher-level control-flow summary is enough and the decompiled output is readable.
 
 Do not pretend the current released CLI has a dedicated `analyze-method` command. This workflow is intentionally multi-step.
+
+## Helper path
+
+For exported code:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/scan_exported_code.py \
+  --input /path/to/TargetClass.java \
+  --method targetMethod \
+  --mode summary
+```
+
+For direct dex-to-summary composition:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py \
+  --input-dex /path/to/classes.dex \
+  --class com.example.TargetClass \
+  --method targetMethod \
+  --language java \
+  --mode summary
+```
