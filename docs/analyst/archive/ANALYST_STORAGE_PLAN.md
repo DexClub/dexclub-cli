@@ -1,5 +1,7 @@
 # Analyst 存储与缓存落地计划
 
+> 状态：V1 存储设计归档记录。第一阶段已落地完成，本文保留为目录结构、缓存边界与后续扩展依据。
+
 ## 目标
 
 为 `skills/dexclub-cli-launcher/analyst` 落地一套可复用、可清理、可追踪的本地存储结构。
@@ -215,7 +217,7 @@ build/dexclub-cli/
 
 必须做：
 
-- 把 analyst run 产物默认目录从 `/tmp/dexclub-analyst-runs` 切到工作目录下 `build/dexclub-cli/runs/v1`
+- 把 analyst run 产物默认目录从旧的临时目录方案切到工作目录下 `build/dexclub-cli/runs/v1`
 - 为 APK / dex 输入增加工作目录下的输入缓存目录
 - 为缓存目录补 `input-meta.json`
 - 为 run 目录补 `run-meta.json`
