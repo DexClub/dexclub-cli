@@ -1,4 +1,4 @@
 interface:
   display_name: "DexClub CLI Launcher"
-  short_description: "Prepare and run the cached dexclub-cli release"
-  default_prompt: "Use $dexclub-cli-launcher to prepare the cached dexclub-cli release, run the CLI directly, and perform class/string/method/field searches. Prefer Contains with ignoreCase=true for string queries unless exact matching is explicitly requested."
+  short_description: "Run cached dexclub-cli releases and compose reverse-analysis workflows"
+  default_prompt: "Use $dexclub-cli-launcher as a single entry point. Resolve execution through the internal launcher layer, then use the analyst layer to compose inspect/find/export workflows for reverse-analysis tasks. Prefer Contains with ignoreCase=true for string queries unless exact matching is explicitly requested."
