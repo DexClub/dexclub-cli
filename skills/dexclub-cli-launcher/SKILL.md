@@ -1,9 +1,9 @@
 ---
-name: dexclub-cli-release-launcher
+name: dexclub-cli-launcher
 description: Prepare and run the cached dexclub-cli release artifact for the current OS and architecture. Use when the user wants to run dexclub-cli, reuse the local cached artifact, refresh the cache from GitHub Release on demand, or ask where the local cache lives.
 ---
 
-# DexClub CLI Release Launcher
+# DexClub CLI Launcher
 
 Use this skill when the user wants to run `dexclub-cli` through the local cached artifact instead of wiring the cache logic by hand.
 
@@ -21,36 +21,36 @@ Use this skill when the user wants to run `dexclub-cli` through the local cached
 ## Workflow
 
 1. Resolve the cache root first:
-   - `bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh --print-cache-path`
-   - `.\skills\dexclub-cli-release-launcher\scripts\run_latest_release.bat --print-cache-path`
+   - `bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh --print-cache-path`
+   - `.\skills\dexclub-cli-launcher\scripts\run_latest_release.bat --print-cache-path`
 2. If the user asks where cached dexclub-cli artifacts live, reply with the absolute path from `--print-cache-path`.
 3. If you need the normalized platform id, run:
-   - `bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh --print-platform`
-   - `.\skills\dexclub-cli-release-launcher\scripts\run_latest_release.bat --print-platform`
+   - `bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh --print-platform`
+   - `.\skills\dexclub-cli-launcher\scripts\run_latest_release.bat --print-platform`
 4. By default, do not refresh from GitHub. Only touch remote release metadata when:
    - no compatible local cache exists yet
    - the user explicitly asks to refresh or update the cache
 5. If the user explicitly asks to refresh or update the cached artifact, use:
-   - `bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh --update-cache --prepare-only`
-   - `.\skills\dexclub-cli-release-launcher\scripts\run_latest_release.bat --update-cache --prepare-only`
+   - `bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh --update-cache --prepare-only`
+   - `.\skills\dexclub-cli-launcher\scripts\run_latest_release.bat --update-cache --prepare-only`
 6. If remote access has already been disabled after repeated failures, reset the remote failure state only when the user explicitly asks to retry:
-   - `bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh --reset-remote-failures --update-cache --prepare-only`
-   - `.\skills\dexclub-cli-release-launcher\scripts\run_latest_release.bat --reset-remote-failures --update-cache --prepare-only`
+   - `bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh --reset-remote-failures --update-cache --prepare-only`
+   - `.\skills\dexclub-cli-launcher\scripts\run_latest_release.bat --reset-remote-failures --update-cache --prepare-only`
 7. If you only need to prepare or inspect the cached artifact, use:
-   - `bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh --prepare-only`
-   - `bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh --print-launcher`
-   - `bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh --print-latest-tag`
-   - `.\skills\dexclub-cli-release-launcher\scripts\run_latest_release.bat --prepare-only`
-   - `.\skills\dexclub-cli-release-launcher\scripts\run_latest_release.bat --print-launcher`
-   - `.\skills\dexclub-cli-release-launcher\scripts\run_latest_release.bat --print-latest-tag`
+   - `bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh --prepare-only`
+   - `bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh --print-launcher`
+   - `bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh --print-latest-tag`
+   - `.\skills\dexclub-cli-launcher\scripts\run_latest_release.bat --prepare-only`
+   - `.\skills\dexclub-cli-launcher\scripts\run_latest_release.bat --print-launcher`
+   - `.\skills\dexclub-cli-launcher\scripts\run_latest_release.bat --print-latest-tag`
 8. To run the CLI, pass the CLI arguments after `--`, for example:
 
 ```bash
-bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh -- --help
+bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh -- --help
 ```
 
 ```bat
-.\skills\dexclub-cli-release-launcher\scripts\run_latest_release.bat -- --help
+.\skills\dexclub-cli-launcher\scripts\run_latest_release.bat -- --help
 ```
 
 ## CLI calls
@@ -60,7 +60,7 @@ Use the release launcher directly when you need the real `dexclub-cli` behavior.
 Unix-like examples:
 
 ```bash
-bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh -- find-class \
+bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh -- find-class \
   --input /path/to/classes.dex \
   --query-json '{"matcher":{"className":{"value":"SampleSearchTarget","matchType":"Contains","ignoreCase":true}}}' \
   --output-format json \
@@ -68,26 +68,26 @@ bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh -- find
 ```
 
 ```bash
-bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh -- find-method \
+bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh -- find-method \
   --input /path/to/classes.dex \
   --query-json '{"matcher":{"usingStrings":[{"value":"dexclub-needle-string","matchType":"Contains","ignoreCase":true}]}}'
 ```
 
 ```bash
-bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh -- find-class \
+bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh -- find-class \
   --input /path/to/classes.dex \
   --query-file /path/to/find-class.json \
   --output-format json
 ```
 
 ```bash
-bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh -- find-method \
+bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh -- find-method \
   --input /path/to/classes.dex \
   --query-json '{"matcher":{"name":{"value":"exposeNeedle","matchType":"Equals"}}}'
 ```
 
 ```bash
-bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh -- find-field \
+bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh -- find-field \
   --input /path/to/classes.dex \
   --query-file /path/to/find-field.json \
   --output-format json
@@ -96,7 +96,7 @@ bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh -- find
 Windows example:
 
 ```bat
-.\skills\dexclub-cli-release-launcher\scripts\run_latest_release.bat -- find-method --input C:\path\to\classes.dex --query-json "{\"matcher\":{\"usingStrings\":[{\"value\":\"dexclub-needle-string\",\"matchType\":\"Contains\",\"ignoreCase\":true}]}}"
+.\skills\dexclub-cli-launcher\scripts\run_latest_release.bat -- find-method --input C:\path\to\classes.dex --query-json "{\"matcher\":{\"usingStrings\":[{\"value\":\"dexclub-needle-string\",\"matchType\":\"Contains\",\"ignoreCase\":true}]}}"
 ```
 
 ## Query guidance

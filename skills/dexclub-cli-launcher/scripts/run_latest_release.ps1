@@ -188,7 +188,7 @@ function Invoke-GitHubRequest {
         [string]$OutFile
     )
 
-    $headers = @{ "User-Agent" = "dexclub-cli-release-launcher" }
+    $headers = @{ "User-Agent" = "dexclub-cli-launcher" }
     $params = @{
         Uri = $Uri
         Headers = $headers

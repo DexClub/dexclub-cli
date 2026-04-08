@@ -1,4 +1,4 @@
-# dexclub-cli-release-launcher
+# dexclub-cli-launcher
 
 This repository keeps the skill implementation in:
 
@@ -45,19 +45,19 @@ It provides:
 Unix-like:
 
 ```bash
-bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh --prepare-only
-bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh --update-cache --prepare-only
-bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh --reset-remote-failures --update-cache --prepare-only
-bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh -- --help
+bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh --prepare-only
+bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh --update-cache --prepare-only
+bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh --reset-remote-failures --update-cache --prepare-only
+bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh -- --help
 ```
 
 Windows:
 
 ```bat
-.\skills\dexclub-cli-release-launcher\scripts\run_latest_release.bat --prepare-only
-.\skills\dexclub-cli-release-launcher\scripts\run_latest_release.bat --update-cache --prepare-only
-.\skills\dexclub-cli-release-launcher\scripts\run_latest_release.bat --reset-remote-failures --update-cache --prepare-only
-.\skills\dexclub-cli-release-launcher\scripts\run_latest_release.bat -- --help
+.\skills\dexclub-cli-launcher\scripts\run_latest_release.bat --prepare-only
+.\skills\dexclub-cli-launcher\scripts\run_latest_release.bat --update-cache --prepare-only
+.\skills\dexclub-cli-launcher\scripts\run_latest_release.bat --reset-remote-failures --update-cache --prepare-only
+.\skills\dexclub-cli-launcher\scripts\run_latest_release.bat -- --help
 ```
 
 ## Search commands
@@ -67,18 +67,18 @@ Use the original CLI command line from the project README and run it through the
 Unix-like:
 
 ```bash
-bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh -- find-class --input /path/to/classes.dex --query-json '{"matcher":{"className":{"value":"SampleSearchTarget","matchType":"Contains","ignoreCase":true}}}' --output-format json --limit 20
-bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh -- find-method --input /path/to/classes.dex --query-json '{"matcher":{"usingStrings":[{"value":"dexclub-needle-string","matchType":"Contains","ignoreCase":true}]}}'
-bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh -- find-class --input /path/to/classes.dex --query-file /path/to/find-class.json --output-format json
-bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh -- find-method --input /path/to/classes.dex --query-json '{"matcher":{"name":{"value":"exposeNeedle","matchType":"Equals"}}}'
-bash ./skills/dexclub-cli-release-launcher/scripts/run_latest_release.sh -- find-field --input /path/to/classes.dex --query-file /path/to/find-field.json --output-format json
+bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh -- find-class --input /path/to/classes.dex --query-json '{"matcher":{"className":{"value":"SampleSearchTarget","matchType":"Contains","ignoreCase":true}}}' --output-format json --limit 20
+bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh -- find-method --input /path/to/classes.dex --query-json '{"matcher":{"usingStrings":[{"value":"dexclub-needle-string","matchType":"Contains","ignoreCase":true}]}}'
+bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh -- find-class --input /path/to/classes.dex --query-file /path/to/find-class.json --output-format json
+bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh -- find-method --input /path/to/classes.dex --query-json '{"matcher":{"name":{"value":"exposeNeedle","matchType":"Equals"}}}'
+bash ./skills/dexclub-cli-launcher/scripts/run_latest_release.sh -- find-field --input /path/to/classes.dex --query-file /path/to/find-field.json --output-format json
 ```
 
 Windows:
 
 ```bat
-.\skills\dexclub-cli-release-launcher\scripts\run_latest_release.bat -- find-class --input C:\path\to\classes.dex --query-json "{\"matcher\":{\"className\":{\"value\":\"SampleSearchTarget\",\"matchType\":\"Contains\",\"ignoreCase\":true}}}" --output-format json --limit 20
-.\skills\dexclub-cli-release-launcher\scripts\run_latest_release.bat -- find-method --input C:\path\to\classes.dex --query-json "{\"matcher\":{\"usingStrings\":[{\"value\":\"dexclub-needle-string\",\"matchType\":\"Contains\",\"ignoreCase\":true}]}}"
+.\skills\dexclub-cli-launcher\scripts\run_latest_release.bat -- find-class --input C:\path\to\classes.dex --query-json "{\"matcher\":{\"className\":{\"value\":\"SampleSearchTarget\",\"matchType\":\"Contains\",\"ignoreCase\":true}}}" --output-format json --limit 20
+.\skills\dexclub-cli-launcher\scripts\run_latest_release.bat -- find-method --input C:\path\to\classes.dex --query-json "{\"matcher\":{\"usingStrings\":[{\"value\":\"dexclub-needle-string\",\"matchType\":\"Contains\",\"ignoreCase\":true}]}}"
 ```
 
 ## Notes

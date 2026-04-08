@@ -257,9 +257,9 @@ cd dexkit/vendor/libcxx-prefab
 
 ## Codex Skill
 
-仓库内提供了本地 skill：`skills/dexclub-cli-release-launcher/`。
+仓库内提供了本地 skill：`skills/dexclub-cli-launcher/`。
 
-详细说明见 `skills/dexclub-cli-release-launcher/README.md` 与 `skills/dexclub-cli-release-launcher/SKILL.md`。
+详细说明见 `skills/dexclub-cli-launcher/README.md` 与 `skills/dexclub-cli-launcher/SKILL.md`。
 
 ## GitHub Actions
 

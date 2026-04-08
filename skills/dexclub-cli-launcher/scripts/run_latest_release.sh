@@ -74,7 +74,7 @@ download_file() {
   local output_path="$2"
   local tmp_path
   tmp_path="${output_path}.tmp"
-  curl -fsSL --retry 3 -H 'User-Agent: dexclub-cli-release-launcher' "$url" -o "$tmp_path"
+  curl -fsSL --retry 3 -H 'User-Agent: dexclub-cli-launcher' "$url" -o "$tmp_path"
   mv "$tmp_path" "$output_path"
 }
 
@@ -126,7 +126,7 @@ find_launcher() {
 
 latest_release_tag_from_api() {
   local response tag
-  if ! response="$(curl -fsSL -H 'Accept: application/vnd.github+json' -H 'User-Agent: dexclub-cli-release-launcher' "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null)"; then
+  if ! response="$(curl -fsSL -H 'Accept: application/vnd.github+json' -H 'User-Agent: dexclub-cli-launcher' "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null)"; then
     return 1
   fi
   tag="$(
@@ -338,7 +338,7 @@ ensure_remote_asset_ready() {
 
   mkdir -p "$release_dir"
 
-  if ! expanded_assets="$(curl -fsSL -H 'User-Agent: dexclub-cli-release-launcher' "$expanded_assets_url")"; then
+  if ! expanded_assets="$(curl -fsSL -H 'User-Agent: dexclub-cli-launcher' "$expanded_assets_url")"; then
     return 1
   fi
   if ! printf '%s' "$expanded_assets" | grep -Fq "${asset_base}.zip"; then
