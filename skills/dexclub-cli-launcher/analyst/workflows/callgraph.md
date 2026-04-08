@@ -23,7 +23,7 @@ To search for methods that call a known anchor:
 
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/run_find.py method \
-  --input /path/to/app.apk \
+  --input ./inputs/app.apk \
   --invoke-method com.example.TargetClass#targetMethod \
   --output-format json
 ```
@@ -32,7 +32,7 @@ To search for methods constrained by known callers:
 
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/run_find.py method \
-  --input /path/to/app.apk \
+  --input ./inputs/app.apk \
   --caller-method com.example.EntryClass#entryMethod \
   --output-format json
 ```

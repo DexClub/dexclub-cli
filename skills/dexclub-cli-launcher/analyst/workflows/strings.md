@@ -24,6 +24,6 @@ When you already have an exported Java or smali file, use:
 
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/scan_exported_code.py \
-  --input /path/to/TargetClass.java \
+  --input ./artifacts/TargetClass.java \
   --mode strings
 ```

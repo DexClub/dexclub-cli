@@ -5,10 +5,23 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ANALYZE="$SCRIPT_DIR/analyze.py"
 RUN_FIND="$SCRIPT_DIR/run_find.py"
 EXPORT_AND_SCAN="$SCRIPT_DIR/export_and_scan.py"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
-DEFAULT_SAMPLE_APK="/data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk"
-SAMPLE_APK="${1:-${DEXCLUB_ANALYST_SAMPLE_APK:-$DEFAULT_SAMPLE_APK}}"
-TMP_ROOT="${DEXCLUB_ANALYST_VALIDATE_TMP:-$(mktemp -d "${TMPDIR:-/tmp}/dexclub-analyst-v1.XXXXXX")}"
+SAMPLE_APK="${1:-${DEXCLUB_ANALYST_SAMPLE_APK:-}}"
+TMP_BASE_DIR="${DEXCLUB_ANALYST_VALIDATE_TMP_BASE:-$REPO_ROOT/build/dexclub-cli/tmp}"
+
+if [[ -z "$SAMPLE_APK" ]]; then
+  cat >&2 <<'EOF'
+usage: validate_v1_sample.sh <sample-apk-path>
+
+Provide the sample APK path as the first argument, or set
+DEXCLUB_ANALYST_SAMPLE_APK=<sample-apk-path>.
+EOF
+  exit 2
+fi
+
+mkdir -p "$TMP_BASE_DIR"
+TMP_ROOT="${DEXCLUB_ANALYST_VALIDATE_TMP:-$(mktemp -d "$TMP_BASE_DIR/dexclub-analyst-v1.XXXXXX")}"
 DEX_DIR="$TMP_ROOT/dex"
 RESULT_DIR="$TMP_ROOT/results"
 

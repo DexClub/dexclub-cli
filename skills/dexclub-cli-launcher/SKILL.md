@@ -70,20 +70,20 @@ bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- --h
 ```
 
 ```bash
-bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- inspect --input /path/to/app.apk
+bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- inspect --input ./inputs/app.apk
 ```
 
 ```bash
 bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- find-method \
-  --input /path/to/classes.dex \
+  --input ./inputs/classes.dex \
   --query-json '{"matcher":{"usingStrings":[{"value":"needle","matchType":"Contains","ignoreCase":true}]}}'
 ```
 
 ```bash
 bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- export-smali \
-  --input /path/to/classes.dex \
+  --input ./inputs/classes.dex \
   --class com.example.TargetActivity \
-  --output /tmp/TargetActivity.smali
+  --output ./artifacts/TargetActivity.smali
 ```
 
 ## Analyst guidance

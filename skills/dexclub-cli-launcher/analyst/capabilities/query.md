@@ -26,13 +26,13 @@ Use query commands when you already have a search target or a narrowing signal.
 
 ```bash
 bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- find-class \
-  --input /path/to/app.apk \
+  --input ./inputs/app.apk \
   --query-json '{"matcher":{"className":{"value":"MainActivity","matchType":"Equals"}}}'
 ```
 
 ```bash
 bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- find-method \
-  --input /path/to/classes.dex \
+  --input ./inputs/classes.dex \
   --query-json '{"matcher":{"usingStrings":[{"value":"login","matchType":"Contains","ignoreCase":true}]}}'
 ```
 
@@ -50,7 +50,7 @@ Build and execute in one step:
 
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/run_find.py method \
-  --input /path/to/app.apk \
+  --input ./inputs/app.apk \
   --declared-class com.example.MainActivity \
   --using-string login \
   --limit 20 \

@@ -5,7 +5,7 @@ This page records observed version 1 `analyze.py run` results from the analyst l
 These examples were captured against:
 
 - sample APK:
-  - `/data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk`
+  - `<sample-apk-path>`
 - sample dex for `MainActivity#onCreate`:
   - discovered by `scripts/validate_v1_sample.sh` from the APK's extracted `classes*.dex`
 
@@ -27,7 +27,7 @@ Command:
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   --task-type summarize_method_logic \
-  --input-json '{"input":["/data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate"}}'
+  --input-json '{"input":["<sample-apk-path>"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate"}}'
 ```
 
 Observed result excerpt:
@@ -75,7 +75,7 @@ Command:
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   --task-type summarize_method_logic \
-  --input-json '{"input":["/data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image","descriptor":"Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V"},"language":"java"}'
+  --input-json '{"input":["<sample-apk-path>"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image","descriptor":"Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V"},"language":"java"}'
 ```
 
 Observed result excerpt:
@@ -131,7 +131,7 @@ Command:
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   --task-type search_methods_by_string \
-  --input-json '{"input":["/data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk"],"string":"https://github.com/shadcn.png","declared_class":"com.shadcn.ui.compose.showcase.docs.AvatarDocsPageKt"}'
+  --input-json '{"input":["<sample-apk-path>"],"string":"https://github.com/shadcn.png","declared_class":"com.shadcn.ui.compose.showcase.docs.AvatarDocsPageKt"}'
 ```
 
 Observed result excerpt:
@@ -143,7 +143,7 @@ Observed result excerpt:
   "plan": {
     "inputs": {
       "input": [
-        "/data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk"
+        "<sample-apk-path>"
       ],
       "string": "https://github.com/shadcn.png",
       "declared_class": "com.shadcn.ui.compose.showcase.docs.AvatarDocsPageKt"
@@ -164,7 +164,7 @@ Observed result excerpt:
             "class_name": "com.shadcn.ui.compose.showcase.docs.AvatarDocsPageKt",
             "method_name": "<clinit>",
             "descriptor": "Lcom/shadcn/ui/compose/showcase/docs/AvatarDocsPageKt;-><clinit>()V",
-            "source_dex_path": "/data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk"
+            "source_dex_path": "<sample-apk-path>"
           }
         ]
       }
@@ -179,7 +179,7 @@ Observed result excerpt:
       "step_id": "step-1",
       "kind": "method_hit",
       "value": "Lcom/shadcn/ui/compose/showcase/docs/AvatarDocsPageKt;-><clinit>()V",
-      "source_path": "/data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk"
+      "source_path": "<sample-apk-path>"
     }
   ]
 }
@@ -192,7 +192,7 @@ Command:
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   --task-type trace_callers \
-  --input-json '{"input":["/data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk"],"method_anchor":{"class_name":"androidx.activity.ComponentActivity","method_name":"onCreate"},"limit":3}'
+  --input-json '{"input":["<sample-apk-path>"],"method_anchor":{"class_name":"androidx.activity.ComponentActivity","method_name":"onCreate"},"limit":3}'
 ```
 
 Observed result excerpt:
@@ -217,13 +217,13 @@ Observed result excerpt:
             "class_name": "androidx.compose.ui.tooling.PreviewActivity",
             "method_name": "onCreate",
             "descriptor": "Landroidx/compose/ui/tooling/PreviewActivity;->onCreate(Landroid/os/Bundle;)V",
-            "source_dex_path": "/data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk"
+            "source_dex_path": "<sample-apk-path>"
           },
           {
             "class_name": "com.shadcn.ui.compose.MainActivity",
             "method_name": "onCreate",
             "descriptor": "Lcom/shadcn/ui/compose/MainActivity;->onCreate(Landroid/os/Bundle;)V",
-            "source_dex_path": "/data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk"
+            "source_dex_path": "<sample-apk-path>"
           }
         ]
       }
@@ -243,7 +243,7 @@ Command:
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   --task-type trace_callees \
-  --input-json '{"input":["/data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate","descriptor":"(Landroid/os/Bundle;)V"},"limit":5}'
+  --input-json '{"input":["<sample-apk-path>"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate","descriptor":"(Landroid/os/Bundle;)V"},"limit":5}'
 ```
 
 Observed result excerpt:
@@ -304,7 +304,7 @@ Command:
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   --task-type summarize_method_logic \
-  --input-json '{"input":["/path/to/main-activity.dex"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate"}}'
+  --input-json '{"input":["<main-activity-dex-path>"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate"}}'
 ```
 
 Observed result excerpt:
@@ -406,7 +406,7 @@ Command:
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   --task-type summarize_method_logic \
-  --input-json '{"input":["/path/to/foundation-image.dex"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image"}}'
+  --input-json '{"input":["<foundation-image-dex-path>"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image"}}'
 ```
 
 Observed result excerpt:
@@ -454,7 +454,7 @@ Command:
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   --task-type summarize_method_logic \
-  --input-json '{"input":["/path/to/foundation-image.dex"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image","descriptor":"Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V"}}'
+  --input-json '{"input":["<foundation-image-dex-path>"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image","descriptor":"Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V"}}'
 ```
 
 Observed result excerpt:

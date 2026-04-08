@@ -24,9 +24,9 @@ Use export commands when you need class-level code artifacts for manual or scrip
 
 ```bash
 bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- export-java \
-  --input /path/to/classes.dex \
+  --input ./inputs/classes.dex \
   --class com.example.TargetClass \
-  --output /tmp/TargetClass.java
+  --output ./artifacts/TargetClass.java
 ```
 
 ## Analyst helpers
@@ -35,7 +35,7 @@ If you already have a dex input and want export plus immediate scanning, use:
 
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py \
-  --input-dex /path/to/classes.dex \
+  --input-dex ./inputs/classes.dex \
   --class com.example.TargetClass \
   --mode summary
 ```

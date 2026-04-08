@@ -64,13 +64,13 @@ The version 1 planner layer keeps JSON as the primary stdout contract:
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py plan \
   --task-type search_methods_by_string \
-  --input-json '{"input":["/path/to/app.apk"],"string":"needle"}'
+  --input-json '{"input":["./inputs/app.apk"],"string":"needle"}'
 ```
 
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   --task-type summarize_method_logic \
-  --input-json '{"input":["/path/to/app.apk"],"method_anchor":{"class_name":"com.example.Target","method_name":"login"}}'
+  --input-json '{"input":["./inputs/app.apk"],"method_anchor":{"class_name":"com.example.Target","method_name":"login"}}'
 ```
 
 Descriptor-aware anchors are now supported for direct relation tracing and smali summarize:
@@ -78,13 +78,13 @@ Descriptor-aware anchors are now supported for direct relation tracing and smali
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   --task-type trace_callees \
-  --input-json '{"input":["/path/to/app.apk"],"method_anchor":{"class_name":"com.example.Target","method_name":"login","descriptor":"(Ljava/lang/String;)V"}}'
+  --input-json '{"input":["./inputs/app.apk"],"method_anchor":{"class_name":"com.example.Target","method_name":"login","descriptor":"(Ljava/lang/String;)V"}}'
 ```
 
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   --task-type summarize_method_logic \
-  --input-json '{"input":["/path/to/classes.dex"],"method_anchor":{"class_name":"com.example.Target","method_name":"login","descriptor":"Lcom/example/Target;->login(Ljava/lang/String;)V"}}'
+  --input-json '{"input":["./inputs/classes.dex"],"method_anchor":{"class_name":"com.example.Target","method_name":"login","descriptor":"Lcom/example/Target;->login(Ljava/lang/String;)V"}}'
 ```
 
 Current exact-anchor limits:
@@ -104,7 +104,7 @@ Observed result excerpts:
 Repeatable sample validation against the published release:
 
 ```bash
-bash ./skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh
+bash ./skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh ./inputs/sample.apk
 ```
 
 Default local storage layout:

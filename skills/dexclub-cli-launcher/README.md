@@ -98,18 +98,18 @@ Use the original CLI command line from the project README and run it through the
 Unix-like:
 
 ```bash
-bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- find-class --input /path/to/classes.dex --query-json '{"matcher":{"className":{"value":"SampleSearchTarget","matchType":"Contains","ignoreCase":true}}}' --output-format json --limit 20
-bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- find-method --input /path/to/classes.dex --query-json '{"matcher":{"usingStrings":[{"value":"dexclub-needle-string","matchType":"Contains","ignoreCase":true}]}}'
-bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- find-class --input /path/to/classes.dex --query-file /path/to/find-class.json --output-format json
-bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- find-method --input /path/to/classes.dex --query-json '{"matcher":{"name":{"value":"exposeNeedle","matchType":"Equals"}}}'
-bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- find-field --input /path/to/classes.dex --query-file /path/to/find-field.json --output-format json
+bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- find-class --input ./inputs/classes.dex --query-json '{"matcher":{"className":{"value":"SampleSearchTarget","matchType":"Contains","ignoreCase":true}}}' --output-format json --limit 20
+bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- find-method --input ./inputs/classes.dex --query-json '{"matcher":{"usingStrings":[{"value":"dexclub-needle-string","matchType":"Contains","ignoreCase":true}]}}'
+bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- find-class --input ./inputs/classes.dex --query-file ./queries/find-class.json --output-format json
+bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- find-method --input ./inputs/classes.dex --query-json '{"matcher":{"name":{"value":"exposeNeedle","matchType":"Equals"}}}'
+bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- find-field --input ./inputs/classes.dex --query-file ./queries/find-field.json --output-format json
 ```
 
 Windows:
 
 ```bat
-.\skills\dexclub-cli-launcher\launcher\scripts\run_latest_release.bat -- find-class --input C:\path\to\classes.dex --query-json "{\"matcher\":{\"className\":{\"value\":\"SampleSearchTarget\",\"matchType\":\"Contains\",\"ignoreCase\":true}}}" --output-format json --limit 20
-.\skills\dexclub-cli-launcher\launcher\scripts\run_latest_release.bat -- find-method --input C:\path\to\classes.dex --query-json "{\"matcher\":{\"usingStrings\":[{\"value\":\"dexclub-needle-string\",\"matchType\":\"Contains\",\"ignoreCase\":true}]}}"
+.\skills\dexclub-cli-launcher\launcher\scripts\run_latest_release.bat -- find-class --input .\inputs\classes.dex --query-json "{\"matcher\":{\"className\":{\"value\":\"SampleSearchTarget\",\"matchType\":\"Contains\",\"ignoreCase\":true}}}" --output-format json --limit 20
+.\skills\dexclub-cli-launcher\launcher\scripts\run_latest_release.bat -- find-method --input .\inputs\classes.dex --query-json "{\"matcher\":{\"usingStrings\":[{\"value\":\"dexclub-needle-string\",\"matchType\":\"Contains\",\"ignoreCase\":true}]}}"
 ```
 
 ## Notes

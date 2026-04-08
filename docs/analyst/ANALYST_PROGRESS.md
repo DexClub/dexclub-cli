@@ -58,6 +58,7 @@
     - 输入缓存目录会写入 `input-meta.json`
 - 当前验证脚本
   - [validate_v1_sample.sh](../../skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh)
+  - 运行时需要通过首个参数或 `DEXCLUB_ANALYST_SAMPLE_APK` 显式提供样例 APK 路径
 - 最近一次通过验证的命令
   - `DEXCLUB_CLI_CACHE_DIR=<cache-dir> bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh --reset-remote-failures --update-cache --prepare-only`
   - `DEXCLUB_CLI_CACHE_DIR=<cache-dir> python3 ./skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py --input-dex <dex-path> --class androidx.compose.foundation.ImageKt --method Image --method-descriptor 'Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V' --language java --mode summary --format json`
