@@ -90,12 +90,11 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
 Current exact-anchor limits:
 
 - `trace_callers` and `trace_callees` accept either a relaxed `ClassName#methodName` anchor or a descriptor-aware anchor.
-- `summarize_method_logic` accepts a descriptor-aware anchor on the `smali` export path, and the repo-local Java exported-code analysis path now also supports descriptor-aware exact scoping.
+- `summarize_method_logic` accepts a descriptor-aware anchor on the `smali` export path, and on the `java` export path when the launcher build already includes the `A-09` `export-java` fix.
 - Planner-side `descriptor-aware + language=java` hard rejection has been removed in the current repository state.
-- The remaining caveat is release alignment:
-  - the analyst launcher still runs the published CLI release by default
-  - repo-local verification now succeeds for `com.shadcn.ui.compose.MainActivity` and `androidx.compose.foundation.ImageKt`
-  - release-based end-to-end analyst validation should be treated separately until a published launcher build includes the `A-09` `export-java` fix
+- The current maintenance environment validates Java exact summarize through a launcher cache that has been overlaid with the repo-local `cli/build/libs/dexclub-cli-all.jar`.
+- The default published release may still lag behind that local fixed launcher build, so those two verification scopes must remain separate until a published launcher build includes the same fix.
+- `scripts/validate_v1_sample.sh` now covers both direct `export_and_scan.py` Java exact summarize and APK-backed `analyze.py run` Java exact summarize on a launcher build that already contains the `A-09` fix.
 - `summarize_method_logic` on `smali` now also includes `structured_summary`, with basic blocks, call/constant clusters, and `focus_snippets`.
 - Large `smali` summarize results now include `large_method_analysis`, which groups method-call, string, number, field, and branch hotspots without removing the exported raw code artifact.
 
@@ -103,7 +102,7 @@ Observed result excerpts:
 
 - `references/analyze-v1-examples.md`
 
-Repeatable sample validation:
+Repeatable sample validation against a launcher build that already includes the `A-09` `export-java` fix:
 
 ```bash
 bash ./skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh

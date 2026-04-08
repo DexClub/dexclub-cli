@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ANALYZE="$SCRIPT_DIR/analyze.py"
 RUN_FIND="$SCRIPT_DIR/run_find.py"
+EXPORT_AND_SCAN="$SCRIPT_DIR/export_and_scan.py"
 
 DEFAULT_SAMPLE_APK="/data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk"
 SAMPLE_APK="${1:-${DEXCLUB_ANALYST_SAMPLE_APK:-$DEFAULT_SAMPLE_APK}}"
@@ -30,7 +31,23 @@ import sys
 path = pathlib.Path(sys.argv[1])
 expr = sys.argv[2]
 message = sys.argv[3]
-payload = json.loads(path.read_text(encoding="utf-8"))
+text = path.read_text(encoding="utf-8")
+try:
+    payload = json.loads(text)
+except json.JSONDecodeError:
+    payload = None
+    lines = text.splitlines()
+    for start in range(len(lines)):
+        candidate = "\n".join(lines[start:]).strip()
+        if candidate[:1] not in "[{":
+            continue
+        try:
+            payload = json.loads(candidate)
+            break
+        except json.JSONDecodeError:
+            continue
+    if payload is None:
+        raise SystemExit(f"{path.name}: unable to locate JSON payload")
 ok = eval(expr, {}, {"payload": payload, "Path": pathlib.Path})
 if not ok:
     raise SystemExit(f"{path.name}: {message}")
@@ -232,12 +249,39 @@ assert_expr "$RESULT_DIR/exact_summarize_method_logic.json" "payload['step_resul
 assert_expr "$RESULT_DIR/exact_summarize_method_logic.json" "any(group['kind'] == 'branch_hotspots' for group in payload['step_results'][0]['result']['large_method_analysis']['groups'])" "large method compression should include branch hotspots"
 assert_expr "$RESULT_DIR/exact_summarize_method_logic.json" "any(group['kind'] == 'method_calls' and len(group['clusters']) >= 1 for group in payload['step_results'][0]['result']['large_method_analysis']['groups'])" "large method compression should cluster direct call hotspots"
 
-unsupported_exact_java_input=$(cat <<JSON
-{"input":["$ambiguous_image_dex"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image","descriptor":"$exact_descriptor"},"language":"java"}
+exact_java_export_output="$RESULT_DIR/exact_java_export_and_scan.json"
+python3 "$EXPORT_AND_SCAN" \
+  --input-dex "$ambiguous_image_dex" \
+  --class "androidx.compose.foundation.ImageKt" \
+  --method "Image" \
+  --method-descriptor "$exact_descriptor" \
+  --language java \
+  --mode summary \
+  --format json >"$exact_java_export_output"
+echo "validated_output=$exact_java_export_output"
+assert_expr "$exact_java_export_output" "payload['kind'] == 'java'" "direct export_and_scan should produce java output on a fixed launcher build"
+assert_expr "$exact_java_export_output" "payload['scope']['methodDescriptor'] == '$exact_descriptor'" "direct export_and_scan should keep the exact java-scoped descriptor"
+assert_expr "$exact_java_export_output" "payload['methodCallCount'] >= 5" "direct export_and_scan should report java-side method calls"
+assert_expr "$exact_java_export_output" "payload['branchLineCount'] >= 1" "direct export_and_scan should report java-side branch lines"
+assert_expr "$exact_java_export_output" "payload['structuredSummary']['supported'] is False" "java summarize should still skip smali-only structured summary"
+assert_expr "$exact_java_export_output" "Path(payload['exportPath']).is_file()" "direct export_and_scan should keep the exported java artifact"
+
+exact_java_input=$(cat <<JSON
+{"input":["$SAMPLE_APK"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image","descriptor":"$exact_descriptor"},"language":"java"}
 JSON
 )
-run_case "unsupported_exact_java_summarize" "summarize_method_logic" "$unsupported_exact_java_input"
-assert_expr "$RESULT_DIR/unsupported_exact_java_summarize.json" "payload['status'] == 'unsupported'" "descriptor-aware summarize should reject java export for now"
+run_case "exact_java_summarize_method_logic" "summarize_method_logic" "$exact_java_input"
+assert_expr "$RESULT_DIR/exact_java_summarize_method_logic.json" "payload['status'] == 'ok'" "descriptor-aware java summarize should succeed on a fixed launcher build"
+assert_expr "$RESULT_DIR/exact_java_summarize_method_logic.json" "len(payload['plan']['steps']) == 2" "apk-backed java summarize should plan resolve plus export steps"
+assert_expr "$RESULT_DIR/exact_java_summarize_method_logic.json" "payload['step_results'][0]['step_kind'] == 'resolve_apk_dex'" "apk-backed java summarize should resolve a target dex first"
+assert_expr "$RESULT_DIR/exact_java_summarize_method_logic.json" "payload['step_results'][1]['step_kind'] == 'export_and_scan'" "apk-backed java summarize should export after dex resolution"
+assert_expr "$RESULT_DIR/exact_java_summarize_method_logic.json" "payload['step_results'][1]['result']['kind'] == 'java'" "apk-backed java summarize should produce java output"
+assert_expr "$RESULT_DIR/exact_java_summarize_method_logic.json" "payload['step_results'][1]['result']['scope']['method_descriptor'] == '$exact_descriptor'" "apk-backed java summarize should preserve the exact scoped descriptor"
+assert_expr "$RESULT_DIR/exact_java_summarize_method_logic.json" "payload['step_results'][1]['result']['method_call_count'] >= 5" "apk-backed java summarize should preserve java call analysis"
+assert_expr "$RESULT_DIR/exact_java_summarize_method_logic.json" "payload['step_results'][1]['result']['branch_line_count'] >= 1" "apk-backed java summarize should preserve java branch analysis"
+assert_expr "$RESULT_DIR/exact_java_summarize_method_logic.json" "payload['step_results'][1]['result']['structured_summary']['supported'] is False" "java summarize should still report smali-only structured summary support"
+assert_expr "$RESULT_DIR/exact_java_summarize_method_logic.json" "payload['step_results'][1]['result']['large_method_analysis']['is_large_method'] is False" "small java summarize should not be marked as a large method"
+assert_expr "$RESULT_DIR/exact_java_summarize_method_logic.json" "Path(payload['step_results'][1]['result']['export_path']).is_file()" "apk-backed java summarize should keep the exported java artifact"
 
 echo "validation=passed"
 echo "results_dir=$RESULT_DIR"

@@ -16,6 +16,7 @@ Notes:
 - For full current sample outputs, run `scripts/validate_v1_sample.sh`; it keeps the JSON files under its reported temporary `results_dir`.
 - `summarize_method_logic` accepts either one direct dex input or one APK input. When the input is an APK, the planner inserts a `resolve_apk_dex` step before export.
 - Descriptor-aware anchors may use a full descriptor or a signature-only suffix such as `"(Landroid/os/Bundle;)V"` when `class_name` and `method_name` are also present.
+- The Java exact-anchor example below was captured against a launcher cache whose `dexclub-cli-all.jar` had been overlaid with the repo-local build that already includes the `A-09` `export-java` fix. It does not claim that the untouched published release already behaves the same way.
 
 ## `summarize_method_logic` with APK input
 
@@ -60,6 +61,62 @@ Observed result excerpt:
   ],
   "summary": {
     "text": "Resolved one APK dex and summarized one exported method body.",
+    "style": "partial_support"
+  }
+}
+```
+
+## `summarize_method_logic` with APK input and exact Java anchor
+
+Command:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type summarize_method_logic \
+  --input-json '{"input":["/data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image","descriptor":"Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V"},"language":"java"}'
+```
+
+Observed result excerpt:
+
+```json
+{
+  "status": "ok",
+  "task_type": "summarize_method_logic",
+  "step_results": [
+    {
+      "step_kind": "resolve_apk_dex",
+      "status": "ok",
+      "result": {
+        "class_name": "androidx.compose.foundation.ImageKt",
+        "candidate_dex_paths": [
+          "/tmp/dexclub-analyst-runs/<run-id>/resolved/step-1/classes.dex"
+        ],
+        "resolved_dex_path": "/tmp/dexclub-analyst-runs/<run-id>/resolved/step-1/classes.dex"
+      }
+    },
+    {
+      "step_kind": "export_and_scan",
+      "status": "ok",
+      "result": {
+        "kind": "java",
+        "scope": {
+          "method": "Image",
+          "method_descriptor": "Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V",
+          "line_count": 16,
+          "start_line": 49,
+          "end_line": 64
+        },
+        "method_call_count": 10,
+        "branch_line_count": 2,
+        "structured_summary": {
+          "supported": false
+        },
+        "export_path": "/tmp/dexclub-analyst-runs/<run-id>/exports/androidx_compose_foundation_ImageKt.java"
+      }
+    }
+  ],
+  "summary": {
+    "text": "Resolved one APK dex and summarized one exact method body.",
     "style": "partial_support"
   }
 }

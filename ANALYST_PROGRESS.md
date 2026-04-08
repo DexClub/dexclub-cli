@@ -16,12 +16,12 @@
 ## 当前快照
 
 - 当前最新相关提交
+  - `8f41ae6` `Support analyst exact Java summarize`
+  - `7cc459f` `Fix export-java in packaged CLI`
   - `dcc2030` `Add structured analyst method summaries`
   - `3af1500` `Add analyst large-method summary compression`
   - `7007464` `Support descriptor-aware analyst anchors`
   - `a51c692` `Add APK summarize resolution to analyst`
-  - `d14413d` `Add analyst ambiguous sample validation`
-  - `b85be18` `Add analyst planner and runner v1`
 - 当前已稳定的 analyst v1 能力
   - `plan` / `run` 入口已经落地
   - `search_methods_by_string`
@@ -32,7 +32,9 @@
   - APK 输入下自动解析目标 dex 后再 summarize
   - overloaded 方法在 relaxed anchor 下返回 `ambiguous`
   - descriptor-aware 的 `trace_*`
-  - descriptor-aware 的 `summarize_method_logic`，当前只支持 `smali`
+  - descriptor-aware 的 `summarize_method_logic`
+    - `smali` 已稳定
+    - `java` 已在包含 `A-09` 修复的 launcher 构建上完成端到端验证
   - `smali` summarize 的结构化摘要
     - 输出：`structured_summary`
     - 当前包含：`basic_blocks / call_clusters / constant_clusters`
@@ -44,17 +46,20 @@
 - 当前验证脚本
   - [validate_v1_sample.sh](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh)
 - 最近一次通过验证的命令
-  - `bash ./skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh`
+  - `python3 ./skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py --input-dex /tmp/.../classes.dex --class androidx.compose.foundation.ImageKt --method Image --method-descriptor 'Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V' --language java --mode summary --format json`
+  - `python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run --task-type summarize_method_logic --input-json '{"input":["/data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image","descriptor":"Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V"},"language":"java"}'`
 - 最近一次通过验证的结果目录
-  - `/tmp/dexclub-analyst-v1.8tFAAZ/results`
+  - `/tmp/a06-targeted-verify.vmj8xb1_/results`
 
 ## 当前边界
 
-- `summarize_method_logic` 的 descriptor-aware 精确切片目前只支持 `smali`
-- `language=java` 的普通 summarize 可以用，但“descriptor-aware + java”当前明确返回 `unsupported`
+- `summarize_method_logic` 的 descriptor-aware 精确切片当前支持：
+  - `smali`
+  - `java`，但要求 launcher 构建已经包含 `A-09` 的 `export-java` 修复
 - 仓库当前代码里的 `export-java` 修复已经落地
   - 本地 fat jar 已验证：`com.shadcn.ui.compose.MainActivity` 与 `androidx.compose.foundation.ImageKt` 可成功导出 Java
-  - 但 analyst launcher 默认仍调用已发布 release；在下一个包含 `A-09` 修复的发布版出现前，release-based 端到端验证结论仍要区分“仓库当前状态”和“当前已发布状态”
+  - 当前还要区分“包含 `A-09` 修复的 launcher 构建”和“默认已发布 release”
+  - 默认已发布 release 是否已对齐，不能由当前本地覆盖验证直接推出
 - 当前会话的 launcher 端到端验证使用了临时本地覆盖
   - 已将本地构建的 `cli/build/libs/dexclub-cli-all.jar` 覆盖到 launcher 缓存产物
   - 缓存路径：`/root/.cache/dexclub-cli/releases/v0.0.1/dexclub-cli-linux-arm64/cli-shadow/lib/dexclub-cli-all.jar`
@@ -134,7 +139,7 @@
 | A-03 | APK 输入下自动定位目标 dex 后 summarize | 已完成 | 提交 `a51c692` |
 | A-04 | descriptor-aware 的 trace/summarize 最小闭环 | 已完成 | 提交 `7007464` |
 | A-05 | 大方法 smali 的二级拆解与上下文压缩 | 已完成 | 本次会话完成。新增 `large_method_analysis`，阈值 `120`，并补了样例验证 |
-| A-06 | descriptor-aware + `java` summarize | 进行中 | `A-09` 已在仓库内修复，planner 的 `language=java` 硬拒绝已移除，Java exported-code 已支持 descriptor-aware 精确切片；下一步需要基于包含 `A-09` 修复的 launcher 构建补端到端验证并决定最终 contract |
+| A-06 | descriptor-aware + `java` summarize | 进行中 | `A-09` 已在仓库内修复，planner 的 `language=java` 硬拒绝已移除，Java exported-code 已支持 descriptor-aware 精确切片；本次已补基于包含 `A-09` 修复的 launcher 构建的 `export_and_scan.py` / `analyze.py run` 端到端验证，并同步了验证脚本与文档；当前剩余问题仅为默认 published release 对齐口径 |
 | A-07 | 更强的 summary 结构化输出 | 已完成 | 本次会话完成。新增 `structured_summary`，包含 `basic_blocks / call_clusters / constant_clusters` |
 | A-08 | 基于结构化摘要的局部片段提取 | 已完成 | 本次会话完成。新增 `focus_snippets`，按高信号 block / cluster 回抽原始 smali 片段 |
 | A-09 | `export-java` 导出失败定位与修复 | 已完成 | 本次会话完成。根因包括 fat jar 中缺失 Jadx `dex-input` service 声明，以及 Java 导出时在 decompiler 生命周期外读取 `JavaClass.code` |
@@ -188,12 +193,12 @@
     - [`planner.py`](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/planner.py) 已移除 `descriptor-aware + language=java` 的硬拒绝
     - [`code_analysis.py`](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/code_analysis.py) 已支持 Java exported-code 的 descriptor-aware 精确切片
   - 当前停点
-    - 需要基于包含 `A-09` 修复的 launcher 构建补 `export_and_scan.py` / `analyze.py run` 级别的端到端验证
-    - 完成前仍需决定 README 与样例文档中对 release-based 使用方式的最终表述
+    - 基于包含 `A-09` 修复的 launcher 构建的 `export_and_scan.py` / `analyze.py run` 端到端验证已补完
+    - 当前只剩默认 published release 的对齐判断与最终口径维护
 
 ## 下一步推荐入口
 
-下一个对话优先继续 `A-06`，补 Java exact-anchor 的端到端验证并收口 contract。
+下一个对话优先继续 `A-06`，确认默认 published release 是否已经对齐 `A-09` 修复，并收口 Java exact summarize 的发布态口径。
 
 原因：
 
@@ -202,8 +207,8 @@
   - `large_method_analysis`
   - `focus_snippets`
 - `A-09` 的仓库内修复已经完成
-- `A-06` 的 planner 与 Java exported-code 精确切片已经恢复推进
-- 当前剩余问题已经从“底层导出直接失败”切换成“如何对齐 launcher 发布态与 analyst 文档/验证口径”
+- `A-06` 的 planner、Java exported-code 精确切片、以及 fixed-launcher-build 端到端验证都已经完成
+- 当前剩余问题已经收缩到“如何对齐默认 launcher 发布态与 analyst 文档/验证口径”
 
 ## A-06 历史阻塞记录
 
@@ -287,12 +292,42 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py \
    - 并命中 `VectorPainterKt.rememberVectorPainter`
    - 说明当前已切到目标重载
 
+本次继续补的端到端验证：
+
+1. 直接 `export_and_scan.py` 验证
+   - 输入：`androidx.compose.foundation.ImageKt`
+   - descriptor：`...ImageBitmap...`
+   - language：`java`
+   - 结果：基于当前本地覆盖后的 launcher 构建，已返回 `kind=java`
+   - 并保留：
+     - `scope.methodDescriptor`
+     - `methodCallCount`
+     - `branchLineCount`
+     - `exportPath`
+2. `analyze.py run` 验证
+   - 输入：样例 APK
+   - descriptor：同上
+   - language：`java`
+   - 结果：已返回 `status=ok`
+   - planner 已走：
+     - `resolve_apk_dex`
+     - `export_and_scan`
+   - 最终 `step_results[1].result.kind=java`
+   - 最终 `scope.method_descriptor` 与输入 descriptor 一致
+3. 验证脚本与文档同步
+   - [`validate_v1_sample.sh`](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh) 已把旧的 `unsupported_exact_java_summarize` 断言改为真实通过断言
+   - [`README.md`](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/README.md) 已补“fixed launcher build 与 published release 分开表述”的口径
+   - [`analyze-v1-examples.md`](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/references/analyze-v1-examples.md) 已补 Java exact summarize 的 `analyze.py run` 样例
+   - 本次尝试整跑 `validate_v1_sample.sh` 时，进程在旧的 APK summarize 用例上被系统杀掉，因此当前只把 A-06 直接影响的 Java exact 路径做了定向通过验证
+
 当前尚未收口的点：
 
-1. analyst 的 `run` 端到端验证仍默认走 launcher 的已发布 release
-2. 在发布版包含 `A-09` 修复前，`validate_v1_sample.sh` 这类 release-based 验证还不能直接改成“Java exact summarize 已稳定”
-3. 因此 `A-06` 现在应继续推进，但暂不宜直接标 `已完成`
-4. 当前会话虽然已经通过“本地覆盖 launcher 缓存”的方式打通了一条 release-path 验证，但该前提需要在后续维护时显式保留，避免误判为远程 release 已同步
+1. analyst launcher 默认仍指向已发布 release
+2. 当前 Java exact summarize 的“通过”结论，仍然只适用于：
+   - 仓库内代码
+   - 或包含 `A-09` 修复的 launcher 构建
+3. 默认 published release 是否已具备同样能力，仍需单独确认
+4. 因此 `A-06` 继续保持 `进行中`，直到默认发布态对齐口径彻底明确
 
 ## A-05 完成记录
 
@@ -325,8 +360,8 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py \
 3. 确认工作区无关状态，不要误处理
    - `git status --short`
 4. 确认最近相关提交
-  - `git log --oneline -n 6`
-5. 直接进入 `A-06`
+   - `git log --oneline -n 6`
+5. 继续进入 `A-06`
    - 重点看：
      - [ANALYST_PROGRESS.md](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/ANALYST_PROGRESS.md)
      - [code_analysis.py](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/code_analysis.py)
@@ -335,15 +370,17 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py \
      - [runner.py](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/runner.py)
      - [JadxDecompilerService.kt](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/core/src/jvmMain/kotlin/io/github/dexclub/core/export/JadxDecompilerService.kt)
      - [validate_v1_sample.sh](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh)
-   - 优先补基于包含 `A-09` 修复的 launcher 构建的端到端验证
-   - 再决定 `validate_v1_sample.sh`、README 和样例文档里对 Java exact summarize 的最终表述
+     - [README.md](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/README.md)
+     - [analyze-v1-examples.md](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/references/analyze-v1-examples.md)
+   - 先确认默认 published release 是否已经包含 `A-09` 修复
+   - 如果没有，继续维持“fixed launcher build”和“published release”两套口径
 
 ## 下次会话可直接使用的提示词
 
 如果下次会话要最快恢复，可以直接用这句：
 
 ```text
-先阅读仓库根目录的 ANALYST_PROGRESS.md，按其中“下次会话快速开始”执行，继续推进 A-06，重点补基于包含 A-09 修复的 launcher 构建的 Java exact summarize 端到端验证。
+先阅读仓库根目录的 ANALYST_PROGRESS.md，按其中“下次会话快速开始”执行，继续推进 A-06，优先确认默认 launcher 发布态是否已经对齐 A-09 修复，并区分 fixed launcher build 与 published release 的 Java exact summarize 口径。
 ```
 
 ## 文档维护规则
