@@ -160,6 +160,7 @@ run_case "summarize_method_logic" "summarize_method_logic" "$summarize_input"
 assert_expr "$RESULT_DIR/summarize_method_logic.json" "payload['status'] == 'ok'" "summarize method logic should succeed"
 assert_expr "$RESULT_DIR/summarize_method_logic.json" "payload['step_results'][0]['result']['kind'] == 'smali'" "summarize method logic should export smali by default"
 assert_expr "$RESULT_DIR/summarize_method_logic.json" "payload['step_results'][0]['result']['method_call_count'] == 4" "summarize method logic should report four direct calls in sample"
+assert_expr "$RESULT_DIR/summarize_method_logic.json" "payload['step_results'][0]['result']['large_method_analysis']['is_large_method'] is False" "small summarize sample should not be marked as a large method"
 assert_expr "$RESULT_DIR/summarize_method_logic.json" "Path(payload['step_results'][0]['result']['export_path']).is_file()" "summarize method logic should keep exported artifact"
 
 summarize_apk_input=$(cat <<JSON
@@ -214,6 +215,10 @@ JSON
 run_case "exact_summarize_method_logic" "summarize_method_logic" "$exact_summarize_input"
 assert_expr "$RESULT_DIR/exact_summarize_method_logic.json" "payload['status'] == 'ok'" "descriptor-aware summarize should disambiguate overloaded methods"
 assert_expr "$RESULT_DIR/exact_summarize_method_logic.json" "payload['step_results'][0]['result']['scope']['method_descriptor'] == '$exact_descriptor'" "descriptor-aware summarize should keep the exact scoped descriptor"
+assert_expr "$RESULT_DIR/exact_summarize_method_logic.json" "payload['step_results'][0]['result']['large_method_analysis']['is_large_method'] is True" "large smali summarize should surface grouped compression"
+assert_expr "$RESULT_DIR/exact_summarize_method_logic.json" "payload['step_results'][0]['result']['large_method_analysis']['line_threshold'] == 120" "large method threshold should stay stable in v1"
+assert_expr "$RESULT_DIR/exact_summarize_method_logic.json" "any(group['kind'] == 'branch_hotspots' for group in payload['step_results'][0]['result']['large_method_analysis']['groups'])" "large method compression should include branch hotspots"
+assert_expr "$RESULT_DIR/exact_summarize_method_logic.json" "any(group['kind'] == 'method_calls' and len(group['clusters']) >= 1 for group in payload['step_results'][0]['result']['large_method_analysis']['groups'])" "large method compression should cluster direct call hotspots"
 
 unsupported_exact_java_input=$(cat <<JSON
 {"input":["$ambiguous_image_dex"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image","descriptor":"$exact_descriptor"},"language":"java"}

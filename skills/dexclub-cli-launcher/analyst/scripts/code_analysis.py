@@ -29,6 +29,15 @@ JAVA_METHOD_DECL_RE = re.compile(
     r"^\s*(?:public|private|protected|static|final|synchronized|abstract|native|\s)+"
     r"[\w<>\[\], ?]+\s+([A-Za-z_][\w$]*)\s*\(",
 )
+SMALI_BRANCH_RE = re.compile(r"^(if-[^\s]+|goto(?:/[^\s]+)?|packed-switch|sparse-switch)\b")
+JAVA_BRANCH_RE = re.compile(r"^(if\b|else if\b|switch\b|for\b|while\b|catch\b)")
+
+LARGE_METHOD_LINE_THRESHOLD = 120
+HOTSPOT_CLUSTER_LINE_GAP = 8
+HOTSPOT_CLUSTER_PADDING = 2
+HOTSPOT_PREVIEW_LIMIT = 5
+HOTSPOT_CLUSTER_ITEM_LIMIT = 8
+HOTSPOT_CLUSTER_LIMIT = 6
 
 
 def read_text(path: str | Path) -> str:
@@ -291,6 +300,221 @@ def count_return_lines(kind: str, line_entries: list[tuple[int, str]]) -> int:
     return count
 
 
+def collect_branch_hotspots(kind: str, line_entries: list[tuple[int, str]]) -> list[dict[str, object]]:
+    hotspots: list[dict[str, object]] = []
+    for line_no, line in line_entries:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if kind == "smali":
+            match = SMALI_BRANCH_RE.match(stripped)
+            if not match:
+                continue
+            hotspots.append(
+                {
+                    "line": line_no,
+                    "opcode": match.group(1),
+                    "text": stripped,
+                }
+            )
+            continue
+        match = JAVA_BRANCH_RE.match(stripped)
+        if not match:
+            continue
+        hotspots.append(
+            {
+                "line": line_no,
+                "opcode": match.group(1),
+                "text": stripped,
+            }
+        )
+    return hotspots
+
+
+def _lines_to_span(lines: list[int]) -> tuple[int | None, int | None]:
+    if not lines:
+        return None, None
+    return lines[0], lines[-1]
+
+
+def _preview_occurrence_items(items: list[dict[str, object]], *, limit: int) -> list[dict[str, object]]:
+    ordered = sorted(
+        items,
+        key=lambda item: (
+            -(int(item.get("count", 0))),
+            item.get("lines", [0])[0] if isinstance(item.get("lines"), list) and item["lines"] else 0,
+            str(item.get("value")),
+        ),
+    )
+    preview: list[dict[str, object]] = []
+    for item in ordered[:limit]:
+        lines = list(item.get("lines", [])) if isinstance(item.get("lines"), list) else []
+        start_line, end_line = _lines_to_span(lines)
+        preview.append(
+            {
+                "value": item.get("value"),
+                "count": item.get("count", 0),
+                "startLine": start_line,
+                "endLine": end_line,
+                "lines": lines[:limit],
+            }
+        )
+    return preview
+
+
+def _occurrence_events(kind: str, items: list[dict[str, object]]) -> list[dict[str, object]]:
+    events: list[dict[str, object]] = []
+    for item in items:
+        value = item.get("value")
+        lines = item.get("lines", [])
+        if not isinstance(lines, list):
+            continue
+        for line_no in lines:
+            if not isinstance(line_no, int):
+                continue
+            events.append(
+                {
+                    "kind": kind,
+                    "line": line_no,
+                    "value": value,
+                }
+            )
+    return events
+
+
+def _branch_events(items: list[dict[str, object]]) -> list[dict[str, object]]:
+    events: list[dict[str, object]] = []
+    for item in items:
+        line_no = item.get("line")
+        if not isinstance(line_no, int):
+            continue
+        events.append(
+            {
+                "kind": "branch_hotspots",
+                "line": line_no,
+                "value": item.get("text"),
+                "opcode": item.get("opcode"),
+            }
+        )
+    return events
+
+
+def _build_event_clusters(
+    events: list[dict[str, object]],
+    *,
+    kind: str,
+    scope_start_line: int | None,
+    scope_end_line: int | None,
+) -> list[dict[str, object]]:
+    if not events:
+        return []
+    ordered = sorted(events, key=lambda item: (int(item["line"]), str(item.get("value"))))
+    grouped_events: list[list[dict[str, object]]] = []
+    current_group: list[dict[str, object]] = []
+    last_line: int | None = None
+    for event in ordered:
+        line_no = int(event["line"])
+        if last_line is None or line_no - last_line <= HOTSPOT_CLUSTER_LINE_GAP:
+            current_group.append(event)
+        else:
+            grouped_events.append(current_group)
+            current_group = [event]
+        last_line = line_no
+    if current_group:
+        grouped_events.append(current_group)
+
+    clusters: list[dict[str, object]] = []
+    for index, group in enumerate(grouped_events[:HOTSPOT_CLUSTER_LIMIT], start=1):
+        focus_lines = sorted({int(event["line"]) for event in group})
+        start_line = focus_lines[0]
+        end_line = focus_lines[-1]
+        if scope_start_line is not None:
+            start_line = max(scope_start_line, start_line - HOTSPOT_CLUSTER_PADDING)
+        if scope_end_line is not None:
+            end_line = min(scope_end_line, end_line + HOTSPOT_CLUSTER_PADDING)
+        items: list[dict[str, object]] = []
+        for event in group[:HOTSPOT_CLUSTER_ITEM_LIMIT]:
+            item = {
+                "line": event["line"],
+                "value": event.get("value"),
+            }
+            if event.get("opcode") is not None:
+                item["opcode"] = event["opcode"]
+            items.append(item)
+        clusters.append(
+            {
+                "clusterId": f"{kind}-{index}",
+                "startLine": start_line,
+                "endLine": end_line,
+                "eventCount": len(group),
+                "focusLines": focus_lines,
+                "items": items,
+            }
+        )
+    return clusters
+
+
+def build_large_method_analysis(
+    *,
+    kind: str,
+    scope: dict[str, object],
+    strings: list[dict[str, object]],
+    numbers: list[dict[str, object]],
+    method_calls: list[dict[str, object]],
+    field_accesses: list[dict[str, object]],
+    branch_hotspots: list[dict[str, object]],
+) -> dict[str, object]:
+    line_count = int(scope.get("lineCount", 0) or 0)
+    is_large_method = kind == "smali" and line_count >= LARGE_METHOD_LINE_THRESHOLD
+    analysis: dict[str, object] = {
+        "lineThreshold": LARGE_METHOD_LINE_THRESHOLD,
+        "isLargeMethod": is_large_method,
+        "strategy": "grouped_hotspots_v1" if is_large_method else "none",
+        "codeRetained": True,
+        "groupCount": 0,
+        "groups": [],
+    }
+    if not is_large_method:
+        return analysis
+
+    scope_start_line = scope.get("startLine") if isinstance(scope.get("startLine"), int) else None
+    scope_end_line = scope.get("endLine") if isinstance(scope.get("endLine"), int) else None
+    groups: list[dict[str, object]] = []
+    group_specs = (
+        ("method_calls", method_calls, _occurrence_events("method_calls", method_calls)),
+        ("strings", strings, _occurrence_events("strings", strings)),
+        ("numbers", numbers, _occurrence_events("numbers", numbers)),
+        ("field_accesses", field_accesses, _occurrence_events("field_accesses", field_accesses)),
+        ("branch_hotspots", branch_hotspots, _branch_events(branch_hotspots)),
+    )
+    for group_kind, items, events in group_specs:
+        if not items:
+            continue
+        if group_kind == "branch_hotspots":
+            top_items = list(items[:HOTSPOT_PREVIEW_LIMIT])
+            occurrence_count = len(items)
+        else:
+            top_items = _preview_occurrence_items(items, limit=HOTSPOT_PREVIEW_LIMIT)
+            occurrence_count = sum(int(item.get("count", 0)) for item in items)
+        groups.append(
+            {
+                "kind": group_kind,
+                "itemCount": len(items),
+                "occurrenceCount": occurrence_count,
+                "topItems": top_items,
+                "clusters": _build_event_clusters(
+                    events,
+                    kind=group_kind,
+                    scope_start_line=scope_start_line,
+                    scope_end_line=scope_end_line,
+                ),
+            }
+        )
+    analysis["groupCount"] = len(groups)
+    analysis["groups"] = groups
+    return analysis
+
+
 def analyze_code(
     path: str | Path,
     method_name: str | None = None,
@@ -301,21 +525,33 @@ def analyze_code(
     numbers = collect_numbers(line_entries)
     method_calls = collect_method_calls(kind, line_entries)
     field_accesses = collect_field_accesses(kind, line_entries)
+    branch_hotspots = collect_branch_hotspots(kind, line_entries)
+    scope = {
+        "path": str(Path(path).resolve()),
+        "method": method_name,
+        "methodDescriptor": method_descriptor,
+        "lineCount": len(line_entries),
+        "startLine": line_entries[0][0] if line_entries else None,
+        "endLine": line_entries[-1][0] if line_entries else None,
+    }
     return {
         "kind": kind,
-        "scope": {
-            "path": str(Path(path).resolve()),
-            "method": method_name,
-            "methodDescriptor": method_descriptor,
-            "lineCount": len(line_entries),
-            "startLine": line_entries[0][0] if line_entries else None,
-            "endLine": line_entries[-1][0] if line_entries else None,
-        },
+        "scope": scope,
         "strings": strings,
         "numbers": numbers,
         "methodCalls": method_calls,
         "fieldAccesses": field_accesses,
+        "branchHotspots": branch_hotspots,
         "branchLineCount": count_branch_lines(kind, line_entries),
         "returnLineCount": count_return_lines(kind, line_entries),
+        "largeMethodAnalysis": build_large_method_analysis(
+            kind=kind,
+            scope=scope,
+            strings=strings,
+            numbers=numbers,
+            method_calls=method_calls,
+            field_accesses=field_accesses,
+            branch_hotspots=branch_hotspots,
+        ),
         "code": "\n".join(line for _, line in line_entries),
     }

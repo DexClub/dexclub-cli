@@ -17,6 +17,11 @@ RUN_ARTIFACTS_DIRNAME = "dexclub-analyst-runs"
 RUN_STATUS_OK = {"ok", "empty", "ambiguous", "unsupported"}
 
 
+def camel_to_snake(name: str) -> str:
+    first_pass = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
+    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", first_pass).lower()
+
+
 def make_run_id() -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
     return f"{stamp}-{uuid.uuid4().hex[:6]}"
@@ -128,6 +133,7 @@ def normalize_export_and_scan_payload(raw_payload: object) -> dict[str, object]:
         "fieldAccessCount": "field_access_count",
         "methodCalls": "method_calls",
         "fieldAccesses": "field_accesses",
+        "branchHotspots": "branch_hotspots",
         "methodDescriptor": "method_descriptor",
     }
     for key, value in raw_payload.items():
@@ -143,8 +149,22 @@ def normalize_export_and_scan_payload(raw_payload: object) -> dict[str, object]:
                 scope[scope_key_map.get(scope_key, scope_key)] = scope_value
             normalized["scope"] = scope
             continue
+        if key == "largeMethodAnalysis" and isinstance(value, dict):
+            normalized["large_method_analysis"] = normalize_nested_object_keys(value)
+            continue
         normalized[key_map.get(key, key)] = value
     return normalized
+
+
+def normalize_nested_object_keys(value: object) -> object:
+    if isinstance(value, list):
+        return [normalize_nested_object_keys(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            camel_to_snake(str(key)): normalize_nested_object_keys(item)
+            for key, item in value.items()
+        }
+    return value
 
 
 def normalize_resolve_apk_dex_payload(raw_payload: object) -> dict[str, object]:
@@ -601,6 +621,11 @@ def finalize_run_result(
             else:
                 step_result = export_step
                 export_path = step_result["result"].get("export_path")
+                large_method_analysis = step_result["result"].get("large_method_analysis", {})
+                has_large_method_summary = bool(
+                    isinstance(large_method_analysis, dict)
+                    and large_method_analysis.get("is_large_method")
+                )
                 if isinstance(export_path, str) and isinstance(method_anchor, dict):
                     overload_count = count_method_overloads(export_path, str(method_anchor.get("method_name")))
                     if not exact_anchor and overload_count > 1:
@@ -625,6 +650,8 @@ def finalize_run_result(
                             if exact_anchor
                             else "Resolved one APK dex and summarized one exported method body."
                         )
+                        if has_large_method_summary:
+                            summary_text += " Attached grouped hotspot compression for the large smali body."
                         summary_style = "partial_support"
                 else:
                     status = "execution_error"
@@ -634,6 +661,11 @@ def finalize_run_result(
             step_result = export_step or step_results[0]
             if step_result["status"] == "ok":
                 export_path = step_result["result"].get("export_path")
+                large_method_analysis = step_result["result"].get("large_method_analysis", {})
+                has_large_method_summary = bool(
+                    isinstance(large_method_analysis, dict)
+                    and large_method_analysis.get("is_large_method")
+                )
                 if isinstance(export_path, str) and isinstance(method_anchor, dict):
                     overload_count = count_method_overloads(export_path, str(method_anchor.get("method_name")))
                     if not exact_anchor and overload_count > 1:
@@ -658,6 +690,8 @@ def finalize_run_result(
                             if exact_anchor
                             else "Summarized one exported method body."
                         )
+                        if has_large_method_summary:
+                            summary_text += " Attached grouped hotspot compression for the large smali body."
                         summary_style = "partial_support"
                 else:
                     status = "execution_error"

@@ -273,6 +273,10 @@ Observed result excerpt:
         "number_count": 4,
         "method_call_count": 4,
         "field_access_count": 0,
+        "large_method_analysis": {
+          "is_large_method": false,
+          "line_threshold": 120
+        },
         "strings": [
           {
             "value": "savedInstanceState",
@@ -405,12 +409,25 @@ Observed result excerpt:
         },
         "method_descriptor": "Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V",
         "method_call_count": 9,
+        "large_method_analysis": {
+          "is_large_method": true,
+          "line_threshold": 120,
+          "group_count": 5,
+          "groups": [
+            {
+              "kind": "method_calls"
+            },
+            {
+              "kind": "branch_hotspots"
+            }
+          ]
+        },
         "export_path": "/tmp/dexclub-analyst-runs/<run-id>/exports/androidx_compose_foundation_ImageKt.smali"
       }
     }
   ],
   "summary": {
-    "text": "Summarized one exact method body.",
+    "text": "Summarized one exact method body. Attached grouped hotspot compression for the large smali body.",
     "style": "partial_support"
   }
 }

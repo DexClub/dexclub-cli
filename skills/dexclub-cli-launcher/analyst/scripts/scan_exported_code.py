@@ -46,6 +46,8 @@ def select_payload(report: dict[str, object], mode: str) -> dict[str, object]:
             "numbers": report["numbers"],
             "methodCalls": report["methodCalls"],
             "fieldAccesses": report["fieldAccesses"],
+            "branchHotspots": report["branchHotspots"],
+            "largeMethodAnalysis": report["largeMethodAnalysis"],
         }
     if mode == "strings":
         return {"scope": report["scope"], "strings": report["strings"]}
@@ -79,6 +81,12 @@ def format_text(payload: dict[str, object], mode: str) -> str:
             lines.append(f"branchLineCount={payload['branchLineCount']}")
         if "returnLineCount" in payload:
             lines.append(f"returnLineCount={payload['returnLineCount']}")
+        large_method_analysis = payload.get("largeMethodAnalysis")
+        if isinstance(large_method_analysis, dict):
+            lines.append(f"isLargeMethod={large_method_analysis.get('isLargeMethod')}")
+            if large_method_analysis.get("isLargeMethod"):
+                lines.append(f"largeMethodThreshold={large_method_analysis.get('lineThreshold')}")
+                lines.append(f"largeMethodGroups={large_method_analysis.get('groupCount')}")
     if "strings" in payload:
         append_occurrences("strings", payload["strings"])
     if "numbers" in payload:
@@ -87,6 +95,10 @@ def format_text(payload: dict[str, object], mode: str) -> str:
         append_occurrences("methodCalls", payload["methodCalls"])
     if "fieldAccesses" in payload:
         append_occurrences("fieldAccesses", payload["fieldAccesses"])
+    if "branchHotspots" in payload:
+        lines.append(f"branchHotspots={len(payload['branchHotspots'])}")
+        for item in payload["branchHotspots"]:
+            lines.append(f"  line={item['line']} | opcode={item['opcode']} | text={item['text']}")
     if mode == "all" and "code" in payload:
         lines.append("code<<EOF")
         lines.append(str(payload["code"]))
