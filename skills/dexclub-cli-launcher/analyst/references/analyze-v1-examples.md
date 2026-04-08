@@ -216,3 +216,51 @@ Observed result excerpt:
   }
 }
 ```
+
+## `summarize_method_logic` with overloaded target
+
+Command:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type summarize_method_logic \
+  --input-json '{"input":["/path/to/foundation-image.dex"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image"}}'
+```
+
+Observed result excerpt:
+
+```json
+{
+  "status": "ambiguous",
+  "task_type": "summarize_method_logic",
+  "step_results": [
+    {
+      "step_kind": "export_and_scan",
+      "status": "ok",
+      "result": {
+        "kind": "smali",
+        "scope": {
+          "method": "Image"
+        },
+        "method_call_count": 9,
+        "export_path": "/tmp/dexclub-analyst-runs/<run-id>/exports/androidx_compose_foundation_ImageKt.smali"
+      }
+    }
+  ],
+  "summary": {
+    "text": "Exported class contains 3 overloads for `Image`; current path cannot isolate one precisely.",
+    "style": "ambiguous"
+  },
+  "recommendations": [
+    {
+      "kind": "narrow_search",
+      "reason": "overload_ambiguity"
+    }
+  ],
+  "limits": [
+    "only direct method body analysis",
+    "method anchor does not include a descriptor; overloads may be ambiguous",
+    "export-and-scan cannot disambiguate overloaded methods by descriptor"
+  ]
+}
+```

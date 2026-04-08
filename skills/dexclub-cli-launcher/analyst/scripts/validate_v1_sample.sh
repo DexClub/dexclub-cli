@@ -71,6 +71,31 @@ run_case() {
   echo "validated_output=$output_path"
 }
 
+locate_class_dex() {
+  local class_name="$1"
+  local method_name="$2"
+  local located_dex=""
+  for dex_path in "$DEX_DIR"/classes*.dex; do
+    local locate_output="$RESULT_DIR/locate-$(basename "$dex_path")-$(echo "$class_name" | tr './$' '___').txt"
+    python3 "$RUN_FIND" \
+      --input "$dex_path" \
+      --output-format json \
+      --limit 10 \
+      method \
+      --declared-class "$class_name" \
+      --method-name "$method_name" >"$locate_output"
+    if stdout_has_hits "$locate_output"; then
+      located_dex="$dex_path"
+      break
+    fi
+  done
+  if [[ -z "$located_dex" ]]; then
+    echo "failed to locate dex containing $class_name#$method_name" >&2
+    exit 1
+  fi
+  printf '%s\n' "$located_dex"
+}
+
 echo "sample_apk=$SAMPLE_APK"
 echo "tmp_root=$TMP_ROOT"
 
@@ -78,28 +103,10 @@ while IFS= read -r dex_name; do
   unzip -p "$SAMPLE_APK" "$dex_name" >"$DEX_DIR/$dex_name"
 done < <(unzip -Z1 "$SAMPLE_APK" 'classes*.dex' | sort)
 
-main_activity_dex=""
-for dex_path in "$DEX_DIR"/classes*.dex; do
-  locate_output="$RESULT_DIR/locate-$(basename "$dex_path").txt"
-  python3 "$RUN_FIND" \
-    --input "$dex_path" \
-    --output-format json \
-    --limit 1 \
-    method \
-    --declared-class com.shadcn.ui.compose.MainActivity \
-    --method-name onCreate >"$locate_output"
-  if stdout_has_hits "$locate_output"; then
-    main_activity_dex="$dex_path"
-    break
-  fi
-done
-
-if [[ -z "$main_activity_dex" ]]; then
-  echo "failed to locate dex containing com.shadcn.ui.compose.MainActivity#onCreate" >&2
-  exit 1
-fi
-
+main_activity_dex="$(locate_class_dex "com.shadcn.ui.compose.MainActivity" "onCreate")"
+ambiguous_image_dex="$(locate_class_dex "androidx.compose.foundation.ImageKt" "Image")"
 echo "main_activity_dex=$main_activity_dex"
+echo "ambiguous_image_dex=$ambiguous_image_dex"
 
 string_input=$(cat <<JSON
 {"input":["$SAMPLE_APK"],"string":"https://github.com/shadcn.png","declared_class":"com.shadcn.ui.compose.showcase.docs.AvatarDocsPageKt"}
@@ -168,6 +175,14 @@ JSON
 )
 run_case "unsupported_descriptor_relation" "trace_callees" "$descriptor_input"
 assert_expr "$RESULT_DIR/unsupported_descriptor_relation.json" "payload['status'] == 'unsupported'" "descriptor-aware relation tracing should be rejected in v1"
+
+ambiguous_input=$(cat <<JSON
+{"input":["$ambiguous_image_dex"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image"}}
+JSON
+)
+run_case "ambiguous_summarize_method_logic" "summarize_method_logic" "$ambiguous_input"
+assert_expr "$RESULT_DIR/ambiguous_summarize_method_logic.json" "payload['status'] == 'ambiguous'" "overloaded summarize target should return ambiguous"
+assert_expr "$RESULT_DIR/ambiguous_summarize_method_logic.json" "payload['recommendations'][0]['reason'] == 'overload_ambiguity'" "ambiguous summarize should emit overload guidance"
 
 echo "validation=passed"
 echo "results_dir=$RESULT_DIR"
