@@ -458,11 +458,6 @@ def build_plan(
         language = normalized_external_inputs.get("language")
         if language is not None and language not in {"java", "smali"}:
             raise PlannerError("input_error", "`language` must be `java` or `smali`.")
-        if not bool(method_anchor.get("is_relaxed", True)) and language == "java":
-            raise PlannerError(
-                "unsupported",
-                "Descriptor-aware summarize currently requires `language=smali`.",
-            )
         mode = normalized_external_inputs.get("mode")
         if mode is not None and mode not in {"summary", "strings", "numbers", "calls", "fields", "all"}:
             raise PlannerError("input_error", "`mode` is invalid for `summarize_method_logic`.")

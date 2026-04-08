@@ -18,6 +18,34 @@ JAVA_CONTROL_KEYWORDS = {
     "new",
     "synchronized",
 }
+JAVA_SIGNATURE_MODIFIERS = {
+    "public",
+    "private",
+    "protected",
+    "static",
+    "final",
+    "synchronized",
+    "abstract",
+    "native",
+    "strictfp",
+    "default",
+}
+JAVA_LANGUAGE_SIMPLE_TYPES = {
+    "Boolean": "java.lang.Boolean",
+    "Byte": "java.lang.Byte",
+    "Character": "java.lang.Character",
+    "Class": "java.lang.Class",
+    "Double": "java.lang.Double",
+    "Enum": "java.lang.Enum",
+    "Float": "java.lang.Float",
+    "Integer": "java.lang.Integer",
+    "Long": "java.lang.Long",
+    "Object": "java.lang.Object",
+    "Short": "java.lang.Short",
+    "String": "java.lang.String",
+    "Throwable": "java.lang.Throwable",
+    "Void": "java.lang.Void",
+}
 
 STRING_LITERAL_RE = re.compile(r'"((?:\\.|[^"\\])*)"')
 NUMBER_LITERAL_RE = re.compile(r"(?<![\w$])(?:-?0x[0-9A-Fa-f]+|-?\d+(?:\.\d+)?)(?![\w$])")
@@ -33,6 +61,10 @@ SMALI_BRANCH_RE = re.compile(r"^(if-[^\s]+|goto(?:/[^\s]+)?|packed-switch|sparse
 JAVA_BRANCH_RE = re.compile(r"^(if\b|else if\b|switch\b|for\b|while\b|catch\b)")
 SMALI_LABEL_RE = re.compile(r"^(:[A-Za-z0-9_]+)\b")
 SMALI_LABEL_TARGET_RE = re.compile(r":[A-Za-z0-9_]+")
+JAVA_PACKAGE_RE = re.compile(r"^\s*package\s+([A-Za-z_][\w.]*);")
+JAVA_IMPORT_RE = re.compile(r"^\s*import\s+([A-Za-z_][\w.]*)(?:\s*;)$")
+JAVA_ANNOTATION_RE = re.compile(r"@\w+(?:\([^)]*\))?\s*")
+JAVA_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.S)
 
 LARGE_METHOD_LINE_THRESHOLD = 120
 HOTSPOT_CLUSTER_LINE_GAP = 8
@@ -75,43 +107,244 @@ def scoped_lines(
     lines = text.splitlines()
     if not method_name and not method_descriptor:
         return kind, [(index + 1, line) for index, line in enumerate(lines)]
-    if method_descriptor and kind != "smali":
-        raise ValueError("Exact method descriptor scoping currently requires smali input.")
     if kind == "smali":
         return kind, extract_smali_method_lines(lines, method_name, method_descriptor)
-    return kind, extract_java_method_lines(lines, method_name)
+    return kind, extract_java_method_lines(lines, method_name, method_descriptor)
 
 
-def extract_java_method_lines(lines: list[str], method_name: str) -> list[tuple[int, str]]:
+def extract_java_method_lines(
+    lines: list[str],
+    method_name: str,
+    method_descriptor: str | None = None,
+) -> list[tuple[int, str]]:
+    expected_descriptor = parse_method_descriptor(method_descriptor) if method_descriptor else None
+    package_name, imports = extract_java_import_context(lines)
     signature_re = re.compile(rf"\b{re.escape(method_name)}\s*\(")
-    start_index: int | None = None
-    end_index: int | None = None
-    depth = 0
-    seen_open_brace = False
 
     for index, line in enumerate(lines):
         stripped = line.strip()
-        if start_index is None:
-            if stripped.startswith(("//", "*", "@")):
-                continue
-            if not signature_re.search(line):
-                continue
-            start_index = index
+        if stripped.startswith(("//", "*", "@")):
+            continue
+        if not signature_re.search(line):
+            continue
+        signature_end_index = find_java_signature_end(lines, index)
+        if signature_end_index is None:
+            continue
+        signature_text = "\n".join(lines[index:signature_end_index + 1])
+        if expected_descriptor is not None and not java_signature_matches(
+            signature_text,
+            expected_descriptor=expected_descriptor,
+            package_name=package_name,
+            imports=imports,
+        ):
+            continue
+        end_index = find_java_method_end(lines, index)
+        if end_index is None:
+            continue
+        return [(line_no + 1, lines[line_no]) for line_no in range(index, end_index + 1)]
 
+    if expected_descriptor is not None:
+        raise ValueError(f"Unable to locate method `{expected_descriptor.descriptor}` in Java source.")
+    raise ValueError(f"Unable to locate method `{method_name}` in Java source.")
+
+
+def find_java_signature_end(lines: list[str], start_index: int) -> int | None:
+    paren_depth = 0
+    seen_open_paren = False
+    for index in range(start_index, len(lines)):
+        line = lines[index]
+        paren_depth += line.count("(")
+        paren_depth -= line.count(")")
+        if "(" in line:
+            seen_open_paren = True
+        if seen_open_paren and paren_depth <= 0 and "{" in line:
+            return index
+    return None
+
+
+def find_java_method_end(lines: list[str], start_index: int) -> int | None:
+    depth = 0
+    seen_open_brace = False
+    for index in range(start_index, len(lines)):
+        line = lines[index]
         open_count = line.count("{")
         close_count = line.count("}")
         if open_count > 0:
             seen_open_brace = True
         depth += open_count
         depth -= close_count
+        if seen_open_brace and depth <= 0:
+            return index
+    return None
 
-        if start_index is not None and seen_open_brace and depth <= 0:
-            end_index = index
-            break
 
-    if start_index is None or end_index is None:
-        raise ValueError(f"Unable to locate method `{method_name}` in Java source.")
-    return [(line_no + 1, lines[line_no]) for line_no in range(start_index, end_index + 1)]
+def extract_java_import_context(lines: list[str]) -> tuple[str | None, dict[str, str]]:
+    package_name: str | None = None
+    imports: dict[str, str] = {}
+    for line in lines:
+        package_match = JAVA_PACKAGE_RE.match(line)
+        if package_match is not None:
+            package_name = package_match.group(1)
+            continue
+        import_match = JAVA_IMPORT_RE.match(line)
+        if import_match is None:
+            continue
+        full_name = import_match.group(1)
+        if full_name.endswith(".*"):
+            continue
+        imports[full_name.rsplit(".", 1)[-1]] = full_name
+    return package_name, imports
+
+
+def java_signature_matches(
+    signature_text: str,
+    *,
+    expected_descriptor,
+    package_name: str | None,
+    imports: dict[str, str],
+) -> bool:
+    cleaned = normalize_java_signature_text(signature_text)
+    method_pattern = re.compile(
+        rf"(?P<prefix>.*?)\b{re.escape(expected_descriptor.method_name)}\s*\((?P<params>.*)\)\s*\{{",
+        re.S,
+    )
+    match = method_pattern.search(cleaned)
+    if match is None:
+        return False
+    return_type = extract_java_return_type(match.group("prefix"))
+    if return_type is None:
+        return False
+    parsed_params = parse_java_signature_params(
+        match.group("params"),
+        package_name=package_name,
+        imports=imports,
+    )
+    expected_params = list(expected_descriptor.params)
+    if len(parsed_params) != len(expected_params):
+        return False
+    if not java_types_match(
+        resolve_java_type_name(return_type, package_name=package_name, imports=imports),
+        expected_descriptor.return_type,
+    ):
+        return False
+    return all(
+        java_types_match(actual, expected)
+        for actual, expected in zip(parsed_params, expected_params)
+    )
+
+
+def normalize_java_signature_text(signature_text: str) -> str:
+    without_comments = JAVA_BLOCK_COMMENT_RE.sub(" ", signature_text)
+    without_annotations = JAVA_ANNOTATION_RE.sub("", without_comments)
+    return re.sub(r"\s+", " ", without_annotations).strip()
+
+
+def extract_java_return_type(prefix_text: str) -> str | None:
+    cleaned = prefix_text.strip()
+    if cleaned.startswith("<"):
+        generic_end = cleaned.find(">")
+        if generic_end != -1:
+            cleaned = cleaned[generic_end + 1:].strip()
+    tokens = [token for token in cleaned.split() if token not in JAVA_SIGNATURE_MODIFIERS]
+    if not tokens:
+        return None
+    return tokens[-1]
+
+
+def parse_java_signature_params(
+    params_text: str,
+    *,
+    package_name: str | None,
+    imports: dict[str, str],
+) -> list[str]:
+    params = split_java_signature_params(params_text)
+    resolved: list[str] = []
+    for param_text in params:
+        type_text = extract_java_param_type(param_text)
+        resolved.append(resolve_java_type_name(type_text, package_name=package_name, imports=imports))
+    return resolved
+
+
+def split_java_signature_params(params_text: str) -> list[str]:
+    params: list[str] = []
+    current: list[str] = []
+    generic_depth = 0
+    for char in params_text:
+        if char == "<":
+            generic_depth += 1
+        elif char == ">" and generic_depth > 0:
+            generic_depth -= 1
+        elif char == "," and generic_depth == 0:
+            candidate = "".join(current).strip()
+            if candidate:
+                params.append(candidate)
+            current = []
+            continue
+        current.append(char)
+    tail = "".join(current).strip()
+    if tail:
+        params.append(tail)
+    return params
+
+
+def extract_java_param_type(param_text: str) -> str:
+    cleaned = JAVA_ANNOTATION_RE.sub("", param_text)
+    cleaned = cleaned.replace("...", "[]")
+    cleaned = re.sub(r"\bfinal\s+", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if " " not in cleaned:
+        return cleaned
+    return cleaned.rsplit(" ", 1)[0].strip()
+
+
+def resolve_java_type_name(
+    type_text: str,
+    *,
+    package_name: str | None,
+    imports: dict[str, str],
+) -> str:
+    normalized = type_text.strip()
+    if not normalized:
+        return normalized
+    array_suffix = ""
+    while normalized.endswith("[]"):
+        normalized = normalized[:-2].strip()
+        array_suffix += "[]"
+    generic_index = normalized.find("<")
+    if generic_index != -1:
+        normalized = normalized[:generic_index].strip()
+    if normalized in {"void", "boolean", "byte", "short", "char", "int", "long", "float", "double"}:
+        return normalized + array_suffix
+    if "." in normalized:
+        head, tail = normalized.split(".", 1)
+        if head in imports:
+            return f"{imports[head]}.{tail}{array_suffix}"
+        if head[:1].islower():
+            return normalized + array_suffix
+    if normalized in imports:
+        return imports[normalized] + array_suffix
+    if normalized in JAVA_LANGUAGE_SIMPLE_TYPES:
+        return JAVA_LANGUAGE_SIMPLE_TYPES[normalized] + array_suffix
+    if package_name:
+        return f"{package_name}.{normalized}{array_suffix}"
+    return normalized + array_suffix
+
+
+def java_types_match(actual_type: str, expected_type: str) -> bool:
+    if actual_type == expected_type:
+        return True
+    return simplify_java_type_name(actual_type) == simplify_java_type_name(expected_type)
+
+
+def simplify_java_type_name(type_name: str) -> str:
+    normalized = type_name.strip()
+    array_suffix = ""
+    while normalized.endswith("[]"):
+        normalized = normalized[:-2].strip()
+        array_suffix += "[]"
+    normalized = normalized.rsplit(".", 1)[-1]
+    normalized = normalized.rsplit("$", 1)[-1]
+    return normalized + array_suffix
 
 
 def extract_smali_method_lines(

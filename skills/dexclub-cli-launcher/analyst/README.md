@@ -90,8 +90,12 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
 Current exact-anchor limits:
 
 - `trace_callers` and `trace_callees` accept either a relaxed `ClassName#methodName` anchor or a descriptor-aware anchor.
-- `summarize_method_logic` accepts a descriptor-aware anchor only on the `smali` export path.
-- Descriptor-aware summarize with `language=java` still returns `unsupported`.
+- `summarize_method_logic` accepts a descriptor-aware anchor on the `smali` export path, and the repo-local Java exported-code analysis path now also supports descriptor-aware exact scoping.
+- Planner-side `descriptor-aware + language=java` hard rejection has been removed in the current repository state.
+- The remaining caveat is release alignment:
+  - the analyst launcher still runs the published CLI release by default
+  - repo-local verification now succeeds for `com.shadcn.ui.compose.MainActivity` and `androidx.compose.foundation.ImageKt`
+  - release-based end-to-end analyst validation should be treated separately until a published launcher build includes the `A-09` `export-java` fix
 - `summarize_method_logic` on `smali` now also includes `structured_summary`, with basic blocks, call/constant clusters, and `focus_snippets`.
 - Large `smali` summarize results now include `large_method_analysis`, which groups method-call, string, number, field, and branch hotspots without removing the exported raw code artifact.
 

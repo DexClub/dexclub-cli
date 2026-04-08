@@ -16,6 +16,8 @@
 ## 当前快照
 
 - 当前最新相关提交
+  - `dcc2030` `Add structured analyst method summaries`
+  - `3af1500` `Add analyst large-method summary compression`
   - `7007464` `Support descriptor-aware analyst anchors`
   - `a51c692` `Add APK summarize resolution to analyst`
   - `d14413d` `Add analyst ambiguous sample validation`
@@ -50,6 +52,14 @@
 
 - `summarize_method_logic` 的 descriptor-aware 精确切片目前只支持 `smali`
 - `language=java` 的普通 summarize 可以用，但“descriptor-aware + java”当前明确返回 `unsupported`
+- 仓库当前代码里的 `export-java` 修复已经落地
+  - 本地 fat jar 已验证：`com.shadcn.ui.compose.MainActivity` 与 `androidx.compose.foundation.ImageKt` 可成功导出 Java
+  - 但 analyst launcher 默认仍调用已发布 release；在下一个包含 `A-09` 修复的发布版出现前，release-based 端到端验证结论仍要区分“仓库当前状态”和“当前已发布状态”
+- 当前会话的 launcher 端到端验证使用了临时本地覆盖
+  - 已将本地构建的 `cli/build/libs/dexclub-cli-all.jar` 覆盖到 launcher 缓存产物
+  - 缓存路径：`/root/.cache/dexclub-cli/releases/v0.0.1/dexclub-cli-linux-arm64/cli-shadow/lib/dexclub-cli-all.jar`
+  - 原始缓存已备份为：`dexclub-cli-all.jar.bak-20260408-a09`
+  - 这只是当前维护阶段的临时验证手段，不等同于远程 release 已更新
 - `structured_summary` 当前只支持 `smali`
   - `java` summarize 不报错，但会返回 `kind=none` 和 `supported=false`
 - `focus_snippets` 当前是受控预览
@@ -124,9 +134,10 @@
 | A-03 | APK 输入下自动定位目标 dex 后 summarize | 已完成 | 提交 `a51c692` |
 | A-04 | descriptor-aware 的 trace/summarize 最小闭环 | 已完成 | 提交 `7007464` |
 | A-05 | 大方法 smali 的二级拆解与上下文压缩 | 已完成 | 本次会话完成。新增 `large_method_analysis`，阈值 `120`，并补了样例验证 |
-| A-06 | descriptor-aware + `java` summarize | 待开始 | 当前变成下一项主缺口 |
+| A-06 | descriptor-aware + `java` summarize | 进行中 | `A-09` 已在仓库内修复，planner 的 `language=java` 硬拒绝已移除，Java exported-code 已支持 descriptor-aware 精确切片；下一步需要基于包含 `A-09` 修复的 launcher 构建补端到端验证并决定最终 contract |
 | A-07 | 更强的 summary 结构化输出 | 已完成 | 本次会话完成。新增 `structured_summary`，包含 `basic_blocks / call_clusters / constant_clusters` |
 | A-08 | 基于结构化摘要的局部片段提取 | 已完成 | 本次会话完成。新增 `focus_snippets`，按高信号 block / cluster 回抽原始 smali 片段 |
+| A-09 | `export-java` 导出失败定位与修复 | 已完成 | 本次会话完成。根因包括 fat jar 中缺失 Jadx `dex-input` service 声明，以及 Java 导出时在 decompiler 生命周期外读取 `JavaClass.code` |
 
 ## 最近一次状态流转
 
@@ -151,10 +162,38 @@
     - 目标代码已落地
     - `validate_v1_sample.sh` 已补充 `focus_snippets` 断言
     - `README`、workflow 与样例文档已同步新 contract
+- `A-06`
+  - `待开始 -> 进行中`
+  - `进行中 -> 阻塞`
+  - 阻塞原因
+    - 已确认 analyst 层在 [`planner.py`](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/planner.py) 中会提前拒绝 `descriptor-aware + language=java`
+    - 但进一步实测发现，当前发布版 `export-java` 对样例 APK 中的 `com.shadcn.ui.compose.MainActivity` 与 `androidx.compose.foundation.ImageKt` 都会直接失败，尚未进入 analyst 的 Java 精确切片阶段
+  - 恢复条件
+    - 先定位并修复 `export-java` 的失败原因，或至少确认一个稳定可复现且可导出的 Java 样例链路
+  - 当前停点
+    - analyst 观察停在 [`export_and_scan.py`](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py) 调用 launcher 后的 subprocess 失败
+    - contract 判断停在 [`planner.py`](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/planner.py) 对 `language=java` 的硬拒绝
+- `A-09`
+  - `待开始 -> 进行中`
+  - `进行中 -> 已完成`
+  - 完成依据
+    - 已定位 `export-java` 失败根因
+    - 已修复 [`JadxDecompilerService.kt`](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/core/src/jvmMain/kotlin/io/github/dexclub/core/export/JadxDecompilerService.kt) 的导出实现
+    - 已补 [`jadx.api.plugins.JadxPlugin`](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/cli/src/main/resources/META-INF/services/jadx.api.plugins.JadxPlugin) service 声明，保证 fat jar 可加载 `dex-input`
+    - 本地 fat jar 已验证 `MainActivity` / `ImageKt` Java 导出成功
+- `A-06`
+  - `阻塞 -> 进行中`
+  - 恢复原因
+    - `A-09` 已在仓库内完成，Java 导出链路不再是当前代码的前置失败点
+    - [`planner.py`](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/planner.py) 已移除 `descriptor-aware + language=java` 的硬拒绝
+    - [`code_analysis.py`](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/code_analysis.py) 已支持 Java exported-code 的 descriptor-aware 精确切片
+  - 当前停点
+    - 需要基于包含 `A-09` 修复的 launcher 构建补 `export_and_scan.py` / `analyze.py run` 级别的端到端验证
+    - 完成前仍需决定 README 与样例文档中对 release-based 使用方式的最终表述
 
 ## 下一步推荐入口
 
-下一个对话优先做 `A-06`。
+下一个对话优先继续 `A-06`，补 Java exact-anchor 的端到端验证并收口 contract。
 
 原因：
 
@@ -162,7 +201,98 @@
   - `structured_summary`
   - `large_method_analysis`
   - `focus_snippets`
-- 下一步更明显的缺口回到了 `descriptor-aware + java summarize`
+- `A-09` 的仓库内修复已经完成
+- `A-06` 的 planner 与 Java exported-code 精确切片已经恢复推进
+- 当前剩余问题已经从“底层导出直接失败”切换成“如何对齐 launcher 发布态与 analyst 文档/验证口径”
+
+## A-06 历史阻塞记录
+
+这部分保留当时把 `A-06` 从 `进行中` 打回 `阻塞` 的依据，供后续回看。
+
+当前确认到的事实：
+
+1. `descriptor-aware + language=java` 当前确实先被 analyst 层拦住
+   - 重点看 [`planner.py`](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/planner.py)
+2. 但把这层前置拒绝拿掉，并不能自然得到稳定能力
+   - 实测通过 [`export_and_scan.py`](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py) 调发布版 `export-java`
+   - `com.shadcn.ui.compose.MainActivity`
+   - `androidx.compose.foundation.ImageKt`
+   - 都在 CLI 层直接失败，没有进入 analyst 的 Java 方法精确切片
+3. 所以 `A-06` 目前不应继续按“先做 Java overload 精确定位”推进
+   - 更合理的顺序是先修 `A-09`
+   - `A-09` 收口后，再回到 analyst 层决定 exact-anchor 的 Java contract
+
+本次用于确认阻塞的命令包括：
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py plan \
+  --task-type summarize_method_logic \
+  --input-json '{"input":["/path/to/classes.dex"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image","descriptor":"Landroidx/compose/foundation/ImageKt;->Image(... )V"},"language":"java"}'
+```
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py \
+  --input-dex /path/to/classes.dex \
+  --class androidx.compose.foundation.ImageKt \
+  --language java \
+  --mode summary \
+  --format json
+```
+
+## A-09 完成记录
+
+本次完成内容：
+
+1. 定位了 `export-java` 在 fat jar / release 形态下的真实失败根因
+   - Jadx `dex-input` 插件类已被打入 jar
+   - 但 `META-INF/services/jadx.api.plugins.JadxPlugin` 没有包含 `DexInputPlugin`
+   - 导致运行版 CLI 只加载 `kotlin-metadata`，实际解析 dex 时 `Loaded classes: 0`
+2. 修复了 Java 导出实现中的生命周期错误
+   - 之前在 `JadxDecompiler.use {}` 作用域外访问 `JavaClass.code`
+   - 会触发 `codeCache` 为空的空指针
+3. 补了运行版 service 声明
+   - 新增 [`jadx.api.plugins.JadxPlugin`](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/cli/src/main/resources/META-INF/services/jadx.api.plugins.JadxPlugin)
+   - 明确声明 `jadx.plugins.input.dex.DexInputPlugin`
+   - 明确声明 `jadx.plugins.kotlin.metadata.KotlinMetadataPlugin`
+4. 给 Java 反编译保留了保守回退
+   - 当 `useDxInput=true` 且加载结果为空时，会再试一次 `useDxInput=false`
+
+本次直接验证：
+
+1. `./gradlew --no-daemon -Dkotlin.incremental=false :cli:fatJar`
+2. `./gradlew --no-daemon -Dkotlin.incremental=false :core:jvmTest --tests 'io.github.dexclub.core.DexEngineJvmTest.export should write dex smali and java outputs'`
+3. 本地 fat jar 手工验证
+   - `com.shadcn.ui.compose.MainActivity`
+   - `androidx.compose.foundation.ImageKt`
+   - 都已成功导出 `.java`
+
+## A-06 恢复记录
+
+本次恢复内容：
+
+1. 已移除 planner 对 `descriptor-aware + language=java` 的硬拒绝
+2. 已给 [`code_analysis.py`](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/code_analysis.py) 增加 Java exported-code 的 descriptor-aware 精确切片
+   - 当前按 descriptor 的参数/返回类型匹配 Java 方法声明
+   - 已验证可以在 `ImageKt.java` 中准确切到 `ImageVector` 这一组重载，而不是只命中第一个 `Image(...)`
+
+本次直接验证：
+
+1. planner 验证
+   - `python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py plan --task-type summarize_method_logic --input-json '{"input":["/tmp/.../classes.dex"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image","descriptor":"Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/vector/ImageVector;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V"},"language":"java"}'`
+   - 结果：已返回 `export_and_scan` 计划，不再 `unsupported`
+2. Java 精确切片验证
+   - 基于本地 fat jar 导出的 `ImageKt.java`
+   - `descriptor=...ImageVector...`
+   - 结果：`startLine=250`
+   - 并命中 `VectorPainterKt.rememberVectorPainter`
+   - 说明当前已切到目标重载
+
+当前尚未收口的点：
+
+1. analyst 的 `run` 端到端验证仍默认走 launcher 的已发布 release
+2. 在发布版包含 `A-09` 修复前，`validate_v1_sample.sh` 这类 release-based 验证还不能直接改成“Java exact summarize 已稳定”
+3. 因此 `A-06` 现在应继续推进，但暂不宜直接标 `已完成`
+4. 当前会话虽然已经通过“本地覆盖 launcher 缓存”的方式打通了一条 release-path 验证，但该前提需要在后续维护时显式保留，避免误判为远程 release 已同步
 
 ## A-05 完成记录
 
@@ -195,20 +325,25 @@
 3. 确认工作区无关状态，不要误处理
    - `git status --short`
 4. 确认最近相关提交
-   - `git log --oneline -n 6`
+  - `git log --oneline -n 6`
 5. 直接进入 `A-06`
    - 重点看：
+     - [ANALYST_PROGRESS.md](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/ANALYST_PROGRESS.md)
      - [code_analysis.py](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/code_analysis.py)
      - [export_and_scan.py](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py)
+     - [planner.py](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/planner.py)
      - [runner.py](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/runner.py)
+     - [JadxDecompilerService.kt](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/core/src/jvmMain/kotlin/io/github/dexclub/core/export/JadxDecompilerService.kt)
      - [validate_v1_sample.sh](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh)
+   - 优先补基于包含 `A-09` 修复的 launcher 构建的端到端验证
+   - 再决定 `validate_v1_sample.sh`、README 和样例文档里对 Java exact summarize 的最终表述
 
 ## 下次会话可直接使用的提示词
 
 如果下次会话要最快恢复，可以直接用这句：
 
 ```text
-先阅读仓库根目录的 ANALYST_PROGRESS.md，按其中“下次会话快速开始”执行，然后继续推进 A-06。
+先阅读仓库根目录的 ANALYST_PROGRESS.md，按其中“下次会话快速开始”执行，继续推进 A-06，重点补基于包含 A-09 修复的 launcher 构建的 Java exact summarize 端到端验证。
 ```
 
 ## 文档维护规则
