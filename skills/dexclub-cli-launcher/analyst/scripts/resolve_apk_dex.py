@@ -5,9 +5,10 @@ import argparse
 import json
 import subprocess
 import sys
-import tempfile
 import zipfile
 from pathlib import Path
+
+from analyst_storage import ensure_apk_input_cache
 
 
 def parse_args() -> argparse.Namespace:
@@ -92,11 +93,17 @@ def format_text(payload: dict[str, object]) -> str:
 
 def main() -> None:
     args = parse_args()
-    apk_path = Path(args.input_apk)
+    apk_path = Path(args.input_apk).expanduser().resolve()
     if not apk_path.is_file():
         raise SystemExit(f"Input APK not found: {apk_path.resolve()}")
 
-    output_dir = Path(args.output_dir) if args.output_dir else Path(tempfile.mkdtemp(prefix="dexclub-analyst-apk-"))
+    if args.output_dir:
+        output_dir = Path(args.output_dir).expanduser().resolve()
+    else:
+        cache_ref = ensure_apk_input_cache(apk_path, ensure_extracted_dex=True)
+        if cache_ref.extracted_dex_dir is None:
+            raise SystemExit("Failed to build extracted dex cache for the input APK.")
+        output_dir = cache_ref.extracted_dex_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     dex_entries: list[str] = []
@@ -111,17 +118,19 @@ def main() -> None:
 
         extracted_dex_paths: list[str] = []
         candidate_dex_paths: list[str] = []
+        extracted_ready = all((output_dir / entry_name).is_file() for entry_name in dex_entries)
         for entry_name in dex_entries:
             extracted_path = output_dir / entry_name
-            extracted_path.parent.mkdir(parents=True, exist_ok=True)
-            with apk_zip.open(entry_name) as src, extracted_path.open("wb") as dst:
-                dst.write(src.read())
+            if not extracted_ready:
+                extracted_path.parent.mkdir(parents=True, exist_ok=True)
+                with apk_zip.open(entry_name) as src, extracted_path.open("wb") as dst:
+                    dst.write(src.read())
             extracted_dex_paths.append(str(extracted_path.resolve()))
             if run_class_lookup(extracted_path, args.class_name):
                 candidate_dex_paths.append(str(extracted_path.resolve()))
 
     payload = {
-        "apk_path": str(apk_path.resolve()),
+        "apk_path": str(apk_path),
         "class_name": args.class_name,
         "output_dir": str(output_dir.resolve()),
         "candidate_dex_paths": candidate_dex_paths,

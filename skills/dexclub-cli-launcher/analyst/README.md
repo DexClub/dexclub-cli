@@ -106,3 +106,9 @@ Repeatable sample validation against the published release:
 ```bash
 bash ./skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh
 ```
+
+Default local storage layout:
+
+- `analyze.py run` writes per-run artifacts under `build/dexclub-cli/runs/v1/<run-id>/`
+- APK / dex input caches live under `build/dexclub-cli/cache/v1/inputs/`
+- APK-backed summarize resolves `classes*.dex` into the APK cache, then exports scanned code into the run-local `exports/` directory

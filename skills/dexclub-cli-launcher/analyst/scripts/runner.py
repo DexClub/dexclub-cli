@@ -5,15 +5,20 @@ import json
 import re
 import subprocess
 import sys
-import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from analyst_storage import (
+    CachedInputRef,
+    detect_cached_input,
+    ensure_apk_input_cache,
+    ensure_default_run_root,
+    ensure_dex_input_cache,
+)
 from plan_schema import RUN_ARTIFACT_ROOT_PLACEHOLDER, SCHEMA_VERSION, TASK_REGISTRY
 
-RUN_ARTIFACTS_DIRNAME = "dexclub-analyst-runs"
 RUN_STATUS_OK = {"ok", "empty", "ambiguous", "unsupported"}
 
 
@@ -31,10 +36,11 @@ def ensure_run_root(*, run_id: str, artifact_root: str | None = None) -> Path:
     if artifact_root:
         root = Path(artifact_root).expanduser().resolve()
     else:
-        root = Path(tempfile.gettempdir(), RUN_ARTIFACTS_DIRNAME, run_id).resolve()
+        root = ensure_default_run_root(run_id).resolve()
     root.mkdir(parents=True, exist_ok=True)
     root.joinpath("exports").mkdir(parents=True, exist_ok=True)
     root.joinpath("results").mkdir(parents=True, exist_ok=True)
+    root.joinpath("resolved").mkdir(parents=True, exist_ok=True)
     return root
 
 
@@ -243,7 +249,7 @@ def build_export_and_scan_command(step_args: dict[str, object]) -> list[str]:
 
 def build_resolve_apk_dex_command(step_args: dict[str, object]) -> list[str]:
     script_path = Path(__file__).resolve().parent / "resolve_apk_dex.py"
-    return [
+    command = [
         sys.executable,
         str(script_path),
         "--input-apk",
@@ -252,9 +258,11 @@ def build_resolve_apk_dex_command(step_args: dict[str, object]) -> list[str]:
         str(step_args["class_name"]),
         "--format",
         "json",
-        "--output-dir",
-        str(step_args["output_dir"]),
     ]
+    output_dir = step_args.get("output_dir")
+    if output_dir:
+        command.extend(["--output-dir", str(output_dir)])
+    return command
 
 
 def determine_limit(task_type: str, step_args: dict[str, object]) -> tuple[int | None, int | None]:
@@ -462,6 +470,124 @@ def resolve_step_arguments(
     return resolved_args
 
 
+def collect_input_paths(raw_input: object) -> list[str]:
+    if isinstance(raw_input, str):
+        return [str(Path(raw_input).expanduser().resolve())]
+    if isinstance(raw_input, list):
+        return [str(Path(item).expanduser().resolve()) for item in raw_input if isinstance(item, str)]
+    return []
+
+
+def register_cache_ref(
+    cache_refs: dict[str, CachedInputRef],
+    cache_ref: CachedInputRef | None,
+) -> None:
+    if cache_ref is None:
+        return
+    cache_refs[cache_ref.cache_key] = cache_ref
+
+
+def cache_input_path(
+    input_path: str,
+    *,
+    ensure_apk_extracted_dex: bool,
+) -> tuple[str, CachedInputRef | None]:
+    resolved_path = Path(input_path).expanduser().resolve()
+    cached_ref = detect_cached_input(resolved_path)
+    if cached_ref is not None:
+        return str(resolved_path), cached_ref
+
+    suffix = resolved_path.suffix.lower()
+    if suffix == ".dex":
+        dex_ref = ensure_dex_input_cache(resolved_path)
+        cached_path = dex_ref.cached_path or resolved_path
+        return str(cached_path.resolve()), dex_ref
+    if suffix == ".apk":
+        apk_ref = ensure_apk_input_cache(resolved_path, ensure_extracted_dex=ensure_apk_extracted_dex)
+        return str(resolved_path), apk_ref
+    return str(resolved_path), None
+
+
+def prepare_step_args_for_storage(
+    step_args: dict[str, object],
+    *,
+    step_kind: str,
+    cache_refs: dict[str, CachedInputRef],
+) -> dict[str, object]:
+    prepared_args = dict(step_args)
+
+    if step_kind == "run_find":
+        prepared_inputs: list[str] = []
+        raw_inputs = prepared_args.get("inputs", [])
+        if isinstance(raw_inputs, list):
+            for input_path in raw_inputs:
+                original_path = str(Path(str(input_path)).expanduser().resolve())
+                _, cache_ref = cache_input_path(original_path, ensure_apk_extracted_dex=False)
+                prepared_inputs.append(original_path)
+                register_cache_ref(cache_refs, cache_ref)
+        prepared_args["inputs"] = prepared_inputs
+        return prepared_args
+
+    if step_kind == "resolve_apk_dex" and "input_apk" in prepared_args:
+        input_apk = str(prepared_args["input_apk"])
+        _, apk_ref = cache_input_path(input_apk, ensure_apk_extracted_dex=True)
+        register_cache_ref(cache_refs, apk_ref)
+        if apk_ref is not None and apk_ref.extracted_dex_dir is not None:
+            prepared_args["output_dir"] = str(apk_ref.extracted_dex_dir.resolve())
+        return prepared_args
+
+    if step_kind == "export_and_scan" and "input_dex" in prepared_args:
+        cached_path, cache_ref = cache_input_path(
+            str(prepared_args["input_dex"]),
+            ensure_apk_extracted_dex=False,
+        )
+        prepared_args["input_dex"] = cached_path
+        register_cache_ref(cache_refs, cache_ref)
+        return prepared_args
+
+    return prepared_args
+
+
+def resolve_release_tag() -> str | None:
+    launcher_dir = Path(__file__).resolve().parents[2] / "launcher" / "scripts"
+    if sys.platform == "win32":
+        command = ["cmd.exe", "/c", str((launcher_dir / "run_latest_release.bat").resolve()), "--print-latest-tag"]
+    else:
+        command = ["bash", str((launcher_dir / "run_latest_release.sh").resolve()), "--print-latest-tag"]
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if completed.returncode != 0:
+        return None
+    tag = completed.stdout.strip()
+    return tag or None
+
+
+def build_run_meta(
+    *,
+    run_id: str,
+    task_type: str,
+    input_paths: list[str],
+    cache_refs: dict[str, CachedInputRef],
+    inputs: dict[str, object],
+    release_tag: str | None,
+    created_at: str,
+) -> dict[str, object]:
+    method_anchor = inputs.get("method_anchor")
+    language = inputs.get("language")
+    return {
+        "run_id": run_id,
+        "task_type": task_type,
+        "input_paths": input_paths,
+        "input_cache_keys": sorted(cache_refs),
+        "method_anchor": method_anchor if isinstance(method_anchor, dict) else None,
+        "language": language if isinstance(language, str) else None,
+        "release_tag": release_tag,
+        "created_at": created_at,
+    }
+
+
 def execute_step(
     *,
     task_type: str,
@@ -469,6 +595,7 @@ def execute_step(
     artifact_root: Path,
     anchor: dict[str, object] | None = None,
     prior_step_results: dict[str, dict[str, object]] | None = None,
+    cache_refs: dict[str, CachedInputRef] | None = None,
 ) -> tuple[dict[str, object], list[dict[str, object]], list[dict[str, object]], list[str]]:
     step_id = str(step["step_id"])
     step_args = replace_placeholder(dict(step["args"]), str(artifact_root))
@@ -477,6 +604,11 @@ def execute_step(
     step_args = resolve_step_arguments(
         step_args,
         prior_step_results=prior_step_results or {},
+    )
+    step_args = prepare_step_args_for_storage(
+        step_args,
+        step_kind=str(step["kind"]),
+        cache_refs={} if cache_refs is None else cache_refs,
     )
 
     if step["kind"] == "run_find":
@@ -784,12 +916,36 @@ def run_plan(plan: dict[str, object], *, artifact_root: str | None = None, run_i
         raise ValueError("Plan must remain a mapping after placeholder replacement.")
 
     task_type = str(rewritten_plan["task_type"])
+    plan_inputs = rewritten_plan.get("inputs", {})
+    input_paths = collect_input_paths(plan_inputs.get("input") if isinstance(plan_inputs, dict) else None)
+    cache_refs: dict[str, CachedInputRef] = {}
+    for input_path in input_paths:
+        _, cache_ref = cache_input_path(input_path, ensure_apk_extracted_dex=False)
+        register_cache_ref(cache_refs, cache_ref)
+    release_tag = resolve_release_tag()
+    run_created_at = datetime.now(timezone.utc).isoformat()
+
+    run_meta_path = run_root / "run-meta.json"
+    write_json(
+        run_meta_path,
+        build_run_meta(
+            run_id=current_run_id,
+            task_type=task_type,
+            input_paths=input_paths,
+            cache_refs=cache_refs,
+            inputs=plan_inputs if isinstance(plan_inputs, dict) else {},
+            release_tag=release_tag,
+            created_at=run_created_at,
+        ),
+    )
+
     step_results: list[dict[str, object]] = []
     recommendations: list[dict[str, object]] = []
     evidence: list[dict[str, object]] = []
     limits = list(rewritten_plan.get("limits", []))
     artifacts: list[dict[str, object]] = [
-        {"type": "run_root", "path": str(run_root.resolve()), "produced_by_step": "run"}
+        {"type": "run_root", "path": str(run_root.resolve()), "produced_by_step": "run"},
+        {"type": "run_meta", "path": str(run_meta_path.resolve()), "produced_by_step": "run"},
     ]
     prior_step_results: dict[str, dict[str, object]] = {}
 
@@ -805,6 +961,7 @@ def run_plan(plan: dict[str, object], *, artifact_root: str | None = None, run_i
             artifact_root=run_root,
             anchor=relation_anchor,
             prior_step_results=prior_step_results,
+            cache_refs=cache_refs,
         )
         step_results.append(step_result)
         prior_step_results[str(step_result["step_id"])] = step_result
@@ -832,6 +989,18 @@ def run_plan(plan: dict[str, object], *, artifact_root: str | None = None, run_i
         recommendations=recommendations,
         evidence=evidence,
         limits=limits,
+    )
+    write_json(
+        run_meta_path,
+        build_run_meta(
+            run_id=current_run_id,
+            task_type=task_type,
+            input_paths=input_paths,
+            cache_refs=cache_refs,
+            inputs=plan_inputs if isinstance(plan_inputs, dict) else {},
+            release_tag=release_tag,
+            created_at=run_created_at,
+        ),
     )
     final_result_path = run_root / "results" / "final_result.json"
     write_json(final_result_path, final_result)

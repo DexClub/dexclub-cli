@@ -6,6 +6,7 @@ import json
 import subprocess
 from pathlib import Path
 
+from analyst_storage import ensure_apk_input_cache, ensure_dex_input_cache
 from query_builder import build_query, create_query_parser, dump_query
 
 
@@ -50,7 +51,13 @@ def main() -> None:
     command_name = f"find-{args.kind}"
     cli_args = [command_name]
     for input_value in args.input:
-        cli_args.extend(["--input", str(Path(input_value).resolve())])
+        input_path = Path(input_value).expanduser().resolve()
+        if input_path.suffix.lower() == ".dex":
+            ensure_dex_input_cache(input_path)
+        else:
+            if input_path.suffix.lower() == ".apk":
+                ensure_apk_input_cache(input_path, ensure_extracted_dex=False)
+        cli_args.extend(["--input", str(input_path)])
     cli_args.extend(["--query-json", query_json, "--output-format", args.output_format])
     if args.limit is not None:
         cli_args.extend(["--limit", str(args.limit)])

@@ -16,7 +16,7 @@
 ## 当前快照
 
 - 当前最新相关提交
-  - `dca4369` `Validate analyst exact Java summarize`
+  - `57804d9` `Finalize analyst Java summarize release validation`
   - `8f41ae6` `Support analyst exact Java summarize`
   - `7cc459f` `Fix export-java in packaged CLI`
   - `dcc2030` `Add structured analyst method summaries`
@@ -44,6 +44,11 @@
     - 固定阈值：`line_count >= 120`
     - 压缩输出：`large_method_analysis`
     - 当前按 `method_calls / strings / numbers / field_accesses / branch_hotspots` 分组，并补充行簇聚合
+  - 当前本地已落地的 analyst 存储结构
+    - `analyze.py run` 默认写入 `build/dexclub-cli/runs/v1/<run-id>/`
+    - APK / dex 输入缓存写入 `build/dexclub-cli/cache/v1/inputs/`
+    - run 目录会写入 `run-meta.json`
+    - 输入缓存目录会写入 `input-meta.json`
 - 当前验证脚本
   - [validate_v1_sample.sh](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh)
 - 最近一次通过验证的命令
@@ -70,7 +75,6 @@
 - 当前仍然是 analyst 层编排，不是主仓库 `cli / core / dexkit` 的正式产品化能力扩展
 - 当前工作区存在无关状态，继续开发时不要混入
   - `dexkit/vendor/DexKit` 子模块改动
-  - 未跟踪的 `ANALYST_PLANNER_PLAN.md`
 
 ## 状态定义
 
@@ -139,6 +143,7 @@
 | A-07 | 更强的 summary 结构化输出 | 已完成 | 本次会话完成。新增 `structured_summary`，包含 `basic_blocks / call_clusters / constant_clusters` |
 | A-08 | 基于结构化摘要的局部片段提取 | 已完成 | 本次会话完成。新增 `focus_snippets`，按高信号 block / cluster 回抽原始 smali 片段 |
 | A-09 | `export-java` 导出失败定位与修复 | 已完成 | 本次会话完成。根因包括 fat jar 中缺失 Jadx `dex-input` service 声明，以及 Java 导出时在 decompiler 生命周期外读取 `JavaClass.code` |
+| A-10 | analyst 工作目录产物与输入缓存落地 | 进行中 | 本地实现已切到 `build/dexclub-cli/{runs,cache}/v1`，并完成同 APK 复用、删 `runs/` 复用、删 `cache/` 重建的最小验证；待提交 |
 
 ## 最近一次状态流转
 
@@ -197,15 +202,23 @@
     - 默认 published release `v0.0.1` 已确认可通过 launcher 的空缓存下载路径获取
     - 已基于新的空缓存完成 `export_and_scan.py` / `analyze.py run` 的 Java exact summarize 端到端验证
     - `README`、样例文档与验证脚本口径已收口到 published release
+- `A-10`
+  - `待开始 -> 进行中`
+  - 当前进展
+    - [`runner.py`](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/runner.py) 已把默认 run 根目录切到 `build/dexclub-cli/runs/v1`
+    - [`analyst_storage.py`](/data/data/com.termux/files/home/AndroidProjects/dexclub-cli/skills/dexclub-cli-launcher/analyst/scripts/analyst_storage.py) 已补 APK / dex 输入缓存、`input-meta.json` 与原子落盘
+    - 已完成同 APK 连续执行复用、删 `runs/` 不影响缓存、删 `cache/` 可重建的最小验证
+  - 当前停点
+    - 代码与最小文档已落地，等待整理提交
 
 ## 下一步推荐入口
 
-当前这条 analyst 主线已经收口，暂无新的主推进项。
+当前主推进项是 `A-10`，即 analyst 工作目录产物与输入缓存落地。
 
 如果下一个对话继续沿这条线推进，优先做以下两类事情之一：
 
-- 观察 `v0.0.1` 发布态在真实使用中的回归或下载问题
-- 处理新的 analyst 能力扩展需求，而不是回到 `A-06`
+- 整理并提交 `A-10` 的实现、README 和样例文档更新
+- 如果要继续扩展，再考虑补充清理入口或更细的缓存复用粒度
 
 ## A-06 历史阻塞记录
 

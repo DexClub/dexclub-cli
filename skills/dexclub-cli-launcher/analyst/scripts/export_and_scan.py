@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from analyst_storage import ensure_dex_input_cache
 from code_analysis import analyze_code
 from scan_exported_code import format_text, select_payload
 
@@ -56,9 +57,11 @@ def build_launcher_command(skill_root: Path, cli_args: list[str]) -> list[str]:
 
 def main() -> None:
     args = parse_args()
-    dex_path = Path(args.input_dex)
+    dex_path = Path(args.input_dex).expanduser().resolve()
     if not dex_path.is_file():
         raise SystemExit(f"Input dex not found: {dex_path.resolve()}")
+    dex_cache_ref = ensure_dex_input_cache(dex_path)
+    export_input_dex = (dex_cache_ref.cached_path or dex_path).resolve()
 
     output_dir = Path(args.output_dir) if args.output_dir else Path(tempfile.mkdtemp(prefix="dexclub-analyst-"))
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -73,7 +76,7 @@ def main() -> None:
         [
             f"export-{args.language}",
             "--input",
-            str(dex_path.resolve()),
+            str(export_input_dex),
             "--class",
             args.class_name,
             "--output",
