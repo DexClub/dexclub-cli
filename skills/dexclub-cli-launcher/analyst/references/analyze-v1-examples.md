@@ -14,6 +14,55 @@ Notes:
 - `run_id`, `artifact_root`, and temporary export paths vary by machine and by run.
 - `stdout` in `step_results[]` is preserved exactly as captured from helper scripts, including current DexKit info lines.
 - For full current sample outputs, run `scripts/validate_v1_sample.sh`; it keeps the JSON files under its reported temporary `results_dir`.
+- `summarize_method_logic` accepts either one direct dex input or one APK input. When the input is an APK, the planner inserts a `resolve_apk_dex` step before export.
+
+## `summarize_method_logic` with APK input
+
+Command:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type summarize_method_logic \
+  --input-json '{"input":["/data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate"}}'
+```
+
+Observed result excerpt:
+
+```json
+{
+  "status": "ok",
+  "task_type": "summarize_method_logic",
+  "step_results": [
+    {
+      "step_kind": "resolve_apk_dex",
+      "status": "ok",
+      "result": {
+        "class_name": "com.shadcn.ui.compose.MainActivity",
+        "candidate_dex_paths": [
+          "/tmp/dexclub-analyst-runs/<run-id>/resolved/step-1/classes4.dex"
+        ],
+        "resolved_dex_path": "/tmp/dexclub-analyst-runs/<run-id>/resolved/step-1/classes4.dex"
+      }
+    },
+    {
+      "step_kind": "export_and_scan",
+      "status": "ok",
+      "result": {
+        "kind": "smali",
+        "scope": {
+          "method": "onCreate"
+        },
+        "method_call_count": 4,
+        "export_path": "/tmp/dexclub-analyst-runs/<run-id>/exports/com_shadcn_ui_compose_MainActivity.smali"
+      }
+    }
+  ],
+  "summary": {
+    "text": "Resolved one APK dex and summarized one exported method body.",
+    "style": "partial_support"
+  }
+}
+```
 
 ## `search_methods_by_string`
 

@@ -28,6 +28,8 @@ It does not replace the launcher. Instead, it assumes the launcher can already e
 - `scripts/export_and_scan.py`
   - call the launcher layer to export a target class from a dex file
   - immediately run the exported-code scanner on the result
+- `scripts/resolve_apk_dex.py`
+  - extract APK dex entries and resolve which single dex contains a target class before export-based analysis
 - `scripts/plan_schema.py`
   - define the version 1 task registry, planner constants, and shared schema defaults
 - `scripts/planner.py`
@@ -68,7 +70,7 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py plan \
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   --task-type summarize_method_logic \
-  --input-json '{"input":["/path/to/classes.dex"],"method_anchor":{"class_name":"com.example.Target","method_name":"login"}}'
+  --input-json '{"input":["/path/to/app.apk"],"method_anchor":{"class_name":"com.example.Target","method_name":"login"}}'
 ```
 
 Observed result excerpts:

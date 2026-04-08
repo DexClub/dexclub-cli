@@ -145,6 +145,23 @@ def normalize_export_and_scan_payload(raw_payload: object) -> dict[str, object]:
     return normalized
 
 
+def normalize_resolve_apk_dex_payload(raw_payload: object) -> dict[str, object]:
+    if not isinstance(raw_payload, dict):
+        raise ValueError("Expected object payload from resolve_apk_dex.")
+    normalized: dict[str, object] = {}
+    for key in (
+        "apk_path",
+        "class_name",
+        "output_dir",
+        "candidate_dex_paths",
+        "extracted_dex_paths",
+        "resolved_dex_path",
+    ):
+        if key in raw_payload:
+            normalized[key] = raw_payload[key]
+    return normalized
+
+
 def build_run_find_command(step_args: dict[str, object], *, limit: int | None) -> list[str]:
     script_path = Path(__file__).resolve().parent / "run_find.py"
     command: list[str] = [sys.executable, str(script_path)]
@@ -192,6 +209,22 @@ def build_export_and_scan_command(step_args: dict[str, object]) -> list[str]:
     if step_args.get("method"):
         command.extend(["--method", str(step_args["method"])])
     return command
+
+
+def build_resolve_apk_dex_command(step_args: dict[str, object]) -> list[str]:
+    script_path = Path(__file__).resolve().parent / "resolve_apk_dex.py"
+    return [
+        sys.executable,
+        str(script_path),
+        "--input-apk",
+        str(step_args["input_apk"]),
+        "--class",
+        str(step_args["class_name"]),
+        "--format",
+        "json",
+        "--output-dir",
+        str(step_args["output_dir"]),
+    ]
 
 
 def determine_limit(task_type: str, step_args: dict[str, object]) -> tuple[int | None, int | None]:
@@ -350,23 +383,79 @@ def normalize_export_result(
     return "ok", normalized_payload, [], evidence, []
 
 
+def normalize_resolve_apk_dex_result(
+    *,
+    step_id: str,
+    payload: object,
+) -> tuple[str, dict[str, object], list[dict[str, object]], list[dict[str, object]], list[str]]:
+    normalized_payload = normalize_resolve_apk_dex_payload(payload)
+    candidate_dex_paths = normalized_payload.get("candidate_dex_paths", [])
+    if not isinstance(candidate_dex_paths, list):
+        raise ValueError("`candidate_dex_paths` must be a list.")
+    if normalized_payload.get("resolved_dex_path"):
+        status = "ok"
+    elif candidate_dex_paths:
+        status = "ok"
+    else:
+        status = "empty"
+    evidence: list[dict[str, object]] = []
+    for candidate_path in candidate_dex_paths:
+        evidence.append(
+            {
+                "step_id": step_id,
+                "kind": "resolved_dex_candidate",
+                "value": candidate_path,
+                "source_path": candidate_path,
+            }
+        )
+    return status, normalized_payload, [], evidence, []
+
+
+def resolve_step_arguments(
+    step_args: dict[str, object],
+    *,
+    prior_step_results: dict[str, dict[str, object]],
+) -> dict[str, object]:
+    resolved_args = dict(step_args)
+    source_step_id = resolved_args.pop("input_dex_from_step", None)
+    if not source_step_id:
+        return resolved_args
+    if not isinstance(source_step_id, str):
+        raise ValueError("`input_dex_from_step` must be a step id string.")
+    source_step_result = prior_step_results.get(source_step_id)
+    if source_step_result is None:
+        raise ValueError(f"Missing prior step result: {source_step_id}")
+    resolved_dex_path = source_step_result.get("result", {}).get("resolved_dex_path")
+    if not isinstance(resolved_dex_path, str) or not resolved_dex_path:
+        raise ValueError(f"Prior step `{source_step_id}` did not resolve a dex path.")
+    resolved_args["input_dex"] = resolved_dex_path
+    return resolved_args
+
+
 def execute_step(
     *,
     task_type: str,
     step: dict[str, object],
     artifact_root: Path,
     anchor: dict[str, object] | None = None,
+    prior_step_results: dict[str, dict[str, object]] | None = None,
 ) -> tuple[dict[str, object], list[dict[str, object]], list[dict[str, object]], list[str]]:
     step_id = str(step["step_id"])
     step_args = replace_placeholder(dict(step["args"]), str(artifact_root))
     if not isinstance(step_args, dict):
         raise ValueError("Step args must remain a mapping after placeholder replacement.")
+    step_args = resolve_step_arguments(
+        step_args,
+        prior_step_results=prior_step_results or {},
+    )
 
     if step["kind"] == "run_find":
         _, internal_limit = determine_limit(task_type, step_args)
         command = build_run_find_command(step_args, limit=internal_limit)
     elif step["kind"] == "export_and_scan":
         command = build_export_and_scan_command(step_args)
+    elif step["kind"] == "resolve_apk_dex":
+        command = build_resolve_apk_dex_command(step_args)
     else:
         raise ValueError(f"Unsupported step kind: {step['kind']}")
 
@@ -401,6 +490,11 @@ def execute_step(
                 anchor=anchor,
                 payload=payload,
             )
+        elif step["kind"] == "resolve_apk_dex":
+            status, normalized_result, recommendations, evidence, extra_limits = normalize_resolve_apk_dex_result(
+                step_id=step_id,
+                payload=payload,
+            )
         else:
             status, normalized_result, recommendations, evidence, extra_limits = normalize_export_result(
                 step_id=step_id,
@@ -433,6 +527,16 @@ def execute_step(
                     "produced_by_step": step_id,
                 }
             )
+    elif step["kind"] == "resolve_apk_dex":
+        resolved_dex_path = step_result["result"].get("resolved_dex_path")
+        if isinstance(resolved_dex_path, str):
+            step_artifacts.append(
+                {
+                    "type": "resolved_dex",
+                    "path": resolved_dex_path,
+                    "produced_by_step": step_id,
+                }
+            )
     return step_result, recommendations, evidence, extra_limits
 
 
@@ -458,39 +562,95 @@ def finalize_run_result(
         summary_text = f"Step `{execution_failure['step_id']}` failed during execution."
         summary_style = "error"
     elif task_type == "summarize_method_logic":
-        step_result = step_results[0]
-        if step_result["status"] == "ok":
-            export_path = step_result["result"].get("export_path")
-            method_anchor = plan["inputs"].get("method_anchor", {})
-            if isinstance(export_path, str) and isinstance(method_anchor, dict):
-                overload_count = count_method_overloads(export_path, str(method_anchor.get("method_name")))
-                if overload_count > 1:
-                    status = "ambiguous"
-                    summary_text = (
-                        f"Exported class contains {overload_count} overloads for "
-                        f"`{method_anchor.get('method_name')}`; current path cannot isolate one precisely."
-                    )
-                    summary_style = "ambiguous"
-                    recommendations.append(
-                        {
-                            "kind": "narrow_search",
-                            "message": "Choose a method name that is unique within the exported class in version 1.",
-                            "reason": "overload_ambiguity",
-                        }
-                    )
-                    limits.append("export-and-scan cannot disambiguate overloaded methods by descriptor")
-                else:
-                    status = "ok"
-                    summary_text = "Summarized one exported method body."
-                    summary_style = "partial_support"
-            else:
+        resolve_step = next((step for step in step_results if step["step_kind"] == "resolve_apk_dex"), None)
+        export_step = next((step for step in step_results if step["step_kind"] == "export_and_scan"), None)
+        if resolve_step is not None:
+            candidate_dex_paths = resolve_step["result"].get("candidate_dex_paths", [])
+            if not isinstance(candidate_dex_paths, list):
+                candidate_dex_paths = []
+            if resolve_step["status"] == "empty":
+                status = "empty"
+                summary_text = "Target class was not found in the APK dex set."
+                summary_style = "empty"
+            elif len(candidate_dex_paths) > 1:
+                status = "ambiguous"
+                summary_text = "APK resolution matched multiple dex files for the target class."
+                summary_style = "ambiguous"
+                recommendations.append(
+                    {
+                        "kind": "narrow_search",
+                        "message": "Use a direct dex input if the class is duplicated across extracted APK dex files.",
+                        "reason": "apk_resolution_ambiguity",
+                    }
+                )
+                limits.append("APK summarize must resolve to exactly one extracted dex before export")
+            elif export_step is None:
                 status = "execution_error"
-                summary_text = "Export step did not surface an export path."
+                summary_text = "APK resolution completed, but no export step ran."
                 summary_style = "error"
+            else:
+                step_result = export_step
+                export_path = step_result["result"].get("export_path")
+                method_anchor = plan["inputs"].get("method_anchor", {})
+                if isinstance(export_path, str) and isinstance(method_anchor, dict):
+                    overload_count = count_method_overloads(export_path, str(method_anchor.get("method_name")))
+                    if overload_count > 1:
+                        status = "ambiguous"
+                        summary_text = (
+                            f"Exported class contains {overload_count} overloads for "
+                            f"`{method_anchor.get('method_name')}`; current path cannot isolate one precisely."
+                        )
+                        summary_style = "ambiguous"
+                        recommendations.append(
+                            {
+                                "kind": "narrow_search",
+                                "message": "Choose a method name that is unique within the exported class in version 1.",
+                                "reason": "overload_ambiguity",
+                            }
+                        )
+                        limits.append("export-and-scan cannot disambiguate overloaded methods by descriptor")
+                    else:
+                        status = "ok"
+                        summary_text = "Resolved one APK dex and summarized one exported method body."
+                        summary_style = "partial_support"
+                else:
+                    status = "execution_error"
+                    summary_text = "Export step did not surface an export path."
+                    summary_style = "error"
         else:
-            status = "empty"
-            summary_text = "No exported method summary was produced."
-            summary_style = "empty"
+            step_result = export_step or step_results[0]
+            if step_result["status"] == "ok":
+                export_path = step_result["result"].get("export_path")
+                method_anchor = plan["inputs"].get("method_anchor", {})
+                if isinstance(export_path, str) and isinstance(method_anchor, dict):
+                    overload_count = count_method_overloads(export_path, str(method_anchor.get("method_name")))
+                    if overload_count > 1:
+                        status = "ambiguous"
+                        summary_text = (
+                            f"Exported class contains {overload_count} overloads for "
+                            f"`{method_anchor.get('method_name')}`; current path cannot isolate one precisely."
+                        )
+                        summary_style = "ambiguous"
+                        recommendations.append(
+                            {
+                                "kind": "narrow_search",
+                                "message": "Choose a method name that is unique within the exported class in version 1.",
+                                "reason": "overload_ambiguity",
+                            }
+                        )
+                        limits.append("export-and-scan cannot disambiguate overloaded methods by descriptor")
+                    else:
+                        status = "ok"
+                        summary_text = "Summarized one exported method body."
+                        summary_style = "partial_support"
+                else:
+                    status = "execution_error"
+                    summary_text = "Export step did not surface an export path."
+                    summary_style = "error"
+            else:
+                status = "empty"
+                summary_text = "No exported method summary was produced."
+                summary_style = "empty"
     else:
         step_result = step_results[0] if step_results else None
         result_payload = step_result["result"] if step_result else {}
@@ -551,6 +711,7 @@ def run_plan(plan: dict[str, object], *, artifact_root: str | None = None, run_i
     artifacts: list[dict[str, object]] = [
         {"type": "run_root", "path": str(run_root.resolve()), "produced_by_step": "run"}
     ]
+    prior_step_results: dict[str, dict[str, object]] = {}
 
     for step in rewritten_plan.get("steps", []):
         relation_anchor = None
@@ -563,14 +724,23 @@ def run_plan(plan: dict[str, object], *, artifact_root: str | None = None, run_i
             step=step,
             artifact_root=run_root,
             anchor=relation_anchor,
+            prior_step_results=prior_step_results,
         )
         step_results.append(step_result)
+        prior_step_results[str(step_result["step_id"])] = step_result
         recommendations.extend(step_recommendations)
         evidence.extend(step_evidence)
         limits.extend(extra_limits)
         artifacts.extend(step_result["artifacts"])
 
         if step_result["status"] == "execution_error":
+            break
+        if step_result["status"] == "empty" and not bool(step.get("allow_empty_result", False)):
+            break
+        if (
+            step_result["step_kind"] == "resolve_apk_dex"
+            and not step_result.get("result", {}).get("resolved_dex_path")
+        ):
             break
 
     final_result = finalize_run_result(

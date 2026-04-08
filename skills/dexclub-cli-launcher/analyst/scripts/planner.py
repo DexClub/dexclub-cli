@@ -193,6 +193,17 @@ def build_common_limits(task_type: str, method_anchor: dict[str, object] | None 
     return limits
 
 
+def build_summarize_limits(
+    *,
+    normalized_inputs: dict[str, object],
+    method_anchor: dict[str, object],
+) -> list[str]:
+    limits = build_common_limits("summarize_method_logic", method_anchor)
+    if normalized_inputs["primary_kind"] == "apk":
+        limits.append("APK summarize resolves the target class to one extracted dex before export")
+    return limits
+
+
 def build_expected_outputs(task_type: str) -> list[str]:
     task_definition = TASK_REGISTRY[task_type]
     outputs = ["structured step result", "human-readable summary"]
@@ -266,6 +277,26 @@ def build_export_and_scan_step(
             "mode": mode or "summary",
             "format": "json",
             "output_dir": join_artifact_path(artifact_root, "exports"),
+        },
+        "allow_empty_result": False,
+    }
+
+
+def build_resolve_apk_dex_step(
+    *,
+    normalized_inputs: dict[str, object],
+    method_anchor: dict[str, object],
+    artifact_root: str,
+) -> dict[str, object]:
+    return {
+        "step_id": "step-1",
+        "kind": "resolve_apk_dex",
+        "tool": "resolve_apk_dex.py",
+        "args": {
+            "input_apk": normalized_inputs["paths"][0],
+            "class_name": method_anchor["class_name"],
+            "format": "json",
+            "output_dir": join_artifact_path(artifact_root, "resolved", "step-1"),
         },
         "allow_empty_result": False,
     }
@@ -376,8 +407,8 @@ def build_plan(
             )
         ]
     elif task_type == "summarize_method_logic":
-        if normalized_inputs["primary_kind"] != "dex" or int(normalized_inputs["path_count"]) != 1:
-            raise PlannerError("unsupported", "`summarize_method_logic` requires exactly one dex input.")
+        if int(normalized_inputs["path_count"]) != 1:
+            raise PlannerError("unsupported", "`summarize_method_logic` requires exactly one APK or dex input.")
         method_anchor = normalize_method_anchor(normalized_external_inputs["method_anchor"])
         if not bool(method_anchor.get("is_relaxed", True)):
             raise PlannerError(
@@ -399,15 +430,44 @@ def build_plan(
             plan_inputs["language"] = language
         if mode is not None:
             plan_inputs["mode"] = mode
-        steps = [
-            build_export_and_scan_step(
-                normalized_inputs=normalized_inputs,
-                method_anchor=method_anchor,
-                artifact_root=artifact_root or RUN_ARTIFACT_ROOT_PLACEHOLDER,
-                language=language if isinstance(language, str) else task_definition.default_language,
-                mode=mode if isinstance(mode, str) else task_definition.default_mode,
-            )
-        ]
+        if normalized_inputs["primary_kind"] == "apk":
+            steps = [
+                build_resolve_apk_dex_step(
+                    normalized_inputs=normalized_inputs,
+                    method_anchor=method_anchor,
+                    artifact_root=artifact_root or RUN_ARTIFACT_ROOT_PLACEHOLDER,
+                ),
+                {
+                    "step_id": "step-2",
+                    "kind": "export_and_scan",
+                    "tool": "export_and_scan.py",
+                    "args": {
+                        "input_dex_from_step": "step-1",
+                        "class_name": method_anchor["class_name"],
+                        "method": method_anchor["method_name"],
+                        "language": language if isinstance(language, str) else task_definition.default_language,
+                        "mode": mode if isinstance(mode, str) else task_definition.default_mode,
+                        "format": "json",
+                        "output_dir": join_artifact_path(
+                            artifact_root or RUN_ARTIFACT_ROOT_PLACEHOLDER,
+                            "exports",
+                        ),
+                    },
+                    "allow_empty_result": False,
+                },
+            ]
+        elif normalized_inputs["primary_kind"] == "dex":
+            steps = [
+                build_export_and_scan_step(
+                    normalized_inputs=normalized_inputs,
+                    method_anchor=method_anchor,
+                    artifact_root=artifact_root or RUN_ARTIFACT_ROOT_PLACEHOLDER,
+                    language=language if isinstance(language, str) else task_definition.default_language,
+                    mode=mode if isinstance(mode, str) else task_definition.default_mode,
+                )
+            ]
+        else:
+            raise PlannerError("unsupported", "`summarize_method_logic` accepts one APK or one dex input in this version.")
     else:
         raise PlannerError("unsupported", f"Unsupported task type: `{task_type}`.")
 
@@ -418,7 +478,11 @@ def build_plan(
         "inputs": plan_inputs,
         "normalized_inputs": normalized_inputs,
         "steps": steps,
-        "limits": build_common_limits(task_type, method_anchor),
+        "limits": (
+            build_summarize_limits(normalized_inputs=normalized_inputs, method_anchor=method_anchor)
+            if task_type == "summarize_method_logic" and method_anchor is not None
+            else build_common_limits(task_type, method_anchor)
+        ),
         "expected_outputs": build_expected_outputs(task_type),
         "stop_conditions": [
             "stop after the planned steps complete",

@@ -153,6 +153,18 @@ assert_expr "$RESULT_DIR/summarize_method_logic.json" "payload['step_results'][0
 assert_expr "$RESULT_DIR/summarize_method_logic.json" "payload['step_results'][0]['result']['method_call_count'] == 4" "summarize method logic should report four direct calls in sample"
 assert_expr "$RESULT_DIR/summarize_method_logic.json" "Path(payload['step_results'][0]['result']['export_path']).is_file()" "summarize method logic should keep exported artifact"
 
+summarize_apk_input=$(cat <<JSON
+{"input":["$SAMPLE_APK"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate"}}
+JSON
+)
+run_case "summarize_method_logic_apk" "summarize_method_logic" "$summarize_apk_input"
+assert_expr "$RESULT_DIR/summarize_method_logic_apk.json" "payload['status'] == 'ok'" "apk summarize should succeed"
+assert_expr "$RESULT_DIR/summarize_method_logic_apk.json" "len(payload['plan']['steps']) == 2" "apk summarize should plan a resolve step plus export step"
+assert_expr "$RESULT_DIR/summarize_method_logic_apk.json" "payload['step_results'][0]['step_kind'] == 'resolve_apk_dex'" "apk summarize should resolve a target dex first"
+assert_expr "$RESULT_DIR/summarize_method_logic_apk.json" "payload['step_results'][1]['step_kind'] == 'export_and_scan'" "apk summarize should export after dex resolution"
+assert_expr "$RESULT_DIR/summarize_method_logic_apk.json" "payload['step_results'][0]['result']['resolved_dex_path'].endswith('classes4.dex')" "apk summarize should resolve MainActivity to classes4.dex in sample"
+assert_expr "$RESULT_DIR/summarize_method_logic_apk.json" "payload['step_results'][1]['result']['method_call_count'] == 4" "apk summarize should preserve exported method analysis"
+
 overflow_input=$(cat <<JSON
 {"input":["$SAMPLE_APK"],"string":"description"}
 JSON
@@ -163,11 +175,19 @@ assert_expr "$RESULT_DIR/threshold_overflow.json" "payload['step_results'][0]['r
 assert_expr "$RESULT_DIR/threshold_overflow.json" "payload['recommendations'][0]['reason'] == 'max_direct_hits_exceeded'" "threshold overflow should emit narrowing recommendation"
 
 unsupported_input=$(cat <<JSON
-{"input":["$SAMPLE_APK"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate"}}
+{"input":["$(python3 - "$RESULT_DIR/summarize_method_logic.json" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(payload["step_results"][0]["result"]["export_path"])
+PY
+)"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate"}}
 JSON
 )
-run_case "unsupported_apk_summarize" "summarize_method_logic" "$unsupported_input"
-assert_expr "$RESULT_DIR/unsupported_apk_summarize.json" "payload['status'] == 'unsupported'" "apk summarize should be rejected"
+run_case "unsupported_exported_code_summarize" "summarize_method_logic" "$unsupported_input"
+assert_expr "$RESULT_DIR/unsupported_exported_code_summarize.json" "payload['status'] == 'unsupported'" "exported code summarize input should be rejected"
 
 descriptor_input=$(cat <<JSON
 {"input":["$SAMPLE_APK"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate","descriptor":"(Landroid/os/Bundle;)V"}}
