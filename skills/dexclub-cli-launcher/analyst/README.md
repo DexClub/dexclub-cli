@@ -28,6 +28,16 @@ It does not replace the launcher. Instead, it assumes the launcher can already e
 - `scripts/export_and_scan.py`
   - call the launcher layer to export a target class from a dex file
   - immediately run the exported-code scanner on the result
+- `scripts/plan_schema.py`
+  - define the version 1 task registry, planner constants, and shared schema defaults
+- `scripts/planner.py`
+  - normalize task inputs, run preflight checks, and emit structured execution plans
+- `scripts/runner.py`
+  - execute structured plans, capture helper subprocess output, and normalize final result payloads
+- `scripts/analyze.py`
+  - user-facing entry point for `plan` and `run` subcommands on top of the version 1 planner/runner
+- `scripts/validate_v1_sample.sh`
+  - run a repeatable sample validation pass against the current version 1 planner/runner contract
 - `scripts/generate_query_reference.py`
   - maintenance helper for regenerating the matcher reference
 
@@ -44,3 +54,29 @@ Today the analyst layer is workflow-driven. It documents how to combine the rele
 - `export-java`
 
 It does not yet provide a dedicated one-shot command for every higher-level question. When the released CLI lacks a direct primitive, the analyst layer must describe a multi-step approach instead of pretending the capability exists.
+
+## Version 1 planner entrypoint
+
+The version 1 planner layer keeps JSON as the primary stdout contract:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py plan \
+  --task-type search_methods_by_string \
+  --input-json '{"input":["/path/to/app.apk"],"string":"needle"}'
+```
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type summarize_method_logic \
+  --input-json '{"input":["/path/to/classes.dex"],"method_anchor":{"class_name":"com.example.Target","method_name":"login"}}'
+```
+
+Observed result excerpts:
+
+- `references/analyze-v1-examples.md`
+
+Repeatable sample validation:
+
+```bash
+bash ./skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh
+```
