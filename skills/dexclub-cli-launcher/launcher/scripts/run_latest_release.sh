@@ -124,15 +124,19 @@ find_launcher() {
   exit 1
 }
 
-latest_release_tag_from_api() {
-  local response tag
-  if ! response="$(curl -fsSL -H 'Accept: application/vnd.github+json' -H 'User-Agent: dexclub-cli-launcher' "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null)"; then
+latest_release_tag_from_page() {
+  local response_url tag
+  if ! response_url="$(
+    curl -fsSL -o /dev/null -w '%{url_effective}' \
+      -H 'Accept: text/html' \
+      -H 'User-Agent: dexclub-cli-launcher' \
+      "https://github.com/${REPO}/releases/latest" 2>/dev/null
+  )"; then
     return 1
   fi
   tag="$(
-    printf '%s' "$response" |
-      tr -d '\n' |
-      sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
+    printf '%s' "$response_url" |
+      sed -n 's#^https://github\.com/[^/][^/]*/[^/][^/]*/releases/tag/\([^/?#]*\).*$#\1#p'
   )"
   [ -n "$tag" ] || return 1
   printf '%s\n' "$tag"
@@ -140,11 +144,11 @@ latest_release_tag_from_api() {
 
 latest_release_tag() {
   local tag
-  if tag="$(latest_release_tag_from_api)"; then
+  if tag="$(latest_release_tag_from_page)"; then
     printf '%s\n' "$tag"
     return 0
   fi
-  printf 'Unable to resolve the latest GitHub Release tag from the GitHub API.\n' >&2
+  printf 'Unable to resolve the latest GitHub Release tag from the GitHub release page.\n' >&2
   return 1
 }
 

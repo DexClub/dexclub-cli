@@ -65,7 +65,7 @@ Design principles for future changes:
 - The scripts check the latest release only when:
   - no compatible local cache exists yet
   - the caller explicitly asks for `--update-cache`
-- Latest release discovery uses the GitHub latest-release API only.
+- Latest release discovery follows the GitHub release webpage redirect and does not depend on the GitHub API.
 - `--print-latest-tag` prints the currently selected local cached tag and does not trigger a remote check.
 - If remote access fails during an initial fetch or an explicit update, the scripts warn at most twice.
 - After two failed remote attempts, further remote checks are disabled until `--reset-remote-failures` is used.

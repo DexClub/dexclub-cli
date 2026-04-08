@@ -202,18 +202,24 @@ function Invoke-GitHubRequest {
     return Invoke-WebRequest @params
 }
 
-function Get-LatestReleaseTagFromApi {
+function Get-LatestReleaseTagFromPage {
     $repo = Get-Repo
-    $response = Invoke-GitHubRequest -Uri "https://api.github.com/repos/$repo/releases/latest"
-    $payload = $response.Content | ConvertFrom-Json
-    if (-not $payload.tag_name) {
-        throw "Missing tag_name in latest release API response."
+    $response = Invoke-GitHubRequest -Uri "https://github.com/$repo/releases/latest"
+    $responseUri = $response.BaseResponse.ResponseUri
+    if ($null -eq $responseUri) {
+        throw "Missing redirected release page URL."
     }
-    return $payload.tag_name
+
+    $path = $responseUri.AbsolutePath
+    if ($path -match '^/[^/]+/[^/]+/releases/tag/([^/?#]+)$') {
+        return $matches[1]
+    }
+
+    throw "Missing tag name in redirected release page URL."
 }
 
 function Get-LatestReleaseTag {
-    return Get-LatestReleaseTagFromApi
+    return Get-LatestReleaseTagFromPage
 }
 
 function Download-File {

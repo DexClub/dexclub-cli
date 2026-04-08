@@ -97,7 +97,7 @@ bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- exp
 ## Behavior notes
 
 - The launcher scripts never depend on GitHub Actions artifacts.
-- Latest release discovery uses the GitHub latest-release API only.
+- Latest release discovery follows the GitHub release webpage redirect and does not depend on the GitHub API.
 - `--print-latest-tag` prints the currently selected local cached tag and does not trigger a remote check.
 - Remote failure state is isolated by repository and platform.
 - The scripts normalize the current machine to `linux|macos|windows` and `x64|arm64`, then look for `dexclub-cli-<os>-<arch>.zip`.
