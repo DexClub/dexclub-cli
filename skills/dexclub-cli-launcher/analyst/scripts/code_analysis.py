@@ -157,8 +157,14 @@ def collect_strings(line_entries: list[tuple[int, str]]) -> list[dict[str, objec
 
 
 def collect_numbers(line_entries: list[tuple[int, str]]) -> list[dict[str, object]]:
+    filtered_entries = []
+    for line_no, line in line_entries:
+        stripped = line.strip()
+        if stripped.startswith((".locals ", ".line ", ".prologue", ".registers ", ".param ", ".end param", ".annotation", ".end annotation")):
+            continue
+        filtered_entries.append((line_no, line))
     return _collect_occurrences(
-        line_entries,
+        filtered_entries,
         NUMBER_LITERAL_RE,
         lambda match: match.group(0),
         strip_strings=True,

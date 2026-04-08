@@ -37,6 +37,7 @@ If you already have a dex input and want export plus immediate scanning, use:
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py \
   --input-dex /path/to/classes.dex \
   --class com.example.TargetClass \
-  --language java \
   --mode summary
 ```
+
+Prefer `--language smali` when you need the most reliable export path or method-level bytecode details.

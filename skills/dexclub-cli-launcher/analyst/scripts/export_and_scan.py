@@ -22,7 +22,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--language",
         choices=("java", "smali"),
-        default="java",
+        default="smali",
         help="Export format to request from dexclub-cli.",
     )
     parser.add_argument(

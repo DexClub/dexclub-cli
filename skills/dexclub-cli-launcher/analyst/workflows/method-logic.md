@@ -38,6 +38,5 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py \
   --input-dex /path/to/classes.dex \
   --class com.example.TargetClass \
   --method targetMethod \
-  --language java \
   --mode summary
 ```

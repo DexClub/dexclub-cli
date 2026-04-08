@@ -16,3 +16,23 @@ Goal: move from one known method to its callers, callees, or nearby logic.
 This workflow is best for targeted traversal, not whole-program call graph dumping.
 
 If the user asks for logic in "methods called by A" or "methods calling A", keep the scope narrow, search in layers, and export only after the candidate set becomes manageable.
+
+## Helper path
+
+To search for methods that call a known anchor:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/run_find.py method \
+  --input /path/to/app.apk \
+  --invoke-method com.example.TargetClass#targetMethod \
+  --output-format json
+```
+
+To search for methods constrained by known callers:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/run_find.py method \
+  --input /path/to/app.apk \
+  --caller-method com.example.EntryClass#entryMethod \
+  --output-format json
+```

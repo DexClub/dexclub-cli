@@ -18,6 +18,10 @@ It does not replace the launcher. Instead, it assumes the launcher can already e
 
 ## Current helper scripts
 
+- `scripts/build_query.py`
+  - generate common `find-class`, `find-method`, or `find-field` JSON without hand-writing nested matcher objects
+- `scripts/run_find.py`
+  - generate a common query JSON shape and immediately execute the matching `find-*` command through the launcher layer
 - `scripts/scan_exported_code.py`
   - scan exported Java or smali for strings, numbers, calls, and field access
   - optionally narrow the scan to a single method

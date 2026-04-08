@@ -35,3 +35,24 @@ bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- fin
   --input /path/to/classes.dex \
   --query-json '{"matcher":{"usingStrings":[{"value":"login","matchType":"Contains","ignoreCase":true}]}}'
 ```
+
+## Analyst helpers
+
+Build query JSON:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/build_query.py method \
+  --declared-class com.example.MainActivity \
+  --using-string login
+```
+
+Build and execute in one step:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/run_find.py method \
+  --input /path/to/app.apk \
+  --declared-class com.example.MainActivity \
+  --using-string login \
+  --limit 20 \
+  --output-format json
+```
