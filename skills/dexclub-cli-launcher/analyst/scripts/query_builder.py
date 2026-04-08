@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from method_descriptor import parse_method_descriptor
+
 STRING_MATCH_TYPES = ("Contains", "Equals", "StartsWith", "EndsWith", "SimilarRegex")
 COLLECTION_MATCH_TYPES = ("Contains", "Equals")
 
@@ -58,18 +60,92 @@ def class_name_matcher(
     }
 
 
+def parameter_matchers(values: list[str]) -> dict[str, Any] | None:
+    if not values:
+        return None
+    return {
+        "params": [
+            {
+                "type": {
+                    "className": string_matcher(value, "Equals", False),
+                }
+            }
+            for value in values
+        ]
+    }
+
+
+def build_method_matcher(
+    *,
+    class_name: str,
+    method_name: str,
+    params: list[str] | None = None,
+    return_type: str | None = None,
+) -> dict[str, Any]:
+    matcher: dict[str, Any] = {
+        "declaredClass": {
+            "className": string_matcher(class_name, "Equals", False),
+        },
+        "name": string_matcher(method_name, "Equals", False),
+    }
+    params_matcher = parameter_matchers(params or [])
+    if params_matcher is not None:
+        matcher["params"] = params_matcher
+    if return_type:
+        matcher["returnType"] = {
+            "className": string_matcher(return_type, "Equals", False),
+        }
+    return matcher
+
+
 def build_method_anchor(spec: str) -> dict[str, Any]:
     declared_class, separator, method_name = spec.partition("#")
     if not separator or not declared_class or not method_name:
         raise ValueError(
             f"Method anchor must use ClassName#methodName form: {spec}",
         )
-    return {
-        "declaredClass": {
-            "className": string_matcher(declared_class, "Equals", False),
-        },
-        "name": string_matcher(method_name, "Equals", False),
+    return build_method_matcher(class_name=declared_class, method_name=method_name)
+
+
+def build_exact_anchor_matcher(anchor: dict[str, Any]) -> dict[str, Any]:
+    if anchor.get("descriptor"):
+        parsed = parse_method_descriptor(
+            str(anchor["descriptor"]),
+            class_name=str(anchor["class_name"]),
+            method_name=str(anchor["method_name"]),
+        )
+        return build_method_matcher(
+            class_name=parsed.class_name,
+            method_name=parsed.method_name,
+            params=list(parsed.params),
+            return_type=parsed.return_type,
+        )
+    return build_method_matcher(
+        class_name=str(anchor["class_name"]),
+        method_name=str(anchor["method_name"]),
+        params=list(anchor.get("params", [])),
+        return_type=str(anchor["return_type"]) if anchor.get("return_type") else None,
+    )
+
+
+def build_relation_query(
+    *,
+    relation_direction: str,
+    anchor: dict[str, Any],
+    search_packages: list[str] | None = None,
+) -> dict[str, Any]:
+    key = "invokeMethods" if relation_direction == "callers" else "callerMethods"
+    query: dict[str, Any] = {
+        "matcher": {
+            key: {
+                "methods": [build_exact_anchor_matcher(anchor)],
+                "matchType": "Contains",
+            }
+        }
     }
+    if search_packages:
+        query["searchPackages"] = list(search_packages)
+    return query
 
 
 def build_class_query(args: argparse.Namespace) -> dict[str, Any]:

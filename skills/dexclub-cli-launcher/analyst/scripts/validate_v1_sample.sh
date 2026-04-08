@@ -143,6 +143,15 @@ assert_expr "$RESULT_DIR/trace_callees.json" "payload['status'] == 'ok'" "trace 
 assert_expr "$RESULT_DIR/trace_callees.json" "payload['step_results'][0]['result']['relation_direction'] == 'callees'" "trace callees should keep relation direction"
 assert_expr "$RESULT_DIR/trace_callees.json" 'any(item["method_name"] == "setContent$default" for item in payload["step_results"][0]["result"]["items"])' "trace callees should include setContent\$default"
 
+trace_callees_descriptor_input=$(cat <<JSON
+{"input":["$SAMPLE_APK"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate","descriptor":"(Landroid/os/Bundle;)V"},"limit":5}
+JSON
+)
+run_case "trace_callees_descriptor" "trace_callees" "$trace_callees_descriptor_input"
+assert_expr "$RESULT_DIR/trace_callees_descriptor.json" "payload['status'] == 'ok'" "descriptor-aware trace callees should succeed"
+assert_expr "$RESULT_DIR/trace_callees_descriptor.json" "payload['step_results'][0]['result']['anchor']['descriptor'] == 'Lcom/shadcn/ui/compose/MainActivity;->onCreate(Landroid/os/Bundle;)V'" "descriptor-aware trace should normalize the full descriptor"
+assert_expr "$RESULT_DIR/trace_callees_descriptor.json" 'any(item["method_name"] == "setContent$default" for item in payload["step_results"][0]["result"]["items"])' "descriptor-aware trace should preserve exact callee hits"
+
 summarize_input=$(cat <<JSON
 {"input":["$main_activity_dex"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate"}}
 JSON
@@ -189,13 +198,6 @@ JSON
 run_case "unsupported_exported_code_summarize" "summarize_method_logic" "$unsupported_input"
 assert_expr "$RESULT_DIR/unsupported_exported_code_summarize.json" "payload['status'] == 'unsupported'" "exported code summarize input should be rejected"
 
-descriptor_input=$(cat <<JSON
-{"input":["$SAMPLE_APK"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate","descriptor":"(Landroid/os/Bundle;)V"}}
-JSON
-)
-run_case "unsupported_descriptor_relation" "trace_callees" "$descriptor_input"
-assert_expr "$RESULT_DIR/unsupported_descriptor_relation.json" "payload['status'] == 'unsupported'" "descriptor-aware relation tracing should be rejected in v1"
-
 ambiguous_input=$(cat <<JSON
 {"input":["$ambiguous_image_dex"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image"}}
 JSON
@@ -203,6 +205,22 @@ JSON
 run_case "ambiguous_summarize_method_logic" "summarize_method_logic" "$ambiguous_input"
 assert_expr "$RESULT_DIR/ambiguous_summarize_method_logic.json" "payload['status'] == 'ambiguous'" "overloaded summarize target should return ambiguous"
 assert_expr "$RESULT_DIR/ambiguous_summarize_method_logic.json" "payload['recommendations'][0]['reason'] == 'overload_ambiguity'" "ambiguous summarize should emit overload guidance"
+
+exact_descriptor="Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V"
+exact_summarize_input=$(cat <<JSON
+{"input":["$ambiguous_image_dex"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image","descriptor":"$exact_descriptor"}}
+JSON
+)
+run_case "exact_summarize_method_logic" "summarize_method_logic" "$exact_summarize_input"
+assert_expr "$RESULT_DIR/exact_summarize_method_logic.json" "payload['status'] == 'ok'" "descriptor-aware summarize should disambiguate overloaded methods"
+assert_expr "$RESULT_DIR/exact_summarize_method_logic.json" "payload['step_results'][0]['result']['scope']['method_descriptor'] == '$exact_descriptor'" "descriptor-aware summarize should keep the exact scoped descriptor"
+
+unsupported_exact_java_input=$(cat <<JSON
+{"input":["$ambiguous_image_dex"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image","descriptor":"$exact_descriptor"},"language":"java"}
+JSON
+)
+run_case "unsupported_exact_java_summarize" "summarize_method_logic" "$unsupported_exact_java_input"
+assert_expr "$RESULT_DIR/unsupported_exact_java_summarize.json" "payload['status'] == 'unsupported'" "descriptor-aware summarize should reject java export for now"
 
 echo "validation=passed"
 echo "results_dir=$RESULT_DIR"

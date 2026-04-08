@@ -19,6 +19,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input-dex", required=True, help="Path to a single dex file.")
     parser.add_argument("--class", dest="class_name", required=True, help="Target class name.")
     parser.add_argument("--method", help="Optional target method name for scoped scanning.")
+    parser.add_argument("--method-descriptor", help="Optional exact method descriptor for precise smali scoping.")
     parser.add_argument(
         "--language",
         choices=("java", "smali"),
@@ -81,9 +82,15 @@ def main() -> None:
     )
     subprocess.run(export_command, check=True)
 
-    report = analyze_code(export_path, args.method)
+    report = analyze_code(
+        export_path,
+        method_name=args.method,
+        method_descriptor=args.method_descriptor,
+    )
     payload = select_payload(report, args.mode)
     payload["exportPath"] = str(export_path.resolve())
+    if args.method_descriptor:
+        payload["methodDescriptor"] = args.method_descriptor
 
     if args.format == "json":
         print(json.dumps(payload, ensure_ascii=False, indent=2))

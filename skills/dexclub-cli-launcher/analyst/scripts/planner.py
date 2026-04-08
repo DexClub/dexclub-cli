@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from method_descriptor import build_full_method_descriptor, parse_method_descriptor
 from plan_schema import (
     PLANNER_VERSION,
     RUN_ARTIFACT_ROOT_PLACEHOLDER,
@@ -14,6 +15,7 @@ from plan_schema import (
     get_task_definition,
     join_artifact_path,
 )
+from query_builder import build_relation_query
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,6 +173,34 @@ def normalize_method_anchor(value: object) -> dict[str, object]:
         if not isinstance(params, list) or not all(isinstance(item, str) and item.strip() for item in params):
             raise PlannerError("input_error", "`method_anchor.params` must be a non-empty string array.")
         normalized["params"] = [item.strip() for item in params]
+    if "descriptor" in normalized:
+        try:
+            parsed = parse_method_descriptor(
+                str(normalized["descriptor"]),
+                class_name=str(normalized["class_name"]),
+                method_name=str(normalized["method_name"]),
+            )
+        except ValueError as exc:
+            raise PlannerError("input_error", str(exc)) from exc
+        normalized["class_name"] = parsed.class_name
+        normalized["method_name"] = parsed.method_name
+        normalized["descriptor"] = parsed.descriptor
+        if "params" in normalized and list(parsed.params) != normalized["params"]:
+            raise PlannerError("input_error", "`method_anchor.params` does not match `method_anchor.descriptor`.")
+        if "return_type" in normalized and str(normalized["return_type"]) != parsed.return_type:
+            raise PlannerError("input_error", "`method_anchor.return_type` does not match `method_anchor.descriptor`.")
+        normalized["params"] = list(parsed.params)
+        normalized["return_type"] = parsed.return_type
+    elif "params" in normalized and "return_type" in normalized:
+        try:
+            normalized["descriptor"] = build_full_method_descriptor(
+                class_name=str(normalized["class_name"]),
+                method_name=str(normalized["method_name"]),
+                params=list(normalized["params"]),
+                return_type=str(normalized["return_type"]),
+            )
+        except ValueError as exc:
+            raise PlannerError("input_error", str(exc)) from exc
     if any(key in normalized for key in ("descriptor", "params", "return_type")):
         normalized["is_relaxed"] = False
     return normalized
@@ -188,7 +218,11 @@ def build_common_limits(task_type: str, method_anchor: dict[str, object] | None 
     limits = list(task_definition.current_limits)
     if method_anchor is not None and bool(method_anchor.get("is_relaxed", True)):
         limits.append("method anchor does not include a descriptor; overloads may be ambiguous")
-    if task_type in {"trace_callers", "trace_callees"} and method_anchor is not None:
+    if (
+        task_type in {"trace_callers", "trace_callees"}
+        and method_anchor is not None
+        and bool(method_anchor.get("is_relaxed", True))
+    ):
         limits.append("current version cannot verify overload uniqueness for relaxed relation anchors")
     return limits
 
@@ -243,10 +277,18 @@ def build_run_find_step(
     if using_number is not None:
         args["using_number"] = [using_number]
     if method_anchor is not None:
-        if task_type == "trace_callers":
-            args["invoke_method"] = [str(method_anchor["compact"])]
-        elif task_type == "trace_callees":
-            args["caller_method"] = [str(method_anchor["compact"])]
+        if bool(method_anchor.get("is_relaxed", True)):
+            if task_type == "trace_callers":
+                args["invoke_method"] = [str(method_anchor["compact"])]
+            elif task_type == "trace_callees":
+                args["caller_method"] = [str(method_anchor["compact"])]
+        else:
+            relation_direction = "callers" if task_type == "trace_callers" else "callees"
+            args["raw_query_json"] = build_relation_query(
+                relation_direction=relation_direction,
+                anchor=method_anchor,
+                search_packages=search_package,
+            )
 
     return {
         "step_id": "step-1",
@@ -265,19 +307,22 @@ def build_export_and_scan_step(
     language: str | None,
     mode: str | None,
 ) -> dict[str, object]:
+    step_args: dict[str, object] = {
+        "input_dex": normalized_inputs["paths"][0],
+        "class_name": method_anchor["class_name"],
+        "method": method_anchor["method_name"],
+        "language": language or "smali",
+        "mode": mode or "summary",
+        "format": "json",
+        "output_dir": join_artifact_path(artifact_root, "exports"),
+    }
+    if method_anchor.get("descriptor"):
+        step_args["method_descriptor"] = method_anchor["descriptor"]
     return {
         "step_id": "step-1",
         "kind": "export_and_scan",
         "tool": "export_and_scan.py",
-        "args": {
-            "input_dex": normalized_inputs["paths"][0],
-            "class_name": method_anchor["class_name"],
-            "method": method_anchor["method_name"],
-            "language": language or "smali",
-            "mode": mode or "summary",
-            "format": "json",
-            "output_dir": join_artifact_path(artifact_root, "exports"),
-        },
+        "args": step_args,
         "allow_empty_result": False,
     }
 
@@ -381,11 +426,6 @@ def build_plan(
         ]
     elif task_type in {"trace_callers", "trace_callees"}:
         method_anchor = normalize_method_anchor(normalized_external_inputs["method_anchor"])
-        if not bool(method_anchor.get("is_relaxed", True)):
-            raise PlannerError(
-                "unsupported",
-                "Descriptor-aware relation tracing is not supported by the current single-step execution path.",
-            )
         search_package = normalize_search_packages(normalized_external_inputs.get("search_package"))
         limit = normalize_limit(normalized_external_inputs.get("limit"))
         plan_inputs["method_anchor"] = {
@@ -410,14 +450,19 @@ def build_plan(
         if int(normalized_inputs["path_count"]) != 1:
             raise PlannerError("unsupported", "`summarize_method_logic` requires exactly one APK or dex input.")
         method_anchor = normalize_method_anchor(normalized_external_inputs["method_anchor"])
-        if not bool(method_anchor.get("is_relaxed", True)):
+        if not bool(method_anchor.get("is_relaxed", True)) and "descriptor" not in method_anchor:
             raise PlannerError(
                 "unsupported",
-                "Descriptor-aware summarize requests are not supported by the current export-and-scan path.",
+                "Descriptor-aware summarize requires either `method_anchor.descriptor` or both `params` and `return_type`.",
             )
         language = normalized_external_inputs.get("language")
         if language is not None and language not in {"java", "smali"}:
             raise PlannerError("input_error", "`language` must be `java` or `smali`.")
+        if not bool(method_anchor.get("is_relaxed", True)) and language == "java":
+            raise PlannerError(
+                "unsupported",
+                "Descriptor-aware summarize currently requires `language=smali`.",
+            )
         mode = normalized_external_inputs.get("mode")
         if mode is not None and mode not in {"summary", "strings", "numbers", "calls", "fields", "all"}:
             raise PlannerError("input_error", "`mode` is invalid for `summarize_method_logic`.")
@@ -456,6 +501,8 @@ def build_plan(
                     "allow_empty_result": False,
                 },
             ]
+            if method_anchor.get("descriptor"):
+                steps[1]["args"]["method_descriptor"] = method_anchor["descriptor"]
         elif normalized_inputs["primary_kind"] == "dex":
             steps = [
                 build_export_and_scan_step(

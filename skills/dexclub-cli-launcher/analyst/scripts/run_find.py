@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 from pathlib import Path
 
@@ -20,6 +21,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-format", choices=("text", "json"), default="json", help="dexclub-cli output format.")
     parser.add_argument("--output-file", help="Optional dexclub-cli output file.")
     parser.add_argument("--print-query", action="store_true", help="Print the generated query JSON to stderr before execution.")
+    parser.add_argument("--raw-query-json", help="Optional raw query JSON. When set, skip the built-in query builder.")
     return parser
 
 
@@ -34,7 +36,13 @@ def main() -> None:
     parser = create_parser()
     args = parser.parse_args()
 
-    query = build_query(args.kind, args)
+    if args.raw_query_json:
+        try:
+            query = json.loads(args.raw_query_json)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"Invalid --raw-query-json: {exc.msg}") from exc
+    else:
+        query = build_query(args.kind, args)
     query_json = dump_query(query)
     if args.print_query:
         print(query_json, file=subprocess.sys.stderr)

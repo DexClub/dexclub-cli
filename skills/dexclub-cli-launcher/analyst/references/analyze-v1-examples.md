@@ -15,6 +15,7 @@ Notes:
 - `stdout` in `step_results[]` is preserved exactly as captured from helper scripts, including current DexKit info lines.
 - For full current sample outputs, run `scripts/validate_v1_sample.sh`; it keeps the JSON files under its reported temporary `results_dir`.
 - `summarize_method_logic` accepts either one direct dex input or one APK input. When the input is an APK, the planner inserts a `resolve_apk_dex` step before export.
+- Descriptor-aware anchors may use a full descriptor or a signature-only suffix such as `"(Landroid/os/Bundle;)V"` when `class_name` and `method_name` are also present.
 
 ## `summarize_method_logic` with APK input
 
@@ -176,6 +177,67 @@ Observed result excerpt:
 }
 ```
 
+## `trace_callees` with descriptor-aware anchor
+
+Command:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type trace_callees \
+  --input-json '{"input":["/data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate","descriptor":"(Landroid/os/Bundle;)V"},"limit":5}'
+```
+
+Observed result excerpt:
+
+```json
+{
+  "status": "ok",
+  "task_type": "trace_callees",
+  "plan": {
+    "inputs": {
+      "method_anchor": {
+        "class_name": "com.shadcn.ui.compose.MainActivity",
+        "method_name": "onCreate",
+        "descriptor": "Lcom/shadcn/ui/compose/MainActivity;->onCreate(Landroid/os/Bundle;)V",
+        "params": [
+          "android.os.Bundle"
+        ],
+        "return_type": "void"
+      }
+    }
+  },
+  "step_results": [
+    {
+      "step_kind": "run_find",
+      "status": "ok",
+      "result": {
+        "relation_direction": "callees",
+        "anchor": {
+          "class_name": "com.shadcn.ui.compose.MainActivity",
+          "method_name": "onCreate",
+          "descriptor": "Lcom/shadcn/ui/compose/MainActivity;->onCreate(Landroid/os/Bundle;)V"
+        },
+        "count": 4,
+        "items": [
+          {
+            "method_name": "onCreate",
+            "descriptor": "Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V"
+          },
+          {
+            "method_name": "setContent$default",
+            "descriptor": "Landroidx/activity/compose/ComponentActivityKt;->setContent$default(Landroidx/activity/ComponentActivity;Landroidx/compose/runtime/CompositionContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)V"
+          }
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "text": "Found 4 direct callees.",
+    "style": "partial_support"
+  }
+}
+```
+
 ## `summarize_method_logic`
 
 Command:
@@ -311,5 +373,45 @@ Observed result excerpt:
     "method anchor does not include a descriptor; overloads may be ambiguous",
     "export-and-scan cannot disambiguate overloaded methods by descriptor"
   ]
+}
+```
+
+## `summarize_method_logic` with exact overloaded target
+
+Command:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type summarize_method_logic \
+  --input-json '{"input":["/path/to/foundation-image.dex"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image","descriptor":"Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V"}}'
+```
+
+Observed result excerpt:
+
+```json
+{
+  "status": "ok",
+  "task_type": "summarize_method_logic",
+  "step_results": [
+    {
+      "step_kind": "export_and_scan",
+      "status": "ok",
+      "result": {
+        "kind": "smali",
+        "scope": {
+          "method": "Image",
+          "method_descriptor": "Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V",
+          "line_count": 259
+        },
+        "method_descriptor": "Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V",
+        "method_call_count": 9,
+        "export_path": "/tmp/dexclub-analyst-runs/<run-id>/exports/androidx_compose_foundation_ImageKt.smali"
+      }
+    }
+  ],
+  "summary": {
+    "text": "Summarized one exact method body.",
+    "style": "partial_support"
+  }
 }
 ```

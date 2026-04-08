@@ -73,6 +73,26 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   --input-json '{"input":["/path/to/app.apk"],"method_anchor":{"class_name":"com.example.Target","method_name":"login"}}'
 ```
 
+Descriptor-aware anchors are now supported for direct relation tracing and smali summarize:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type trace_callees \
+  --input-json '{"input":["/path/to/app.apk"],"method_anchor":{"class_name":"com.example.Target","method_name":"login","descriptor":"(Ljava/lang/String;)V"}}'
+```
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type summarize_method_logic \
+  --input-json '{"input":["/path/to/classes.dex"],"method_anchor":{"class_name":"com.example.Target","method_name":"login","descriptor":"Lcom/example/Target;->login(Ljava/lang/String;)V"}}'
+```
+
+Current exact-anchor limits:
+
+- `trace_callers` and `trace_callees` accept either a relaxed `ClassName#methodName` anchor or a descriptor-aware anchor.
+- `summarize_method_logic` accepts a descriptor-aware anchor only on the `smali` export path.
+- Descriptor-aware summarize with `language=java` still returns `unsupported`.
+
 Observed result excerpts:
 
 - `references/analyze-v1-examples.md`

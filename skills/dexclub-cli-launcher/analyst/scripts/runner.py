@@ -128,6 +128,7 @@ def normalize_export_and_scan_payload(raw_payload: object) -> dict[str, object]:
         "fieldAccessCount": "field_access_count",
         "methodCalls": "method_calls",
         "fieldAccesses": "field_accesses",
+        "methodDescriptor": "method_descriptor",
     }
     for key, value in raw_payload.items():
         if key == "scope" and isinstance(value, dict):
@@ -137,6 +138,7 @@ def normalize_export_and_scan_payload(raw_payload: object) -> dict[str, object]:
                     "lineCount": "line_count",
                     "startLine": "start_line",
                     "endLine": "end_line",
+                    "methodDescriptor": "method_descriptor",
                 }
                 scope[scope_key_map.get(scope_key, scope_key)] = scope_value
             normalized["scope"] = scope
@@ -168,6 +170,8 @@ def build_run_find_command(step_args: dict[str, object], *, limit: int | None) -
     for input_path in step_args["inputs"]:
         command.extend(["--input", str(input_path)])
     command.extend(["--output-format", "json"])
+    if step_args.get("raw_query_json") is not None:
+        command.extend(["--raw-query-json", json.dumps(step_args["raw_query_json"], ensure_ascii=False)])
     if limit is not None:
         command.extend(["--limit", str(limit)])
     command.append(str(step_args["kind"]))
@@ -208,6 +212,8 @@ def build_export_and_scan_command(step_args: dict[str, object]) -> list[str]:
     ]
     if step_args.get("method"):
         command.extend(["--method", str(step_args["method"])])
+    if step_args.get("method_descriptor"):
+        command.extend(["--method-descriptor", str(step_args["method_descriptor"])])
     return command
 
 
@@ -564,6 +570,10 @@ def finalize_run_result(
     elif task_type == "summarize_method_logic":
         resolve_step = next((step for step in step_results if step["step_kind"] == "resolve_apk_dex"), None)
         export_step = next((step for step in step_results if step["step_kind"] == "export_and_scan"), None)
+        method_anchor = plan["inputs"].get("method_anchor", {})
+        exact_anchor = isinstance(method_anchor, dict) and any(
+            key in method_anchor for key in ("descriptor", "params", "return_type")
+        )
         if resolve_step is not None:
             candidate_dex_paths = resolve_step["result"].get("candidate_dex_paths", [])
             if not isinstance(candidate_dex_paths, list):
@@ -591,10 +601,9 @@ def finalize_run_result(
             else:
                 step_result = export_step
                 export_path = step_result["result"].get("export_path")
-                method_anchor = plan["inputs"].get("method_anchor", {})
                 if isinstance(export_path, str) and isinstance(method_anchor, dict):
                     overload_count = count_method_overloads(export_path, str(method_anchor.get("method_name")))
-                    if overload_count > 1:
+                    if not exact_anchor and overload_count > 1:
                         status = "ambiguous"
                         summary_text = (
                             f"Exported class contains {overload_count} overloads for "
@@ -611,7 +620,11 @@ def finalize_run_result(
                         limits.append("export-and-scan cannot disambiguate overloaded methods by descriptor")
                     else:
                         status = "ok"
-                        summary_text = "Resolved one APK dex and summarized one exported method body."
+                        summary_text = (
+                            "Resolved one APK dex and summarized one exact method body."
+                            if exact_anchor
+                            else "Resolved one APK dex and summarized one exported method body."
+                        )
                         summary_style = "partial_support"
                 else:
                     status = "execution_error"
@@ -621,10 +634,9 @@ def finalize_run_result(
             step_result = export_step or step_results[0]
             if step_result["status"] == "ok":
                 export_path = step_result["result"].get("export_path")
-                method_anchor = plan["inputs"].get("method_anchor", {})
                 if isinstance(export_path, str) and isinstance(method_anchor, dict):
                     overload_count = count_method_overloads(export_path, str(method_anchor.get("method_name")))
-                    if overload_count > 1:
+                    if not exact_anchor and overload_count > 1:
                         status = "ambiguous"
                         summary_text = (
                             f"Exported class contains {overload_count} overloads for "
@@ -641,7 +653,11 @@ def finalize_run_result(
                         limits.append("export-and-scan cannot disambiguate overloaded methods by descriptor")
                     else:
                         status = "ok"
-                        summary_text = "Summarized one exported method body."
+                        summary_text = (
+                            "Summarized one exact method body."
+                            if exact_anchor
+                            else "Summarized one exported method body."
+                        )
                         summary_style = "partial_support"
                 else:
                     status = "execution_error"

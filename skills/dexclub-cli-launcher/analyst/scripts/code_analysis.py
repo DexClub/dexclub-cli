@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import Callable
 
+from method_descriptor import parse_method_descriptor
+
 JAVA_CONTROL_KEYWORDS = {
     "if",
     "for",
@@ -49,15 +51,18 @@ def detect_code_kind(path: str | Path, text: str | None = None) -> str:
 def scoped_lines(
     path: str | Path,
     method_name: str | None = None,
+    method_descriptor: str | None = None,
 ) -> tuple[str, list[tuple[int, str]]]:
     path_obj = Path(path)
     text = read_text(path_obj)
     kind = detect_code_kind(path_obj, text)
     lines = text.splitlines()
-    if not method_name:
+    if not method_name and not method_descriptor:
         return kind, [(index + 1, line) for index, line in enumerate(lines)]
+    if method_descriptor and kind != "smali":
+        raise ValueError("Exact method descriptor scoping currently requires smali input.")
     if kind == "smali":
-        return kind, extract_smali_method_lines(lines, method_name)
+        return kind, extract_smali_method_lines(lines, method_name, method_descriptor)
     return kind, extract_java_method_lines(lines, method_name)
 
 
@@ -93,15 +98,33 @@ def extract_java_method_lines(lines: list[str], method_name: str) -> list[tuple[
     return [(line_no + 1, lines[line_no]) for line_no in range(start_index, end_index + 1)]
 
 
-def extract_smali_method_lines(lines: list[str], method_name: str) -> list[tuple[int, str]]:
+def extract_smali_method_lines(
+    lines: list[str],
+    method_name: str | None,
+    method_descriptor: str | None = None,
+) -> list[tuple[int, str]]:
+    expected_signature = None
+    if method_descriptor:
+        parsed = parse_method_descriptor(method_descriptor)
+        expected_signature = parsed.smali_signature
+        method_name = parsed.method_name
     start_index: int | None = None
     for index, line in enumerate(lines):
         stripped = line.strip()
-        if stripped.startswith(".method") and re.search(rf"\b{re.escape(method_name)}\(", stripped):
+        if not stripped.startswith(".method"):
+            continue
+        if expected_signature is not None:
+            if expected_signature in stripped:
+                start_index = index
+                break
+            continue
+        if method_name and re.search(rf"\b{re.escape(method_name)}\(", stripped):
             start_index = index
             break
 
     if start_index is None:
+        if expected_signature is not None:
+            raise ValueError(f"Unable to locate method `{expected_signature}` in smali source.")
         raise ValueError(f"Unable to locate method `{method_name}` in smali source.")
 
     end_index = start_index
@@ -271,8 +294,9 @@ def count_return_lines(kind: str, line_entries: list[tuple[int, str]]) -> int:
 def analyze_code(
     path: str | Path,
     method_name: str | None = None,
+    method_descriptor: str | None = None,
 ) -> dict[str, object]:
-    kind, line_entries = scoped_lines(path, method_name)
+    kind, line_entries = scoped_lines(path, method_name, method_descriptor)
     strings = collect_strings(line_entries)
     numbers = collect_numbers(line_entries)
     method_calls = collect_method_calls(kind, line_entries)
@@ -282,6 +306,7 @@ def analyze_code(
         "scope": {
             "path": str(Path(path).resolve()),
             "method": method_name,
+            "methodDescriptor": method_descriptor,
             "lineCount": len(line_entries),
             "startLine": line_entries[0][0] if line_entries else None,
             "endLine": line_entries[-1][0] if line_entries else None,
