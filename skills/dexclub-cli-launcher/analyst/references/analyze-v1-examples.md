@@ -16,7 +16,7 @@ Notes:
 - For full current sample outputs, run `scripts/validate_v1_sample.sh`; it keeps the JSON files under its reported temporary `results_dir`.
 - `summarize_method_logic` accepts either one direct dex input or one APK input. When the input is an APK, the planner inserts a `resolve_apk_dex` step before export.
 - Descriptor-aware anchors may use a full descriptor or a signature-only suffix such as `"(Landroid/os/Bundle;)V"` when `class_name` and `method_name` are also present.
-- The Java exact-anchor example below was captured against a launcher cache whose `dexclub-cli-all.jar` had been overlaid with the repo-local build that already includes the `A-09` `export-java` fix. It does not claim that the untouched published release already behaves the same way.
+- The Java exact-anchor example below is now valid against the published release path.
 
 ## `summarize_method_logic` with APK input
 

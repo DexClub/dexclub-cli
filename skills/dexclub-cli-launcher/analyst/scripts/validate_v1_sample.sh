@@ -259,7 +259,7 @@ python3 "$EXPORT_AND_SCAN" \
   --mode summary \
   --format json >"$exact_java_export_output"
 echo "validated_output=$exact_java_export_output"
-assert_expr "$exact_java_export_output" "payload['kind'] == 'java'" "direct export_and_scan should produce java output on a fixed launcher build"
+assert_expr "$exact_java_export_output" "payload['kind'] == 'java'" "direct export_and_scan should produce java output on the published release"
 assert_expr "$exact_java_export_output" "payload['scope']['methodDescriptor'] == '$exact_descriptor'" "direct export_and_scan should keep the exact java-scoped descriptor"
 assert_expr "$exact_java_export_output" "payload['methodCallCount'] >= 5" "direct export_and_scan should report java-side method calls"
 assert_expr "$exact_java_export_output" "payload['branchLineCount'] >= 1" "direct export_and_scan should report java-side branch lines"
@@ -271,7 +271,7 @@ exact_java_input=$(cat <<JSON
 JSON
 )
 run_case "exact_java_summarize_method_logic" "summarize_method_logic" "$exact_java_input"
-assert_expr "$RESULT_DIR/exact_java_summarize_method_logic.json" "payload['status'] == 'ok'" "descriptor-aware java summarize should succeed on a fixed launcher build"
+assert_expr "$RESULT_DIR/exact_java_summarize_method_logic.json" "payload['status'] == 'ok'" "descriptor-aware java summarize should succeed on the published release"
 assert_expr "$RESULT_DIR/exact_java_summarize_method_logic.json" "len(payload['plan']['steps']) == 2" "apk-backed java summarize should plan resolve plus export steps"
 assert_expr "$RESULT_DIR/exact_java_summarize_method_logic.json" "payload['step_results'][0]['step_kind'] == 'resolve_apk_dex'" "apk-backed java summarize should resolve a target dex first"
 assert_expr "$RESULT_DIR/exact_java_summarize_method_logic.json" "payload['step_results'][1]['step_kind'] == 'export_and_scan'" "apk-backed java summarize should export after dex resolution"
