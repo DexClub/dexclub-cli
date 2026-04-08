@@ -17,25 +17,59 @@ internal class JadxDecompilerService {
         val outputDirectory = javaFile.parentFile
             ?: throw IllegalArgumentException("output must have a parent directory")
 
+        val javaCode = loadSingleJavaCode(
+            dexFile = dexFile,
+            outputDirectory = outputDirectory,
+            decompileConfig = decompileConfig,
+        )
+        javaFile.parentFile?.mkdirs()
+        javaFile.writeText(javaCode, Charsets.UTF_8)
+
+        return javaFile.absolutePath
+    }
+
+    private fun loadSingleJavaCode(
+        dexFile: File,
+        outputDirectory: File,
+        decompileConfig: JavaDecompileConfig,
+    ): String {
+        val initialCodes = loadClassCodes(
+            dexFile = dexFile,
+            outputDirectory = outputDirectory,
+            decompileConfig = decompileConfig,
+        )
+        val resolvedCodes = if (initialCodes.isEmpty() && decompileConfig.useDxInput) {
+            loadClassCodes(
+                dexFile = dexFile,
+                outputDirectory = outputDirectory,
+                decompileConfig = decompileConfig.copy(useDxInput = false),
+            )
+        } else {
+            initialCodes
+        }
+        return resolvedCodes.singleOrNull()
+            ?: throw IllegalStateException(
+                "Expected exactly one decompiled class from `${dexFile.absolutePath}`, but got ${resolvedCodes.size}",
+            )
+    }
+
+    private fun loadClassCodes(
+        dexFile: File,
+        outputDirectory: File,
+        decompileConfig: JavaDecompileConfig,
+    ): List<String> {
         val args = JadxArgs().apply {
             setInputFile(dexFile)
             outDir = outputDirectory
             codeCache = NoOpCodeCache()
             decompileConfig.applyTo(this)
         }
-
         JadxDecompiler(args).use { decompiler ->
             decompiler.load()
-            val classes = decompiler.classesWithInners.filterNot { it.isNoCode }
-            val javaClass = classes.singleOrNull()
-                ?: throw IllegalStateException(
-                    "Expected exactly one decompiled class from `$dexPath`, but got ${classes.size}",
-                )
-            javaFile.parentFile?.mkdirs()
-            javaFile.writeText(javaClass.code, Charsets.UTF_8)
+            return decompiler.classesWithInners
+                .filterNot { it.isNoCode }
+                .map { it.code }
         }
-
-        return javaFile.absolutePath
     }
 
     private fun JavaDecompileConfig.applyTo(args: JadxArgs) {
