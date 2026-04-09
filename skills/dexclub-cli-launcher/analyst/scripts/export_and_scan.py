@@ -4,12 +4,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 import tempfile
 from pathlib import Path
 
 from analyst_storage import ensure_dex_input_cache
 from code_analysis import analyze_code
+from process_exec import run_captured_process
 from scan_exported_code import format_text, select_payload
 
 
@@ -83,7 +83,16 @@ def main() -> None:
             str(export_path.resolve()),
         ],
     )
-    subprocess.run(export_command, check=True)
+    export_logs_root = output_dir / ".export-and-scan-logs" / "launcher_export"
+    execution = run_captured_process(
+        step_id="launcher_export",
+        command=export_command,
+        artifact_dir=export_logs_root,
+        payload_kind="none",
+    )
+    if execution.status != "ok":
+        message = execution.diagnostics.get("cause") or execution.diagnostics.get("message") or "Export failed."
+        raise SystemExit(str(message))
 
     report = analyze_code(
         export_path,
