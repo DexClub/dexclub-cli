@@ -14,34 +14,26 @@ It does not replace the launcher. Instead, it assumes the launcher can already e
 - `references/`: generated matcher reference and schema
 - `capabilities/`: current command-level guidance
 - `workflows/`: problem-oriented multi-step analysis playbooks
-- `scripts/`: maintenance or helper scripts owned by the analysis layer
+- `scripts/`: the stable analyst entry point plus internal helpers and maintenance scripts
 
-## Current helper scripts
+## Script roles
 
-- `scripts/build_query.py`
-  - generate common `find-class`, `find-method`, or `find-field` JSON without hand-writing nested matcher objects
-- `scripts/run_find.py`
-  - generate a common query JSON shape and immediately execute the matching `find-*` command through the launcher layer
-- `scripts/scan_exported_code.py`
-  - scan exported Java or smali for strings, numbers, calls, and field access
-  - optionally narrow the scan to a single method
-- `scripts/export_and_scan.py`
-  - call the launcher layer to export a target class from a dex file
-  - immediately run the exported-code scanner on the result
-- `scripts/resolve_apk_dex.py`
-  - extract APK dex entries and resolve which single dex contains a target class before export-based analysis
-- `scripts/plan_schema.py`
-  - define the version 1 task registry, planner constants, and shared schema defaults
-- `scripts/planner.py`
-  - normalize task inputs, run preflight checks, and emit structured execution plans
-- `scripts/runner.py`
-  - execute structured plans, capture helper subprocess output, and normalize final result payloads
-- `scripts/analyze.py`
-  - user-facing entry point for `plan` and `run` subcommands on top of the version 1 planner/runner
-- `scripts/validate_v1_sample.sh`
-  - run a repeatable sample validation pass against the current version 1 planner/runner contract
-- `scripts/generate_query_reference.py`
-  - maintenance helper for regenerating the matcher reference
+- Stable external analyst entry:
+  - `scripts/analyze.py`
+  - use `plan` and `run` as the supported analyst-facing interface on top of the version 1 planner/runner
+- Internal planner/runtime helpers:
+  - `scripts/run_find.py`
+  - `scripts/resolve_apk_dex.py`
+  - `scripts/export_and_scan.py`
+  - `scripts/planner.py`
+  - `scripts/runner.py`
+  - `scripts/plan_schema.py`
+  - `scripts/scan_exported_code.py`
+  - these scripts are helper implementation details behind `analyze.py`, not a stable external contract
+- Additional maintenance helpers:
+  - `scripts/build_query.py`
+  - `scripts/generate_query_reference.py`
+  - `scripts/validate_v1_sample.sh`
 
 ## Current scope
 
@@ -57,9 +49,9 @@ Today the analyst layer is workflow-driven. It documents how to combine the rele
 
 It does not yet provide a dedicated one-shot command for every higher-level question. When the released CLI lacks a direct primitive, the analyst layer must describe a multi-step approach instead of pretending the capability exists.
 
-## Version 1 planner entrypoint
+## Stable analyst entry point
 
-The version 1 planner layer keeps JSON as the primary stdout contract:
+The version 1 planner layer keeps JSON as the primary stdout contract. Treat `scripts/analyze.py` as the stable analyst-facing entry point; the other analyst scripts are internal helpers that may change as the planner/runner evolves.
 
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py plan \
@@ -109,6 +101,16 @@ bash ./skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh ./input
 
 Default local storage layout:
 
-- `analyze.py run` writes per-run artifacts under `build/dexclub-cli/runs/v1/<run-id>/`
-- APK / dex input caches live under `build/dexclub-cli/cache/v1/inputs/`
-- APK-backed summarize resolves `classes*.dex` into the APK cache, then exports scanned code into the run-local `exports/` directory
+- Default work root: `<repo-root>/.dexclub-cli/`
+- `analyze.py run` writes per-run artifacts under `<repo-root>/.dexclub-cli/runs/v1/<run-id>/` unless `--artifact-root` overrides it
+- Run-level files in the selected run root:
+  - `run-meta.json`
+  - `final_result.json`
+  - `run-summary.json`
+- Per-step outputs are grouped under `steps/<step-id>/`
+  - `step-result.json`
+  - `artifacts/`
+  - `raw.stdout.log`
+  - `raw.stderr.log`
+- Runs root also keeps `<repo-root>/.dexclub-cli/runs/v1/latest.json`
+- APK / dex input caches live under `<repo-root>/.dexclub-cli/cache/v1/inputs/`

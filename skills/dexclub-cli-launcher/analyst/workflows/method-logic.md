@@ -23,7 +23,23 @@ Prefer `export-java` when a higher-level control-flow summary is enough and the 
 
 Do not pretend the current released CLI has a dedicated `analyze-method` command. This workflow is intentionally multi-step.
 
-## Helper path
+## Stable analyst entry
+
+Prefer `analyze.py` for the end-to-end workflow:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type summarize_method_logic \
+  --input-json '{"input":["./inputs/app.apk"],"method_anchor":{"class_name":"com.example.TargetClass","method_name":"targetMethod"}}'
+```
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type summarize_method_logic \
+  --input-json '{"input":["./inputs/classes.dex"],"method_anchor":{"class_name":"com.example.TargetClass","method_name":"targetMethod","descriptor":"Lcom/example/TargetClass;->targetMethod()V"}}'
+```
+
+## Internal helper path
 
 For exported code:
 

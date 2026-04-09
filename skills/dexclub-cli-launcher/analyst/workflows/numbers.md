@@ -27,9 +27,19 @@ For that task, the current workflow is:
 - export code
 - inspect or scan the exported artifact outside the query layer
 
-## Helper path
+## Stable analyst entry
 
-When you already have an exported Java or smali file, use:
+To narrow methods by a known numeric constant, prefer `analyze.py`:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type search_methods_by_number \
+  --input-json '{"input":["./inputs/app.apk"],"number":"1234"}'
+```
+
+## Internal helper path
+
+When you already have an exported Java or smali file and are debugging the exported artifact directly, use:
 
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/scan_exported_code.py \

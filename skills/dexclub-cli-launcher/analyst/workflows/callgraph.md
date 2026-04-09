@@ -17,9 +17,27 @@ This workflow is best for targeted traversal, not whole-program call graph dumpi
 
 If the user asks for logic in "methods called by A" or "methods calling A", keep the scope narrow, search in layers, and export only after the candidate set becomes manageable.
 
-## Helper path
+## Stable analyst entry
 
 To search for methods that call a known anchor:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type trace_callers \
+  --input-json '{"input":["./inputs/app.apk"],"method_anchor":{"class_name":"com.example.TargetClass","method_name":"targetMethod"}}'
+```
+
+To search for direct callees of a known anchor:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type trace_callees \
+  --input-json '{"input":["./inputs/app.apk"],"method_anchor":{"class_name":"com.example.EntryClass","method_name":"entryMethod"}}'
+```
+
+## Internal helper path
+
+For low-level debugging of matcher composition, the helper script remains available:
 
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/run_find.py method \

@@ -22,6 +22,12 @@ The implementation is layered internally:
   - Query schema: `analyst/references/query-json.schema.json`
   - Capability docs: `analyst/capabilities/`
   - Workflow docs: `analyst/workflows/`
+- Stable analyst entry point:
+  - `analyst/scripts/analyze.py`
+- Internal analyst helpers:
+  - `analyst/scripts/run_find.py`
+  - `analyst/scripts/resolve_apk_dex.py`
+  - `analyst/scripts/export_and_scan.py`
 
 ## Recommended operating model
 
@@ -44,6 +50,10 @@ The implementation is layered internally:
    - Numbers workflow: `analyst/workflows/numbers.md`
    - Method logic workflow: `analyst/workflows/method-logic.md`
    - Call graph workflow: `analyst/workflows/callgraph.md`
+4. Treat `analyst/scripts/analyze.py` as the stable analyst-facing script entry point.
+   - Use `plan` when you only need the structured plan.
+   - Use `run` when you want the planner/runner to execute the workflow and emit the final JSON result.
+   - Do not treat `run_find.py`, `resolve_apk_dex.py`, or `export_and_scan.py` as stable external interfaces; they are internal helpers behind `analyze.py`.
 
 ## Launcher rules
 
@@ -88,6 +98,20 @@ bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- exp
 
 ## Analyst guidance
 
+Stable entry examples:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py plan \
+  --task-type search_methods_by_string \
+  --input-json '{"input":["./inputs/app.apk"],"string":"needle"}'
+```
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type summarize_method_logic \
+  --input-json '{"input":["./inputs/app.apk"],"method_anchor":{"class_name":"com.example.Target","method_name":"login"}}'
+```
+
 - Prefer `Contains` with `ignoreCase: true` for `usingStrings` unless exact matching is explicitly required.
 - For class, method, and field identifiers, `Equals` is usually the better default.
 - When the user asks which methods call a known target method, prefer `invokeMethods` on candidate callers.
@@ -102,3 +126,7 @@ bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- exp
 - Remote failure state is isolated by repository and platform.
 - The scripts normalize the current machine to `linux|macos|windows` and `x64|arm64`, then look for `dexclub-cli-<os>-<arch>.zip`.
 - If the latest release does not publish a matching asset for the current platform, the launcher exits non-zero after printing the unsupported-platform message. Preserve that message exactly.
+- The default analyst work root is `<repo-root>/.dexclub-cli/`.
+  - `analyze.py run` writes per-run artifacts under `<repo-root>/.dexclub-cli/runs/v1/<run-id>/` unless `--artifact-root` overrides it.
+  - Input caches live under `<repo-root>/.dexclub-cli/cache/v1/inputs/`.
+  - The run root now contains `run-meta.json`, `final_result.json`, `run-summary.json`, and per-step data under `steps/<step-id>/`.

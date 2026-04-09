@@ -34,6 +34,18 @@ It provides:
 - string/class/method/field search support through the original CLI subcommands
 - an explicit unsupported-platform failure message
 
+## Maintenance Flow
+
+The repository copy under `skills/dexclub-cli-launcher/` is the source of truth for this skill.
+
+When the skill needs updates:
+
+- modify the repository copy first
+- finish the related code, docs, and minimal validation in the repository
+- only then sync the completed result into the installed skill copy under `$CODEX_HOME/skills/dexclub-cli-launcher`
+
+Do not edit the installed skill copy directly as the primary change path. Otherwise the repository version and the installed version drift immediately, and users who fetch the repository will still get stale skill files.
+
 ## Architecture Roadmap
 
 This skill is expected to keep growing into a higher-level reverse-analysis assistant over time.

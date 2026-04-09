@@ -5,15 +5,15 @@ This page records observed version 1 `analyze.py run` results from the analyst l
 These examples were captured against:
 
 - sample APK:
-  - `<sample-apk-path>`
+- `<sample-apk-path>`
 - sample dex for `MainActivity#onCreate`:
   - discovered by `scripts/validate_v1_sample.sh` from the APK's extracted `classes*.dex`
 
 Notes:
 
 - `run_id`, `artifact_root`, and export paths vary by machine and by run.
-- `analyze.py run` now writes per-run artifacts under `build/dexclub-cli/runs/v1/<run-id>/`.
-- APK-backed summarize now reuses `build/dexclub-cli/cache/v1/inputs/apk/<input-hash>/extracted-dex/` for resolved `classes*.dex`.
+- `analyze.py run` now writes per-run artifacts under `<repo-root>/.dexclub-cli/runs/v1/<run-id>/`.
+- APK-backed summarize now reuses `<repo-root>/.dexclub-cli/cache/v1/inputs/apk/<input-hash>/extracted-dex/` for resolved `classes*.dex`.
 - `stdout` in `step_results[]` is preserved exactly as captured from helper scripts, including current DexKit info lines.
 - For full current sample outputs, run `scripts/validate_v1_sample.sh`; it keeps the JSON files under its reported temporary `results_dir`.
 - `summarize_method_logic` accepts either one direct dex input or one APK input. When the input is an APK, the planner inserts a `resolve_apk_dex` step before export.
@@ -43,9 +43,9 @@ Observed result excerpt:
       "result": {
         "class_name": "com.shadcn.ui.compose.MainActivity",
         "candidate_dex_paths": [
-          "build/dexclub-cli/cache/v1/inputs/apk/<input-hash>/extracted-dex/classes4.dex"
+          "<repo-root>/.dexclub-cli/cache/v1/inputs/apk/<input-hash>/extracted-dex/classes4.dex"
         ],
-        "resolved_dex_path": "build/dexclub-cli/cache/v1/inputs/apk/<input-hash>/extracted-dex/classes4.dex"
+        "resolved_dex_path": "<repo-root>/.dexclub-cli/cache/v1/inputs/apk/<input-hash>/extracted-dex/classes4.dex"
       }
     },
     {
@@ -57,7 +57,7 @@ Observed result excerpt:
           "method": "onCreate"
         },
         "method_call_count": 4,
-        "export_path": "build/dexclub-cli/runs/v1/<run-id>/exports/com_shadcn_ui_compose_MainActivity.smali"
+        "export_path": "<repo-root>/.dexclub-cli/runs/v1/<run-id>/steps/step-2/artifacts/com_shadcn_ui_compose_MainActivity.smali"
       }
     }
   ],
@@ -91,9 +91,9 @@ Observed result excerpt:
       "result": {
         "class_name": "androidx.compose.foundation.ImageKt",
         "candidate_dex_paths": [
-          "build/dexclub-cli/cache/v1/inputs/apk/<input-hash>/extracted-dex/classes.dex"
+          "<repo-root>/.dexclub-cli/cache/v1/inputs/apk/<input-hash>/extracted-dex/classes.dex"
         ],
-        "resolved_dex_path": "build/dexclub-cli/cache/v1/inputs/apk/<input-hash>/extracted-dex/classes.dex"
+        "resolved_dex_path": "<repo-root>/.dexclub-cli/cache/v1/inputs/apk/<input-hash>/extracted-dex/classes.dex"
       }
     },
     {
@@ -113,7 +113,7 @@ Observed result excerpt:
         "structured_summary": {
           "supported": false
         },
-        "export_path": "build/dexclub-cli/runs/v1/<run-id>/exports/androidx_compose_foundation_ImageKt.java"
+        "export_path": "<repo-root>/.dexclub-cli/runs/v1/<run-id>/steps/step-2/artifacts/androidx_compose_foundation_ImageKt.java"
       }
     }
   ],
@@ -320,7 +320,7 @@ Observed result excerpt:
       "result": {
         "kind": "smali",
         "scope": {
-          "path": "build/dexclub-cli/runs/v1/<run-id>/exports/com_shadcn_ui_compose_MainActivity.smali",
+          "path": "<repo-root>/.dexclub-cli/runs/v1/<run-id>/steps/step-1/artifacts/com_shadcn_ui_compose_MainActivity.smali",
           "method": "onCreate",
           "line_count": 36,
           "start_line": 54,
@@ -388,7 +388,7 @@ Observed result excerpt:
           }
         ],
         "field_accesses": [],
-        "export_path": "build/dexclub-cli/runs/v1/<run-id>/exports/com_shadcn_ui_compose_MainActivity.smali"
+        "export_path": "<repo-root>/.dexclub-cli/runs/v1/<run-id>/steps/step-1/artifacts/com_shadcn_ui_compose_MainActivity.smali"
       }
     }
   ],
@@ -425,7 +425,7 @@ Observed result excerpt:
           "method": "Image"
         },
         "method_call_count": 9,
-        "export_path": "build/dexclub-cli/runs/v1/<run-id>/exports/androidx_compose_foundation_ImageKt.smali"
+        "export_path": "<repo-root>/.dexclub-cli/runs/v1/<run-id>/steps/step-1/artifacts/androidx_compose_foundation_ImageKt.smali"
       }
     }
   ],
@@ -497,7 +497,7 @@ Observed result excerpt:
             }
           ]
         },
-        "export_path": "build/dexclub-cli/runs/v1/<run-id>/exports/androidx_compose_foundation_ImageKt.smali"
+        "export_path": "<repo-root>/.dexclub-cli/runs/v1/<run-id>/steps/step-1/artifacts/androidx_compose_foundation_ImageKt.smali"
       }
     }
   ],

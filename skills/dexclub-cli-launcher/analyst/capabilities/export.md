@@ -29,9 +29,21 @@ bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- exp
   --output ./artifacts/TargetClass.java
 ```
 
-## Analyst helpers
+## Stable analyst entry
 
-If you already have a dex input and want export plus immediate scanning, use:
+For method-level logic analysis, prefer `analyze.py`:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type summarize_method_logic \
+  --input-json '{"input":["./inputs/classes.dex"],"method_anchor":{"class_name":"com.example.TargetClass","method_name":"targetMethod"}}'
+```
+
+If the input is an APK, `analyze.py` can insert the dex-resolution step before export.
+
+## Internal helpers
+
+If you already have a dex input and need direct export-plus-scan debugging, `export_and_scan.py` remains available as an internal helper:
 
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py \

@@ -36,7 +36,25 @@ bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- fin
   --query-json '{"matcher":{"usingStrings":[{"value":"login","matchType":"Contains","ignoreCase":true}]}}'
 ```
 
-## Analyst helpers
+## Stable analyst entry
+
+For common analyst search tasks, prefer `analyze.py`:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type search_methods_by_string \
+  --input-json '{"input":["./inputs/app.apk"],"string":"login","declared_class":"com.example.MainActivity"}'
+```
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type search_methods_by_number \
+  --input-json '{"input":["./inputs/app.apk"],"number":"1234","declared_class":"com.example.MainActivity"}'
+```
+
+## Internal helpers
+
+These scripts remain available for maintenance or advanced debugging, but they are not the stable analyst-facing contract.
 
 Build query JSON:
 
