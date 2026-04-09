@@ -17,6 +17,7 @@ from analyst_storage import (
     ensure_default_run_root,
     ensure_dex_input_cache,
 )
+from process_exec import extract_json_payload, run_captured_process
 from output_contract import validate_latest_index, validate_run_summary
 from plan_schema import RUN_ARTIFACT_ROOT_PLACEHOLDER, SCHEMA_VERSION, TASK_REGISTRY
 
@@ -47,11 +48,6 @@ def ensure_run_root(*, run_id: str, artifact_root: str | None = None) -> Path:
 def write_json(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-
-def write_text(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
 
 
 def ensure_step_root(run_root: Path, step_id: str) -> Path:
@@ -117,22 +113,6 @@ def replace_placeholder(value: object, artifact_root: str) -> object:
     if isinstance(value, dict):
         return {key: replace_placeholder(item, artifact_root) for key, item in value.items()}
     return value
-
-
-def extract_json_payload(stdout: str) -> object:
-    lines = stdout.splitlines()
-    for start in range(len(lines)):
-        candidate = "\n".join(lines[start:]).strip()
-        if not candidate or candidate[0] not in "[{":
-            continue
-        try:
-            return json.loads(candidate)
-        except json.JSONDecodeError:
-            continue
-    stripped = stdout.strip()
-    if stripped and stripped[0] in "[{":
-        return json.loads(stripped)
-    raise ValueError("Unable to locate a JSON payload in command stdout.")
 
 
 def normalize_run_find_items(raw_items: object) -> list[dict[str, object]]:
@@ -961,46 +941,35 @@ def execute_step(
     else:
         raise ValueError(f"Unsupported step kind: {step['kind']}")
 
-    completed = subprocess.run(command, capture_output=True, text=True)
-    step_artifacts: list[dict[str, object]] = []
+    process_result = run_captured_process(
+        step_id=step_id,
+        command=command,
+        artifact_dir=step_root,
+        payload_kind="json",
+        extractor=extract_json_payload,
+    )
+    step_artifacts: list[dict[str, object]] = list(process_result.artifacts)
     recommendations: list[dict[str, object]] = []
     evidence: list[dict[str, object]] = []
     extra_limits: list[str] = []
-    raw_stdout_path = step_root / "raw.stdout.log"
-    raw_stderr_path = step_root / "raw.stderr.log"
-    write_text(raw_stdout_path, completed.stdout)
-    write_text(raw_stderr_path, completed.stderr)
-    step_artifacts.extend(
-        [
-            {
-                "type": "raw_stdout",
-                "path": str(raw_stdout_path.resolve()),
-                "produced_by_step": step_id,
-            },
-            {
-                "type": "raw_stderr",
-                "path": str(raw_stderr_path.resolve()),
-                "produced_by_step": step_id,
-            },
-        ]
-    )
 
     step_result: dict[str, object] = {
         "step_id": step_id,
         "step_kind": step["kind"],
         "step_root": str(step_root.resolve()),
-        "status": "execution_error" if completed.returncode else "empty",
-        "exit_code": completed.returncode,
-        "command": command,
-        "stdout": completed.stdout,
-        "stderr": completed.stderr,
+        "status": "execution_error" if process_result.exit_code else "empty",
+        "exit_code": process_result.exit_code,
+        "command": process_result.command,
+        "stdout": process_result.stdout,
+        "stderr": process_result.stderr,
+        "raw_process": process_result.raw_process,
         "artifacts": step_artifacts,
         "result": {},
     }
 
-    if completed.returncode == 0:
+    if process_result.status == "ok":
         try:
-            payload = extract_json_payload(completed.stdout)
+            payload = process_result.payload
             if step["kind"] == "run_find":
                 status, normalized_result, recommendations, evidence, extra_limits = normalize_run_find_result(
                     task_type=task_type,
@@ -1023,9 +992,14 @@ def execute_step(
             step_result["result"] = normalized_result
         except Exception as exc:
             step_result["status"] = "execution_error"
-            step_result["stderr"] = (completed.stderr + f"\nNormalization error: {exc}").strip()
+            step_result["stderr"] = (process_result.stderr + f"\nNormalization error: {exc}").strip()
+    elif process_result.status == "normalization_error":
+        step_result["status"] = "execution_error"
+        step_result["stderr"] = (
+            process_result.stderr + f"\nNormalization error: {process_result.diagnostics.get('cause', '')}"
+        ).strip()
 
-    if completed.returncode != 0 or step_result["status"] == "execution_error":
+    if process_result.status != "ok" or step_result["status"] == "execution_error":
         step_result_path = step_root / "step-result.json"
         write_json(step_result_path, step_result)
         step_artifacts.append(

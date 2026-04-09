@@ -161,6 +161,7 @@
 | A-10 | analyst 工作目录产物与输入缓存落地 | 已完成 | 提交 `c102896`。后续已把当前真实实现默认 run 根目录切到 `.dexclub-cli/runs/v1`，输入缓存切到 `.dexclub-cli/cache/v1/inputs`，并把单步结果收口到 `steps/<step-id>/`；更完整的目标方案另见 [OUTPUT_NORMALIZATION.md](./OUTPUT_NORMALIZATION.md) |
 | A-11 | run 接续索引最小落地 | 已完成 | 本次会话完成。当前真实实现已补 `run-summary.json`、`latest.json`、最小 `step_index` 与 `key_artifacts`，并覆盖 `run_plan` 与 `analyze.py run` 的 `input_error` 落盘路径 |
 | A-12 | run 接续对象轻量校验 | 已完成 | 本次会话完成。已新增 `output_contract.py`，并在写 `run-summary.json`、`latest.json` 前做最小字段与枚举校验 |
+| A-13 | 公共执行捕获层最小抽取 | 已完成 | 本次会话完成。已新增 `process_exec.py`，并让 `runner.py` 与 `resolve_apk_dex.py` 复用同一套执行、raw log 与 JSON payload 提取逻辑 |
 
 ## 最近一次状态流转
 
@@ -242,6 +243,14 @@
     - 已新增 [`output_contract.py`](../../skills/dexclub-cli-launcher/analyst/scripts/output_contract.py)
     - [`runner.py`](../../skills/dexclub-cli-launcher/analyst/scripts/runner.py) 已在写 `run-summary.json`、`latest.json` 前调用轻量 validator
     - 已完成成功链路与 `input_error` 链路下的 validator 通过验证
+- `A-13`
+  - `待开始 -> 进行中`
+  - `进行中 -> 已完成`
+  - 完成依据
+    - 已新增 [`process_exec.py`](../../skills/dexclub-cli-launcher/analyst/scripts/process_exec.py)
+    - [`runner.py`](../../skills/dexclub-cli-launcher/analyst/scripts/runner.py) 已复用公共执行捕获层，不再内联重复的 raw log 与 JSON 提取流程
+    - [`resolve_apk_dex.py`](../../skills/dexclub-cli-launcher/analyst/scripts/resolve_apk_dex.py) 已复用同一套执行与 payload 提取逻辑
+    - 已完成 `run_plan` 成功链路、`resolve_apk_dex.py` 类定位链路与 `analyze.py run` 输入错误链路的最小验证
 
 - 本次会话补充
   - 当前真实实现默认内部状态根已从 `build/dexclub-cli/` 切到工作区 `.dexclub-cli/`
@@ -249,7 +258,7 @@
   - `final_result.json` 已回收到 run 根，不再写入 run 根下的 `results/` 目录
   - 当前真实实现已补 `run-summary.json`、`latest.json`、最小 `step_index` 与 `key_artifacts`
   - 当前真实实现已补 `output_contract.py`，并对 `run-summary.json`、`latest.json` 落地前做最小校验
-  - 当前仍未落地公共执行器
+  - 当前真实实现已补 `process_exec.py`，并让 `runner.py` 与 `resolve_apk_dex.py` 复用同一套执行捕获逻辑
 
 ## 下一步推荐入口
 

@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
 import zipfile
 from pathlib import Path
 
 from analyst_storage import ensure_apk_input_cache
+from process_exec import run_captured_process
 
 
 def parse_args() -> argparse.Namespace:
@@ -39,23 +39,7 @@ def dex_entry_sort_key(name: str) -> tuple[int, str]:
     return (10**9, name)
 
 
-def extract_json_payload(stdout: str) -> object:
-    lines = stdout.splitlines()
-    for start in range(len(lines)):
-        candidate = "\n".join(lines[start:]).strip()
-        if not candidate or candidate[0] not in "[{":
-            continue
-        try:
-            return json.loads(candidate)
-        except json.JSONDecodeError:
-            continue
-    stripped = stdout.strip()
-    if stripped and stripped[0] in "[{":
-        return json.loads(stripped)
-    raise ValueError("Unable to locate a JSON payload in stdout.")
-
-
-def run_class_lookup(dex_path: Path, class_name: str) -> bool:
+def run_class_lookup(dex_path: Path, class_name: str, *, artifact_dir: Path) -> bool:
     run_find_path = Path(__file__).resolve().parent / "run_find.py"
     command = [
         sys.executable,
@@ -73,8 +57,15 @@ def run_class_lookup(dex_path: Path, class_name: str) -> bool:
         "Equals",
         "--no-ignore-case",
     ]
-    completed = subprocess.run(command, capture_output=True, text=True, check=True)
-    payload = extract_json_payload(completed.stdout)
+    result = run_captured_process(
+        step_id=f"class_lookup_{dex_path.stem}",
+        command=command,
+        artifact_dir=artifact_dir,
+        payload_kind="json",
+    )
+    if result.status != "ok":
+        raise RuntimeError(f"class lookup failed for {dex_path.name}: {result.diagnostics.get('cause')}")
+    payload = result.payload
     return isinstance(payload, list) and len(payload) > 0
 
 
@@ -105,6 +96,7 @@ def main() -> None:
             raise SystemExit("Failed to build extracted dex cache for the input APK.")
         output_dir = cache_ref.extracted_dex_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
+    lookup_logs_root = output_dir / ".resolve-apk-dex-logs"
 
     dex_entries: list[str] = []
     with zipfile.ZipFile(apk_path) as apk_zip:
@@ -126,7 +118,11 @@ def main() -> None:
                 with apk_zip.open(entry_name) as src, extracted_path.open("wb") as dst:
                     dst.write(src.read())
             extracted_dex_paths.append(str(extracted_path.resolve()))
-            if run_class_lookup(extracted_path, args.class_name):
+            if run_class_lookup(
+                extracted_path,
+                args.class_name,
+                artifact_dir=lookup_logs_root / extracted_path.stem,
+            ):
                 candidate_dex_paths.append(str(extracted_path.resolve()))
 
     payload = {
