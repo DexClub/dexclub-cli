@@ -13,7 +13,7 @@ Notes:
 
 - `run_id`, `artifact_root`, and export paths vary by machine and by run.
 - `analyze.py run` now writes per-run artifacts under `<workspace>/.dexclub-cli/runs/v1/<run-id>/`.
-- `analyze.py run` may reuse prior `resolve_apk_dex` / `export_and_scan` step results through `<workspace>/.dexclub-cli/runs/v1/reusable-step-index-v1.json`.
+- `analyze.py run` may reuse prior `run_find` / `resolve_apk_dex` / `export_and_scan` step results through `<workspace>/.dexclub-cli/runs/v1/reusable-step-index-v1.json`.
 - APK-backed summarize now reuses `<workspace>/.dexclub-cli/cache/v1/inputs/apk/<input-hash>/extracted-dex/` for resolved `classes*.dex`.
 - `resolve_apk_dex` now keeps `class-dex-index-v1.json` under the APK cache directory and may report `cache_hit`, `lookup_strategy`, and `scanned_dex_count`.
 - `export_and_scan.py` now keeps derived export/scan cache entries under `<workspace>/.dexclub-cli/cache/v1/export-and-scan/<dex-sha256>/<request-hash>/` and may report `cacheHit` / `cachePath` on direct helper runs.

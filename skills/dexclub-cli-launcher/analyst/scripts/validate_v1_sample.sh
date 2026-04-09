@@ -306,6 +306,35 @@ assert_expr "$step_reuse_second_output" "payload['step_results'][1]['reused_from
 assert_expr "$step_reuse_second_output" "payload['step_results'][1]['result']['export_path'] != '$step_reuse_first_export_path'" "reused export_and_scan should materialize a fresh run-local export artifact"
 assert_expr "$step_reuse_second_output" "Path(payload['step_results'][1]['result']['export_path']).is_file()" "reused export_and_scan should keep the rematerialized export artifact"
 
+run_find_reuse_work_root="$TMP_ROOT/run-find-reuse-work"
+run_find_reuse_cache_root="$TMP_ROOT/run-find-reuse-cache"
+run_find_reuse_input=$(cat <<JSON
+{"input":["$SAMPLE_APK"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate"},"limit":5}
+JSON
+)
+run_find_reuse_first_output="$RESULT_DIR/run_find_reuse_first_run.json"
+DEXCLUB_ANALYST_WORK_ROOT="$run_find_reuse_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$run_find_reuse_cache_root" \
+python3 "$ANALYZE" run --task-type trace_callees --input-json "$run_find_reuse_input" >"$run_find_reuse_first_output"
+echo "validated_output=$run_find_reuse_first_output"
+run_find_reuse_first_run_id="$(python3 - "$run_find_reuse_first_output" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(payload["run_id"])
+PY
+)"
+run_find_reuse_second_output="$RESULT_DIR/run_find_reuse_second_run.json"
+DEXCLUB_ANALYST_WORK_ROOT="$run_find_reuse_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$run_find_reuse_cache_root" \
+python3 "$ANALYZE" run --task-type trace_callees --input-json "$run_find_reuse_input" >"$run_find_reuse_second_output"
+echo "validated_output=$run_find_reuse_second_output"
+assert_expr "$run_find_reuse_second_output" "payload['step_results'][0]['reused_from']['run_id'] == '$run_find_reuse_first_run_id'" "second trace_callees run should reuse the prior run_find step"
+assert_expr "$run_find_reuse_second_output" "payload['step_results'][0]['result']['relation_direction'] == 'callees'" "reused run_find step should preserve the normalized relation payload"
+assert_expr "$run_find_reuse_second_output" 'any(item["method_name"] == "setContent$default" for item in payload["step_results"][0]["result"]["items"])' "reused run_find step should preserve the original hit set"
+
 overflow_input=$(cat <<JSON
 {"input":["$SAMPLE_APK"],"string":"description"}
 JSON

@@ -113,7 +113,7 @@ Default local storage layout:
   - `raw.stdout.log`
   - `raw.stderr.log`
 - Runs root also keeps `<workspace>/.dexclub-cli/runs/v1/latest.json`
-- Runs root also keeps `<workspace>/.dexclub-cli/runs/v1/reusable-step-index-v1.json` for cross-run `resolve_apk_dex` / `export_and_scan` reuse
+- Runs root also keeps `<workspace>/.dexclub-cli/runs/v1/reusable-step-index-v1.json` for cross-run `run_find` / `resolve_apk_dex` / `export_and_scan` reuse
 - APK / dex input caches live under `<workspace>/.dexclub-cli/cache/v1/inputs/`
 - APK-backed class resolution also keeps a `class-dex-index-v1.json` cache under the APK input cache directory
 - `export_and_scan.py` also keeps derived export/scan cache entries under `<workspace>/.dexclub-cli/cache/v1/export-and-scan/`

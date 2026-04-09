@@ -493,11 +493,26 @@ def normalize_resolve_apk_dex_result(
 
 def build_step_reuse_key(
     *,
+    task_type: str,
     step_kind: str,
     step_args: dict[str, object],
     step_cache_keys: list[str],
 ) -> str | None:
-    if step_kind == "resolve_apk_dex":
+    if step_kind == "run_find":
+        semantic_args = {
+            "inputs": step_cache_keys or step_args.get("inputs"),
+            "kind": step_args.get("kind"),
+            "declared_class": step_args.get("declared_class"),
+            "search_package": step_args.get("search_package"),
+            "using_string": step_args.get("using_string"),
+            "using_number": step_args.get("using_number"),
+            "invoke_method": step_args.get("invoke_method"),
+            "caller_method": step_args.get("caller_method"),
+            "method_name": step_args.get("method_name"),
+            "raw_query_json": step_args.get("raw_query_json"),
+            "limit": step_args.get("limit"),
+        }
+    elif step_kind == "resolve_apk_dex":
         semantic_args = {
             "class_name": step_args.get("class_name"),
             "input_cache_keys": step_cache_keys,
@@ -517,6 +532,7 @@ def build_step_reuse_key(
     return stable_hash(
         {
             "schema_version": SCHEMA_VERSION,
+            "task_type": task_type,
             "step_kind": step_kind,
             "args": semantic_args,
         }
@@ -1098,6 +1114,7 @@ def materialize_reused_export(
 
 def build_reused_step_result(
     *,
+    task_type: str,
     step: dict[str, object],
     step_root: Path,
     command: list[str],
@@ -1110,7 +1127,16 @@ def build_reused_step_result(
     source_result = source_step_result.get("result")
     if not isinstance(source_result, dict):
         return None
-    if step_kind == "export_and_scan":
+    if step_kind == "run_find":
+        current_result = deep_copy_mapping(source_result)
+        items = current_result.get("items", [])
+        evidence_kind = "relation_hit" if task_type in {"trace_callers", "trace_callees"} else "method_hit"
+        evidence = build_hit_evidence(
+            step_id=str(step["step_id"]),
+            items=items if isinstance(items, list) else [],
+            kind=evidence_kind,
+        )
+    elif step_kind == "export_and_scan":
         current_result = materialize_reused_export(
             step_args=step_args,
             result=source_result,
@@ -1291,6 +1317,7 @@ def execute_step(
         raise ValueError(f"Unsupported step kind: {step['kind']}")
 
     reuse_key = build_step_reuse_key(
+        task_type=task_type,
         step_kind=str(step["kind"]),
         step_args=step_args,
         step_cache_keys=step_cache_keys,
@@ -1300,6 +1327,7 @@ def execute_step(
         if reusable_entry is not None:
             reuse_entry, source_step_result = reusable_entry
             reused_result = build_reused_step_result(
+                task_type=task_type,
                 step=step,
                 step_root=step_root,
                 command=command,
