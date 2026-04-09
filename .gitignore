@@ -1,6 +1,7 @@
 /.gradle/
 /.kotlin/
 /build/
+/.dexclub-cli/
 
 **/build/
 

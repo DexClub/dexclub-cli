@@ -8,7 +8,7 @@ EXPORT_AND_SCAN="$SCRIPT_DIR/export_and_scan.py"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
 SAMPLE_APK="${1:-${DEXCLUB_ANALYST_SAMPLE_APK:-}}"
-TMP_BASE_DIR="${DEXCLUB_ANALYST_VALIDATE_TMP_BASE:-$REPO_ROOT/build/dexclub-cli/tmp}"
+TMP_BASE_DIR="${DEXCLUB_ANALYST_VALIDATE_TMP_BASE:-$REPO_ROOT/.dexclub-cli/tmp}"
 
 if [[ -z "$SAMPLE_APK" ]]; then
   cat >&2 <<'EOF'

@@ -11,7 +11,7 @@ import zipfile
 from pathlib import Path
 
 STORAGE_VERSION = "v1"
-WORK_ROOT_PARTS = ("build", "dexclub-cli")
+WORK_ROOT_PARTS = (".dexclub-cli",)
 INPUTS_CACHE_PARTS = ("cache", STORAGE_VERSION, "inputs")
 RUNS_ROOT_PARTS = ("runs", STORAGE_VERSION)
 

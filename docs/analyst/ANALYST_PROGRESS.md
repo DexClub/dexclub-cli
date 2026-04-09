@@ -55,8 +55,8 @@
     - 当前按 `method_calls / strings / numbers / field_accesses / branch_hotspots` 分组，并补充行簇聚合
   - 当前本地已落地的 analyst 存储结构
     - 下面这些是“当前已实现状态”，不是新的目标目录方案
-    - `analyze.py run` 默认写入 `build/dexclub-cli/runs/v1/<run-id>/`
-    - APK / dex 输入缓存写入 `build/dexclub-cli/cache/v1/inputs/`
+    - `analyze.py run` 默认写入 `.dexclub-cli/runs/v1/<run-id>/`
+    - APK / dex 输入缓存写入 `.dexclub-cli/cache/v1/inputs/`
     - run 目录会写入 `run-meta.json`
     - 输入缓存目录会写入 `input-meta.json`
 - 当前验证脚本
@@ -154,7 +154,7 @@
 | A-07 | 更强的 summary 结构化输出 | 已完成 | 本次会话完成。新增 `structured_summary`，包含 `basic_blocks / call_clusters / constant_clusters` |
 | A-08 | 基于结构化摘要的局部片段提取 | 已完成 | 本次会话完成。新增 `focus_snippets`，按高信号 block / cluster 回抽原始 smali 片段 |
 | A-09 | `export-java` 导出失败定位与修复 | 已完成 | 本次会话完成。根因包括 fat jar 中缺失 Jadx `dex-input` service 声明，以及 Java 导出时在 decompiler 生命周期外读取 `JavaClass.code` |
-| A-10 | analyst 工作目录产物与输入缓存落地 | 已完成 | 提交 `c102896`。当前真实实现默认 run 根目录已切到 `build/dexclub-cli/runs/v1`，输入缓存已切到 `build/dexclub-cli/cache/v1/inputs`，并完成计划要求的最小验证；后续目标方案另见 [OUTPUT_NORMALIZATION.md](./OUTPUT_NORMALIZATION.md) |
+| A-10 | analyst 工作目录产物与输入缓存落地 | 已完成 | 提交 `c102896`。后续已把当前真实实现默认 run 根目录切到 `.dexclub-cli/runs/v1`，输入缓存切到 `.dexclub-cli/cache/v1/inputs`；更完整的目标方案另见 [OUTPUT_NORMALIZATION.md](./OUTPUT_NORMALIZATION.md) |
 
 ## 最近一次状态流转
 
@@ -217,11 +217,15 @@
   - `待开始 -> 进行中`
   - `进行中 -> 已完成`
   - 完成依据
-    - [`runner.py`](../../skills/dexclub-cli-launcher/analyst/scripts/runner.py) 已把当前真实实现的默认 run 根目录切到 `build/dexclub-cli/runs/v1`
+    - [`runner.py`](../../skills/dexclub-cli-launcher/analyst/scripts/runner.py) 已把当前真实实现的默认 run 根目录切到 `.dexclub-cli/runs/v1`
     - [`analyst_storage.py`](../../skills/dexclub-cli-launcher/analyst/scripts/analyst_storage.py) 已补 APK / dex 输入缓存、`input-meta.json` 与原子落盘
     - 已完成同 APK 连续执行复用、删 `runs/` 不影响缓存、删 `cache/` 可重建的最小验证
     - `README`、样例文档与进度文档已同步当时的存储口径
     - 代码与文档已提交到 `c102896`
+
+- 本次会话补充
+  - 当前真实实现默认内部状态根已从 `build/dexclub-cli/` 切到工作区 `.dexclub-cli/`
+  - 这一步只完成“工作区根迁移”，尚未落地 `steps/<step-id>/` 收口、`latest.json`、`run-summary.json`、轻量 validator 或公共执行器
 
 ## 下一步推荐入口
 
