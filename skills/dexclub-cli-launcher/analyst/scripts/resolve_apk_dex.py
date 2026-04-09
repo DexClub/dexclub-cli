@@ -7,7 +7,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-from analyst_storage import ensure_apk_input_cache
+from analyst_storage import ensure_apk_input_cache, inputs_cache_root
 from process_exec import run_captured_process
 
 
@@ -128,6 +128,9 @@ def main() -> None:
     payload = {
         "apk_path": str(apk_path),
         "class_name": args.class_name,
+        "artifact_root": str(output_dir.resolve()),
+        "cache_root": str(inputs_cache_root().resolve()),
+        "temporary_paths": [],
         "output_dir": str(output_dir.resolve()),
         "candidate_dex_paths": candidate_dex_paths,
         "extracted_dex_paths": extracted_dex_paths,

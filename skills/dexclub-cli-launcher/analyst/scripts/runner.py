@@ -16,6 +16,7 @@ from analyst_storage import (
     ensure_apk_input_cache,
     ensure_default_run_root,
     ensure_dex_input_cache,
+    inputs_cache_root,
 )
 from process_exec import extract_json_payload, run_captured_process
 from output_contract import validate_latest_index, validate_run_summary, validate_step_result_envelope
@@ -74,6 +75,8 @@ def build_analysis_error_result(
         "status": status,
         "task_type": task_type,
         "artifact_root": artifact_root,
+        "cache_root": str(inputs_cache_root().resolve()),
+        "temporary_paths": [],
         "plan": plan or {},
         "step_results": [],
         "summary": {
@@ -1257,6 +1260,8 @@ def finalize_run_result(
         "status": status,
         "task_type": task_type,
         "artifact_root": str(artifact_root.resolve()),
+        "cache_root": str(inputs_cache_root().resolve()),
+        "temporary_paths": [],
         "plan": plan,
         "step_results": step_results,
         "summary": {

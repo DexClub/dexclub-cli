@@ -126,7 +126,10 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
 - Remote failure state is isolated by repository and platform.
 - The scripts normalize the current machine to `linux|macos|windows` and `x64|arm64`, then look for `dexclub-cli-<os>-<arch>.zip`.
 - If the latest release does not publish a matching asset for the current platform, the launcher exits non-zero after printing the unsupported-platform message. Preserve that message exactly.
-- The default analyst work root is `<repo-root>/.dexclub-cli/`.
-  - `analyze.py run` writes per-run artifacts under `<repo-root>/.dexclub-cli/runs/v1/<run-id>/` unless `--artifact-root` overrides it.
-  - Input caches live under `<repo-root>/.dexclub-cli/cache/v1/inputs/`.
+- The default analyst work root is `<workspace>/.dexclub-cli/`.
+  - `analyze.py run` writes per-run artifacts under `<workspace>/.dexclub-cli/runs/v1/<run-id>/` unless `--artifact-root` overrides it.
+  - Input caches live under `<workspace>/.dexclub-cli/cache/v1/inputs/`.
   - The run root now contains `run-meta.json`, `final_result.json`, `run-summary.json`, and per-step data under `steps/<step-id>/`.
+  - Override the work root with `DEXCLUB_ANALYST_WORK_ROOT` when the current workspace should not own `.dexclub-cli/`.
+  - Override the cache root with `DEXCLUB_ANALYST_CACHE_DIR` when input caches should live outside the default work root.
+  - Direct helper runs such as `export_and_scan.py` now allocate their default output directory under the analyst work root instead of the anonymous system temp directory.

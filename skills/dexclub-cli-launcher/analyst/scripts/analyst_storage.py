@@ -5,15 +5,19 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 import shutil
+import tempfile
 import uuid
 import zipfile
 from pathlib import Path
 
 STORAGE_VERSION = "v1"
 WORK_ROOT_PARTS = (".dexclub-cli",)
-INPUTS_CACHE_PARTS = ("cache", STORAGE_VERSION, "inputs")
+DEFAULT_CACHE_ROOT_PARTS = ("cache",)
+INPUTS_CACHE_PARTS = (STORAGE_VERSION, "inputs")
 RUNS_ROOT_PARTS = ("runs", STORAGE_VERSION)
+TMP_ROOT_PARTS = ("tmp",)
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,12 +35,32 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def repo_root() -> Path:
-    return Path(__file__).resolve().parents[4]
+def _resolve_configured_dir(env_name: str) -> Path | None:
+    raw_value = os.environ.get(env_name)
+    if raw_value is None:
+        return None
+    stripped = raw_value.strip()
+    if not stripped:
+        return None
+    return Path(stripped).expanduser().resolve()
+
+
+def workspace_root() -> Path:
+    return Path.cwd().resolve()
 
 
 def work_root() -> Path:
-    return repo_root().joinpath(*WORK_ROOT_PARTS).resolve()
+    configured = _resolve_configured_dir("DEXCLUB_ANALYST_WORK_ROOT")
+    if configured is not None:
+        return configured
+    return workspace_root().joinpath(*WORK_ROOT_PARTS).resolve()
+
+
+def cache_root() -> Path:
+    configured = _resolve_configured_dir("DEXCLUB_ANALYST_CACHE_DIR")
+    if configured is not None:
+        return configured
+    return work_root().joinpath(*DEFAULT_CACHE_ROOT_PARTS).resolve()
 
 
 def runs_root() -> Path:
@@ -44,7 +68,16 @@ def runs_root() -> Path:
 
 
 def inputs_cache_root() -> Path:
-    return work_root().joinpath(*INPUTS_CACHE_PARTS).resolve()
+    return cache_root().joinpath(*INPUTS_CACHE_PARTS).resolve()
+
+
+def helper_tmp_root() -> Path:
+    return work_root().joinpath(*TMP_ROOT_PARTS).resolve()
+
+
+def allocate_helper_output_dir(prefix: str) -> Path:
+    ensure_dir(helper_tmp_root())
+    return Path(tempfile.mkdtemp(prefix=prefix, dir=str(helper_tmp_root()))).resolve()
 
 
 def ensure_default_run_root(run_id: str) -> Path:

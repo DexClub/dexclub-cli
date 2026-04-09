@@ -101,8 +101,8 @@ bash ./skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh ./input
 
 Default local storage layout:
 
-- Default work root: `<repo-root>/.dexclub-cli/`
-- `analyze.py run` writes per-run artifacts under `<repo-root>/.dexclub-cli/runs/v1/<run-id>/` unless `--artifact-root` overrides it
+- Default work root: `<workspace>/.dexclub-cli/`
+- `analyze.py run` writes per-run artifacts under `<workspace>/.dexclub-cli/runs/v1/<run-id>/` unless `--artifact-root` overrides it
 - Run-level files in the selected run root:
   - `run-meta.json`
   - `final_result.json`
@@ -112,5 +112,8 @@ Default local storage layout:
   - `artifacts/`
   - `raw.stdout.log`
   - `raw.stderr.log`
-- Runs root also keeps `<repo-root>/.dexclub-cli/runs/v1/latest.json`
-- APK / dex input caches live under `<repo-root>/.dexclub-cli/cache/v1/inputs/`
+- Runs root also keeps `<workspace>/.dexclub-cli/runs/v1/latest.json`
+- APK / dex input caches live under `<workspace>/.dexclub-cli/cache/v1/inputs/`
+- Override the work root with `DEXCLUB_ANALYST_WORK_ROOT`
+- Override the cache root with `DEXCLUB_ANALYST_CACHE_DIR`
+- `export_and_scan.py` now creates its default direct-run output directory under the analyst work root instead of the anonymous system temp directory

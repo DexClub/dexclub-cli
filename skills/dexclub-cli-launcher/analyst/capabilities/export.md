@@ -52,4 +52,6 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py \
   --mode summary
 ```
 
+When `--output-dir` is omitted, the helper now allocates a directory under the analyst work root. Override that root with `DEXCLUB_ANALYST_WORK_ROOT` if needed.
+
 Prefer `--language smali` when you need the most reliable export path or method-level bytecode details.
