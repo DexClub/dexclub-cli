@@ -114,6 +114,7 @@ Default local storage layout:
   - `raw.stderr.log`
 - Runs root also keeps `<workspace>/.dexclub-cli/runs/v1/latest.json`
 - APK / dex input caches live under `<workspace>/.dexclub-cli/cache/v1/inputs/`
+- APK-backed class resolution also keeps a `class-dex-index-v1.json` cache under the APK input cache directory
 - Override the work root with `DEXCLUB_ANALYST_WORK_ROOT`
 - Override the cache root with `DEXCLUB_ANALYST_CACHE_DIR`
 - `export_and_scan.py` now creates its default direct-run output directory under the analyst work root instead of the anonymous system temp directory

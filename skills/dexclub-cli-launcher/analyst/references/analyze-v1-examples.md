@@ -14,6 +14,7 @@ Notes:
 - `run_id`, `artifact_root`, and export paths vary by machine and by run.
 - `analyze.py run` now writes per-run artifacts under `<workspace>/.dexclub-cli/runs/v1/<run-id>/`.
 - APK-backed summarize now reuses `<workspace>/.dexclub-cli/cache/v1/inputs/apk/<input-hash>/extracted-dex/` for resolved `classes*.dex`.
+- `resolve_apk_dex` now keeps `class-dex-index-v1.json` under the APK cache directory and may report `cache_hit`, `lookup_strategy`, and `scanned_dex_count`.
 - `stdout` in `step_results[]` is preserved exactly as captured from helper scripts, including current DexKit info lines.
 - For full current sample outputs, run `scripts/validate_v1_sample.sh`; it keeps the JSON files under its reported temporary `results_dir`.
 - `summarize_method_logic` accepts either one direct dex input or one APK input. When the input is an APK, the planner inserts a `resolve_apk_dex` step before export.
