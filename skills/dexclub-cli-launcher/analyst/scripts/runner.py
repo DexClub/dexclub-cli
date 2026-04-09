@@ -144,6 +144,10 @@ def normalize_export_and_scan_payload(raw_payload: object) -> dict[str, object]:
     normalized: dict[str, object] = {}
     key_map = {
         "exportPath": "export_path",
+        "cacheHit": "cache_hit",
+        "cacheKey": "cache_key",
+        "cachePath": "cache_path",
+        "exportScanCacheRoot": "export_scan_cache_root",
         "branchLineCount": "branch_line_count",
         "returnLineCount": "return_line_count",
         "stringCount": "string_count",

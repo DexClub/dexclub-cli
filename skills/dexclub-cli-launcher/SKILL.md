@@ -129,6 +129,7 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
 - The default analyst work root is `<workspace>/.dexclub-cli/`.
   - `analyze.py run` writes per-run artifacts under `<workspace>/.dexclub-cli/runs/v1/<run-id>/` unless `--artifact-root` overrides it.
   - Input caches live under `<workspace>/.dexclub-cli/cache/v1/inputs/`.
+  - `export_and_scan.py` keeps derived export/scan caches under `<workspace>/.dexclub-cli/cache/v1/export-and-scan/`.
   - The run root now contains `run-meta.json`, `final_result.json`, `run-summary.json`, and per-step data under `steps/<step-id>/`.
   - Override the work root with `DEXCLUB_ANALYST_WORK_ROOT` when the current workspace should not own `.dexclub-cli/`.
   - Override the cache root with `DEXCLUB_ANALYST_CACHE_DIR` when input caches should live outside the default work root.

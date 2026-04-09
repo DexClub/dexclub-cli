@@ -16,6 +16,7 @@ STORAGE_VERSION = "v1"
 WORK_ROOT_PARTS = (".dexclub-cli",)
 DEFAULT_CACHE_ROOT_PARTS = ("cache",)
 INPUTS_CACHE_PARTS = (STORAGE_VERSION, "inputs")
+EXPORT_AND_SCAN_CACHE_PARTS = (STORAGE_VERSION, "export-and-scan")
 RUNS_ROOT_PARTS = ("runs", STORAGE_VERSION)
 TMP_ROOT_PARTS = ("tmp",)
 
@@ -69,6 +70,10 @@ def runs_root() -> Path:
 
 def inputs_cache_root() -> Path:
     return cache_root().joinpath(*INPUTS_CACHE_PARTS).resolve()
+
+
+def export_and_scan_cache_root() -> Path:
+    return cache_root().joinpath(*EXPORT_AND_SCAN_CACHE_PARTS).resolve()
 
 
 def helper_tmp_root() -> Path:

@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ANALYZE="$SCRIPT_DIR/analyze.py"
 RUN_FIND="$SCRIPT_DIR/run_find.py"
 EXPORT_AND_SCAN="$SCRIPT_DIR/export_and_scan.py"
+RESOLVE_APK_DEX="$SCRIPT_DIR/resolve_apk_dex.py"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
 SAMPLE_APK="${1:-${DEXCLUB_ANALYST_SAMPLE_APK:-}}"
@@ -209,6 +210,62 @@ assert_expr "$RESULT_DIR/summarize_method_logic_apk.json" "payload['step_results
 assert_expr "$RESULT_DIR/summarize_method_logic_apk.json" "payload['step_results'][1]['step_kind'] == 'export_and_scan'" "apk summarize should export after dex resolution"
 assert_expr "$RESULT_DIR/summarize_method_logic_apk.json" "payload['step_results'][0]['result']['resolved_dex_path'].endswith('classes4.dex')" "apk summarize should resolve MainActivity to classes4.dex in sample"
 assert_expr "$RESULT_DIR/summarize_method_logic_apk.json" "payload['step_results'][1]['result']['method_call_count'] == 4" "apk summarize should preserve exported method analysis"
+
+cache_reuse_work_root="$TMP_ROOT/cache-reuse-work"
+cache_reuse_cache_root="$TMP_ROOT/cache-reuse-cache"
+cache_reuse_resolve_output="$RESULT_DIR/resolve_apk_dex_cache_reuse.json"
+DEXCLUB_ANALYST_WORK_ROOT="$cache_reuse_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$cache_reuse_cache_root" \
+python3 "$RESOLVE_APK_DEX" \
+  --input-apk "$SAMPLE_APK" \
+  --class "com.shadcn.ui.compose.MainActivity" \
+  --format json >"$cache_reuse_resolve_output"
+echo "validated_output=$cache_reuse_resolve_output"
+apk_main_activity_dex="$(python3 - "$cache_reuse_resolve_output" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(payload["resolved_dex_path"])
+PY
+)"
+apk_cache_reuse_output="$RESULT_DIR/export_and_scan_cache_from_apk.json"
+DEXCLUB_ANALYST_WORK_ROOT="$cache_reuse_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$cache_reuse_cache_root" \
+python3 "$EXPORT_AND_SCAN" \
+  --input-dex "$apk_main_activity_dex" \
+  --class "com.shadcn.ui.compose.MainActivity" \
+  --method "onCreate" \
+  --language smali \
+  --mode summary \
+  --format json >"$apk_cache_reuse_output"
+echo "validated_output=$apk_cache_reuse_output"
+assert_expr "$apk_cache_reuse_output" "payload['cacheHit'] is False" "first apk-backed export_and_scan should populate the cache"
+
+direct_cache_reuse_output="$RESULT_DIR/export_and_scan_cache_from_direct_dex.json"
+DEXCLUB_ANALYST_WORK_ROOT="$cache_reuse_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$cache_reuse_cache_root" \
+python3 "$EXPORT_AND_SCAN" \
+  --input-dex "$main_activity_dex" \
+  --class "com.shadcn.ui.compose.MainActivity" \
+  --method "onCreate" \
+  --language smali \
+  --mode summary \
+  --format json >"$direct_cache_reuse_output"
+echo "validated_output=$direct_cache_reuse_output"
+assert_expr "$direct_cache_reuse_output" "payload['cacheHit'] is True" "direct dex export_and_scan should reuse the apk-backed cache entry"
+apk_cache_path="$(python3 - "$apk_cache_reuse_output" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(payload["cachePath"])
+PY
+)"
+assert_expr "$direct_cache_reuse_output" "payload['cachePath'] == '$apk_cache_path'" "apk and direct dex export_and_scan should converge to the same cache path"
+assert_expr "$direct_cache_reuse_output" "Path(payload['exportPath']).is_file()" "cache-backed direct dex export_and_scan should still materialize the exported artifact"
 
 overflow_input=$(cat <<JSON
 {"input":["$SAMPLE_APK"],"string":"description"}
