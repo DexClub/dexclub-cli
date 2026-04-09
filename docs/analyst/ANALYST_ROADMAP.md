@@ -17,6 +17,8 @@
 - `ANALYST_ROADMAP.md`
   - 记录 V1 之后的扩展方向和版本节奏
 
+与当前输出契约、工作区目录和跨会话接续相关的工程约束，以 [OUTPUT_NORMALIZATION.md](./OUTPUT_NORMALIZATION.md) 为准；本文件只负责版本边界和路线判断，不重复展开对象结构、目录细节或校验策略。
+
 ## 当前判断
 
 - `V1` 已收口
@@ -46,13 +48,14 @@
 - descriptor-aware 的 `summarize_method_logic`
 - `smali` 的 `structured_summary`
 - 大方法 `smali` 的 `large_method_analysis`
-- 工作目录下的 run 产物与输入缓存
+- 工作区内聚的 run 产物与输入缓存
 
 ### V1 原则
 
 - 不再继续向 `V1` 塞新的主能力
 - 新需求若明显超出当前受限任务集，应优先归入 `V2`
 - `cli` 继续保持独立，skill 继续直接控制 `cli`
+- `V1` 下与输出契约、目录落点、接续索引相关的补强，优先按 [OUTPUT_NORMALIZATION.md](./OUTPUT_NORMALIZATION.md) 作为工程收敛方向处理
 
 ## V2
 
@@ -75,6 +78,21 @@
 - 更结构化的证据组织
 - 更好的 APK / dex 多输入处理能力
 - 与现有缓存、run 产物、验证脚本更紧密的一致性设计
+
+### 与当前输出契约方案的边界
+
+下面这些更适合作为当前 `V1` 维护与工程收敛的一部分，而不是单独作为 `V2` 新能力：
+
+- 纯净 JSON 输出与 raw log 分流
+- `.dexclub-cli/`、`artifacts/`、`reports/`、`patched/` 的工作区内聚
+- `latest.json`、`run-summary.json`、`step_index`、`key_artifacts` 这类接续索引
+- 轻量 validator、`schema_version` 与输出对象边界收敛
+
+更适合进入 `V2` 的，仍然是：
+
+- 超出当前受限任务集的新任务类型
+- 明显更长链路、更多分支判断的多步 workflow
+- 更强的分析组合能力，而不只是当前对象和目录契约补强
 
 ## V3
 
@@ -100,7 +118,7 @@
 - 清理入口，例如 `clean-runs` / `clean-cache`
 - 更细粒度的缓存复用
 - `dex_set` 组合缓存
-- APK / 会话索引
+- APK / 会话索引与接续索引
 - 基于真实使用数据观察缓存体积、复用率和回归情况
 
 ## 边界提醒

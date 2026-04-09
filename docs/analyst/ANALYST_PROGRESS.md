@@ -19,6 +19,8 @@
 
 下次会话如果没有上下文，先读这份文档，再决定是否需要回看设计文档或具体代码。
 
+与“当前真实状态”相对，后续目标方案、输出契约、工作区目录收敛和跨会话接续规则，以 [OUTPUT_NORMALIZATION.md](./OUTPUT_NORMALIZATION.md) 为准。本文件允许继续记录当前实现仍停留在旧路径或旧结构上的现实，不把“目标方案”误写成“已实现状态”。
+
 ## 当前快照
 
 - 当前最新相关提交
@@ -52,6 +54,7 @@
     - 压缩输出：`large_method_analysis`
     - 当前按 `method_calls / strings / numbers / field_accesses / branch_hotspots` 分组，并补充行簇聚合
   - 当前本地已落地的 analyst 存储结构
+    - 下面这些是“当前已实现状态”，不是新的目标目录方案
     - `analyze.py run` 默认写入 `build/dexclub-cli/runs/v1/<run-id>/`
     - APK / dex 输入缓存写入 `build/dexclub-cli/cache/v1/inputs/`
     - run 目录会写入 `run-meta.json`
@@ -151,7 +154,7 @@
 | A-07 | 更强的 summary 结构化输出 | 已完成 | 本次会话完成。新增 `structured_summary`，包含 `basic_blocks / call_clusters / constant_clusters` |
 | A-08 | 基于结构化摘要的局部片段提取 | 已完成 | 本次会话完成。新增 `focus_snippets`，按高信号 block / cluster 回抽原始 smali 片段 |
 | A-09 | `export-java` 导出失败定位与修复 | 已完成 | 本次会话完成。根因包括 fat jar 中缺失 Jadx `dex-input` service 声明，以及 Java 导出时在 decompiler 生命周期外读取 `JavaClass.code` |
-| A-10 | analyst 工作目录产物与输入缓存落地 | 已完成 | 提交 `c102896`。默认 run 根目录已切到 `build/dexclub-cli/runs/v1`，输入缓存已切到 `build/dexclub-cli/cache/v1/inputs`，并完成计划要求的最小验证 |
+| A-10 | analyst 工作目录产物与输入缓存落地 | 已完成 | 提交 `c102896`。当前真实实现默认 run 根目录已切到 `build/dexclub-cli/runs/v1`，输入缓存已切到 `build/dexclub-cli/cache/v1/inputs`，并完成计划要求的最小验证；后续目标方案另见 [OUTPUT_NORMALIZATION.md](./OUTPUT_NORMALIZATION.md) |
 
 ## 最近一次状态流转
 
@@ -214,10 +217,10 @@
   - `待开始 -> 进行中`
   - `进行中 -> 已完成`
   - 完成依据
-    - [`runner.py`](../../skills/dexclub-cli-launcher/analyst/scripts/runner.py) 已把默认 run 根目录切到 `build/dexclub-cli/runs/v1`
+    - [`runner.py`](../../skills/dexclub-cli-launcher/analyst/scripts/runner.py) 已把当前真实实现的默认 run 根目录切到 `build/dexclub-cli/runs/v1`
     - [`analyst_storage.py`](../../skills/dexclub-cli-launcher/analyst/scripts/analyst_storage.py) 已补 APK / dex 输入缓存、`input-meta.json` 与原子落盘
     - 已完成同 APK 连续执行复用、删 `runs/` 不影响缓存、删 `cache/` 可重建的最小验证
-    - `README`、样例文档与进度文档已同步新存储口径
+    - `README`、样例文档与进度文档已同步当时的存储口径
     - 代码与文档已提交到 `c102896`
 
 ## 下一步推荐入口
@@ -227,7 +230,7 @@
 如果下一个对话继续沿这条线推进，优先做以下两类事情之一：
 
 - 推送 `c102896`，然后观察真实使用里的缓存体积、复用率和回归情况
-- 如果要继续扩展，再考虑补充清理入口或更细的缓存复用粒度
+- 如果要继续扩展或收敛当前工程方案，先对照 [OUTPUT_NORMALIZATION.md](./OUTPUT_NORMALIZATION.md)，再考虑补充清理入口、更细的缓存复用粒度或输出契约相关整理
 
 ## 历史归档
 
@@ -244,6 +247,8 @@
 1. 先读本文件
    - [ANALYST_PROGRESS.md](./ANALYST_PROGRESS.md)
 2. 再读路线和设计边界
+   - [README.md](./README.md)
+   - [OUTPUT_NORMALIZATION.md](./OUTPUT_NORMALIZATION.md)
    - [ANALYST_ROADMAP.md](./ANALYST_ROADMAP.md)
    - [ANALYST_PLANNER_PLAN.md](./archive/ANALYST_PLANNER_PLAN.md)
    - [ANALYST_STORAGE_PLAN.md](./archive/ANALYST_STORAGE_PLAN.md)
@@ -269,7 +274,7 @@
 如果下次会话要最快恢复，可以直接用这句：
 
 ```text
-先阅读 docs/analyst/ANALYST_PROGRESS.md，确认 analyst 主线已完成，再根据新的回归问题或新需求决定是否继续扩展 launcher / analyst 能力。
+先阅读 docs/analyst/ANALYST_PROGRESS.md 确认当前真实状态，再阅读 docs/analyst/OUTPUT_NORMALIZATION.md 区分后续目标方案，然后根据新的回归问题或新需求决定是否继续扩展 launcher / analyst 能力。
 ```
 
 ## 文档维护规则
