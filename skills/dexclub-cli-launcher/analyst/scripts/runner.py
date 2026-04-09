@@ -38,15 +38,25 @@ def ensure_run_root(*, run_id: str, artifact_root: str | None = None) -> Path:
     else:
         root = ensure_default_run_root(run_id).resolve()
     root.mkdir(parents=True, exist_ok=True)
-    root.joinpath("exports").mkdir(parents=True, exist_ok=True)
-    root.joinpath("results").mkdir(parents=True, exist_ok=True)
-    root.joinpath("resolved").mkdir(parents=True, exist_ok=True)
+    root.joinpath("steps").mkdir(parents=True, exist_ok=True)
     return root
 
 
 def write_json(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def write_text(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def ensure_step_root(run_root: Path, step_id: str) -> Path:
+    step_root = run_root / "steps" / step_id
+    step_root.mkdir(parents=True, exist_ok=True)
+    step_root.joinpath("artifacts").mkdir(parents=True, exist_ok=True)
+    return step_root
 
 
 def build_analysis_error_result(
@@ -598,6 +608,7 @@ def execute_step(
     cache_refs: dict[str, CachedInputRef] | None = None,
 ) -> tuple[dict[str, object], list[dict[str, object]], list[dict[str, object]], list[str]]:
     step_id = str(step["step_id"])
+    step_root = ensure_step_root(artifact_root, step_id)
     step_args = replace_placeholder(dict(step["args"]), str(artifact_root))
     if not isinstance(step_args, dict):
         raise ValueError("Step args must remain a mapping after placeholder replacement.")
@@ -626,10 +637,29 @@ def execute_step(
     recommendations: list[dict[str, object]] = []
     evidence: list[dict[str, object]] = []
     extra_limits: list[str] = []
+    raw_stdout_path = step_root / "raw.stdout.log"
+    raw_stderr_path = step_root / "raw.stderr.log"
+    write_text(raw_stdout_path, completed.stdout)
+    write_text(raw_stderr_path, completed.stderr)
+    step_artifacts.extend(
+        [
+            {
+                "type": "raw_stdout",
+                "path": str(raw_stdout_path.resolve()),
+                "produced_by_step": step_id,
+            },
+            {
+                "type": "raw_stderr",
+                "path": str(raw_stderr_path.resolve()),
+                "produced_by_step": step_id,
+            },
+        ]
+    )
 
     step_result: dict[str, object] = {
         "step_id": step_id,
         "step_kind": step["kind"],
+        "step_root": str(step_root.resolve()),
         "status": "execution_error" if completed.returncode else "empty",
         "exit_code": completed.returncode,
         "command": command,
@@ -639,45 +669,44 @@ def execute_step(
         "result": {},
     }
 
-    if completed.returncode != 0:
-        return step_result, recommendations, evidence, extra_limits
+    if completed.returncode == 0:
+        try:
+            payload = extract_json_payload(completed.stdout)
+            if step["kind"] == "run_find":
+                status, normalized_result, recommendations, evidence, extra_limits = normalize_run_find_result(
+                    task_type=task_type,
+                    step_id=step_id,
+                    step_args=step_args,
+                    anchor=anchor,
+                    payload=payload,
+                )
+            elif step["kind"] == "resolve_apk_dex":
+                status, normalized_result, recommendations, evidence, extra_limits = normalize_resolve_apk_dex_result(
+                    step_id=step_id,
+                    payload=payload,
+                )
+            else:
+                status, normalized_result, recommendations, evidence, extra_limits = normalize_export_result(
+                    step_id=step_id,
+                    payload=payload,
+                )
+            step_result["status"] = status
+            step_result["result"] = normalized_result
+        except Exception as exc:
+            step_result["status"] = "execution_error"
+            step_result["stderr"] = (completed.stderr + f"\nNormalization error: {exc}").strip()
 
-    try:
-        payload = extract_json_payload(completed.stdout)
-        if step["kind"] == "run_find":
-            status, normalized_result, recommendations, evidence, extra_limits = normalize_run_find_result(
-                task_type=task_type,
-                step_id=step_id,
-                step_args=step_args,
-                anchor=anchor,
-                payload=payload,
-            )
-        elif step["kind"] == "resolve_apk_dex":
-            status, normalized_result, recommendations, evidence, extra_limits = normalize_resolve_apk_dex_result(
-                step_id=step_id,
-                payload=payload,
-            )
-        else:
-            status, normalized_result, recommendations, evidence, extra_limits = normalize_export_result(
-                step_id=step_id,
-                payload=payload,
-            )
-        step_result["status"] = status
-        step_result["result"] = normalized_result
-    except Exception as exc:
-        step_result["status"] = "execution_error"
-        step_result["stderr"] = (completed.stderr + f"\nNormalization error: {exc}").strip()
+    if completed.returncode != 0 or step_result["status"] == "execution_error":
+        step_result_path = step_root / "step-result.json"
+        write_json(step_result_path, step_result)
+        step_artifacts.append(
+            {
+                "type": "step_result",
+                "path": str(step_result_path.resolve()),
+                "produced_by_step": step_id,
+            }
+        )
         return step_result, recommendations, evidence, extra_limits
-
-    step_result_path = artifact_root / "results" / f"{step_id}.json"
-    write_json(step_result_path, step_result)
-    step_artifacts.append(
-        {
-            "type": "step_result",
-            "path": str(step_result_path.resolve()),
-            "produced_by_step": step_id,
-        }
-    )
 
     if step["kind"] == "export_and_scan":
         export_path = step_result["result"].get("export_path")
@@ -699,6 +728,15 @@ def execute_step(
                     "produced_by_step": step_id,
                 }
             )
+    step_result_path = step_root / "step-result.json"
+    write_json(step_result_path, step_result)
+    step_artifacts.append(
+        {
+            "type": "step_result",
+            "path": str(step_result_path.resolve()),
+            "produced_by_step": step_id,
+        }
+    )
     return step_result, recommendations, evidence, extra_limits
 
 
@@ -1002,6 +1040,6 @@ def run_plan(plan: dict[str, object], *, artifact_root: str | None = None, run_i
             created_at=run_created_at,
         ),
     )
-    final_result_path = run_root / "results" / "final_result.json"
+    final_result_path = run_root / "final_result.json"
     write_json(final_result_path, final_result)
     return final_result

@@ -314,7 +314,7 @@ def build_export_and_scan_step(
         "language": language or "smali",
         "mode": mode or "summary",
         "format": "json",
-        "output_dir": join_artifact_path(artifact_root, "exports"),
+        "output_dir": join_artifact_path(artifact_root, "steps", "step-1", "artifacts"),
     }
     if method_anchor.get("descriptor"):
         step_args["method_descriptor"] = method_anchor["descriptor"]
@@ -341,7 +341,7 @@ def build_resolve_apk_dex_step(
             "input_apk": normalized_inputs["paths"][0],
             "class_name": method_anchor["class_name"],
             "format": "json",
-            "output_dir": join_artifact_path(artifact_root, "resolved", "step-1"),
+            "output_dir": join_artifact_path(artifact_root, "steps", "step-1", "artifacts"),
         },
         "allow_empty_result": False,
     }
@@ -490,7 +490,9 @@ def build_plan(
                         "format": "json",
                         "output_dir": join_artifact_path(
                             artifact_root or RUN_ARTIFACT_ROOT_PLACEHOLDER,
-                            "exports",
+                            "steps",
+                            "step-2",
+                            "artifacts",
                         ),
                     },
                     "allow_empty_result": False,

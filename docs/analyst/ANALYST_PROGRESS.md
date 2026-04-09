@@ -57,7 +57,9 @@
     - 下面这些是“当前已实现状态”，不是新的目标目录方案
     - `analyze.py run` 默认写入 `.dexclub-cli/runs/v1/<run-id>/`
     - APK / dex 输入缓存写入 `.dexclub-cli/cache/v1/inputs/`
-    - run 目录会写入 `run-meta.json`
+    - run 目录当前会写入 `run-meta.json`、`final_result.json`
+    - 单步结果当前聚合到 `.dexclub-cli/runs/v1/<run-id>/steps/<step-id>/`
+    - step 目录当前会写入 `step-result.json`、`raw.stdout.log`、`raw.stderr.log`
     - 输入缓存目录会写入 `input-meta.json`
 - 当前验证脚本
   - [validate_v1_sample.sh](../../skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh)
@@ -154,7 +156,7 @@
 | A-07 | 更强的 summary 结构化输出 | 已完成 | 本次会话完成。新增 `structured_summary`，包含 `basic_blocks / call_clusters / constant_clusters` |
 | A-08 | 基于结构化摘要的局部片段提取 | 已完成 | 本次会话完成。新增 `focus_snippets`，按高信号 block / cluster 回抽原始 smali 片段 |
 | A-09 | `export-java` 导出失败定位与修复 | 已完成 | 本次会话完成。根因包括 fat jar 中缺失 Jadx `dex-input` service 声明，以及 Java 导出时在 decompiler 生命周期外读取 `JavaClass.code` |
-| A-10 | analyst 工作目录产物与输入缓存落地 | 已完成 | 提交 `c102896`。后续已把当前真实实现默认 run 根目录切到 `.dexclub-cli/runs/v1`，输入缓存切到 `.dexclub-cli/cache/v1/inputs`；更完整的目标方案另见 [OUTPUT_NORMALIZATION.md](./OUTPUT_NORMALIZATION.md) |
+| A-10 | analyst 工作目录产物与输入缓存落地 | 已完成 | 提交 `c102896`。后续已把当前真实实现默认 run 根目录切到 `.dexclub-cli/runs/v1`，输入缓存切到 `.dexclub-cli/cache/v1/inputs`，并把单步结果收口到 `steps/<step-id>/`；更完整的目标方案另见 [OUTPUT_NORMALIZATION.md](./OUTPUT_NORMALIZATION.md) |
 
 ## 最近一次状态流转
 
@@ -225,7 +227,9 @@
 
 - 本次会话补充
   - 当前真实实现默认内部状态根已从 `build/dexclub-cli/` 切到工作区 `.dexclub-cli/`
-  - 这一步只完成“工作区根迁移”，尚未落地 `steps/<step-id>/` 收口、`latest.json`、`run-summary.json`、轻量 validator 或公共执行器
+  - 当前真实实现已把单步结果收口到 `steps/<step-id>/step-result.json`，并为每步补 `raw.stdout.log`、`raw.stderr.log`
+  - `final_result.json` 已回收到 run 根，不再写入 run 根下的 `results/` 目录
+  - 当前仍未落地 `latest.json`、`run-summary.json`、轻量 validator 或公共执行器
 
 ## 下一步推荐入口
 
