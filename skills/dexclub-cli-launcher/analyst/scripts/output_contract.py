@@ -66,6 +66,14 @@ def validate_key_artifact_item(item: object) -> dict[str, object]:
     return payload
 
 
+def validate_step_artifact_item(item: object) -> dict[str, object]:
+    payload = _require_mapping(item, field_name="step_artifact")
+    _require_non_empty_string(payload.get("type"), field_name="step_artifact.type")
+    _require_non_empty_string(payload.get("path"), field_name="step_artifact.path")
+    _require_non_empty_string(payload.get("produced_by_step"), field_name="step_artifact.produced_by_step")
+    return payload
+
+
 def validate_step_index_item(item: object) -> dict[str, object]:
     payload = _require_mapping(item, field_name="step_index_item")
     _require_non_empty_string(payload.get("step_id"), field_name="step_index_item.step_id")
@@ -128,4 +136,51 @@ def validate_latest_index(index: object) -> dict[str, object]:
         field_name="latest_index.selection_reason",
         allowed=LATEST_SELECTION_REASONS,
     )
+    return payload
+
+
+def validate_step_result_envelope(step_result: object) -> dict[str, object]:
+    payload = _require_mapping(step_result, field_name="step_result")
+    _require_non_empty_string(payload.get("step_id"), field_name="step_result.step_id")
+    _require_non_empty_string(payload.get("step_kind"), field_name="step_result.step_kind")
+    _require_non_empty_string(payload.get("step_root"), field_name="step_result.step_root")
+    _require_enum(payload.get("status"), field_name="step_result.status", allowed=STEP_STATUSES)
+    _require_int(payload.get("exit_code"), field_name="step_result.exit_code")
+    command = payload.get("command")
+    if not isinstance(command, list):
+        raise ValueError("`step_result.command` must be a list.")
+    for index, item in enumerate(command):
+        _require_non_empty_string(item, field_name=f"step_result.command[{index}]")
+    raw_process = _require_mapping(payload.get("raw_process"), field_name="step_result.raw_process")
+    _require_non_empty_string(raw_process.get("stdout_path"), field_name="step_result.raw_process.stdout_path")
+    _require_non_empty_string(raw_process.get("stderr_path"), field_name="step_result.raw_process.stderr_path")
+    stdout_size = raw_process.get("stdout_size")
+    if stdout_size is not None:
+        _require_int(stdout_size, field_name="step_result.raw_process.stdout_size")
+    stderr_size = raw_process.get("stderr_size")
+    if stderr_size is not None:
+        _require_int(stderr_size, field_name="step_result.raw_process.stderr_size")
+    diagnostics = _require_mapping(payload.get("diagnostics"), field_name="step_result.diagnostics")
+    _require_non_empty_string(diagnostics.get("message"), field_name="step_result.diagnostics.message")
+    cause = diagnostics.get("cause")
+    if cause is not None:
+        _require_non_empty_string(cause, field_name="step_result.diagnostics.cause")
+    next_action = diagnostics.get("next_action")
+    if next_action is not None:
+        _require_non_empty_string(next_action, field_name="step_result.diagnostics.next_action")
+    notes = diagnostics.get("notes")
+    if notes is not None:
+        _require_string_list(notes, field_name="step_result.diagnostics.notes")
+    if not isinstance(payload.get("stdout"), str):
+        raise ValueError("`step_result.stdout` must be a string.")
+    if not isinstance(payload.get("stderr"), str):
+        raise ValueError("`step_result.stderr` must be a string.")
+    artifacts = payload.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise ValueError("`step_result.artifacts` must be a list.")
+    for item in artifacts:
+        validate_step_artifact_item(item)
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        raise ValueError("`step_result.result` must be an object.")
     return payload

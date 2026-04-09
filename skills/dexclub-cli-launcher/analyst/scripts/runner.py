@@ -18,7 +18,7 @@ from analyst_storage import (
     ensure_dex_input_cache,
 )
 from process_exec import extract_json_payload, run_captured_process
-from output_contract import validate_latest_index, validate_run_summary
+from output_contract import validate_latest_index, validate_run_summary, validate_step_result_envelope
 from plan_schema import RUN_ARTIFACT_ROOT_PLACEHOLDER, SCHEMA_VERSION, TASK_REGISTRY
 
 RUN_STATUS_OK = {"ok", "empty", "ambiguous", "unsupported"}
@@ -963,6 +963,7 @@ def execute_step(
         "stdout": process_result.stdout,
         "stderr": process_result.stderr,
         "raw_process": process_result.raw_process,
+        "diagnostics": dict(process_result.diagnostics),
         "artifacts": step_artifacts,
         "result": {},
     }
@@ -993,14 +994,33 @@ def execute_step(
         except Exception as exc:
             step_result["status"] = "execution_error"
             step_result["stderr"] = (process_result.stderr + f"\nNormalization error: {exc}").strip()
+            step_result["diagnostics"] = {
+                "message": "Step normalization failed.",
+                "cause": str(exc),
+            }
     elif process_result.status == "normalization_error":
         step_result["status"] = "execution_error"
         step_result["stderr"] = (
             process_result.stderr + f"\nNormalization error: {process_result.diagnostics.get('cause', '')}"
         ).strip()
+        step_result["diagnostics"] = {
+            "message": "Step normalization failed.",
+            "cause": str(process_result.diagnostics.get("cause", "unknown normalization error")),
+        }
+
+    if process_result.status == "ok":
+        if step_result["status"] == "ok":
+            step_result["diagnostics"] = {"message": "Step completed successfully."}
+        elif step_result["status"] == "empty":
+            step_result["diagnostics"] = {"message": "Step completed with an empty result."}
+        elif step_result["status"] == "ambiguous":
+            step_result["diagnostics"] = {"message": "Step completed but result remains ambiguous."}
+        elif step_result["status"] == "unsupported":
+            step_result["diagnostics"] = {"message": "Step completed but current path is unsupported."}
 
     if process_result.status != "ok" or step_result["status"] == "execution_error":
         step_result_path = step_root / "step-result.json"
+        validate_step_result_envelope(step_result)
         write_json(step_result_path, step_result)
         step_artifacts.append(
             {
@@ -1032,6 +1052,7 @@ def execute_step(
                 }
             )
     step_result_path = step_root / "step-result.json"
+    validate_step_result_envelope(step_result)
     write_json(step_result_path, step_result)
     step_artifacts.append(
         {

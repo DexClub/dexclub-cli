@@ -163,6 +163,7 @@
 | A-12 | run 接续对象轻量校验 | 已完成 | 本次会话完成。已新增 `output_contract.py`，并在写 `run-summary.json`、`latest.json` 前做最小字段与枚举校验 |
 | A-13 | 公共执行捕获层最小抽取 | 已完成 | 本次会话完成。已新增 `process_exec.py`，并让 `runner.py` 与 `resolve_apk_dex.py` 复用同一套执行、raw log 与 JSON payload 提取逻辑 |
 | A-14 | `export_and_scan` 接入公共执行捕获层 | 已完成 | 本次会话完成。`export_and_scan.py` 已改为通过 `process_exec.py` 调 launcher 导出，`json` 模式下不再直通底层 `stdout` 噪音 |
+| A-15 | `step-result` 轻量 envelope 校验 | 已完成 | 本次会话完成。已补 `validate_step_result_envelope(...)`，并在 `runner.py` 写 `step-result.json` 前做最小字段、raw_process、diagnostics 与 artifact 形状校验 |
 
 ## 最近一次状态流转
 
@@ -259,6 +260,13 @@
     - [`export_and_scan.py`](../../skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py) 已改为通过 [`process_exec.py`](../../skills/dexclub-cli-launcher/analyst/scripts/process_exec.py) 捕获 launcher 导出过程
     - `export_and_scan.py --format json` 下已确认不会把底层导出日志混入正式 `stdout`
     - 已完成导出成功链路下的最小 raw log 落盘与纯净 JSON 输出验证
+- `A-15`
+  - `待开始 -> 进行中`
+  - `进行中 -> 已完成`
+  - 完成依据
+    - [`output_contract.py`](../../skills/dexclub-cli-launcher/analyst/scripts/output_contract.py) 已补 `validate_step_result_envelope(...)`
+    - [`runner.py`](../../skills/dexclub-cli-launcher/analyst/scripts/runner.py) 已在写 `step-result.json` 前调用轻量 envelope 校验，并补最小 `diagnostics`
+    - 已完成成功 step 与执行失败 step 两条链路下的 envelope 校验通过验证
 
 - 本次会话补充
   - 当前真实实现默认内部状态根已从 `build/dexclub-cli/` 切到工作区 `.dexclub-cli/`
@@ -267,6 +275,7 @@
   - 当前真实实现已补 `run-summary.json`、`latest.json`、最小 `step_index` 与 `key_artifacts`
   - 当前真实实现已补 `output_contract.py`，并对 `run-summary.json`、`latest.json` 落地前做最小校验
   - 当前真实实现已补 `process_exec.py`，并让 `runner.py`、`resolve_apk_dex.py`、`export_and_scan.py` 复用同一套执行捕获逻辑
+  - 当前真实实现已补 `step-result.json` 的轻量 envelope 校验，并为 step 结果补了最小 `diagnostics`
 
 ## 下一步推荐入口
 
