@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
 import re
 import subprocess
 import sys
@@ -494,6 +495,7 @@ def normalize_resolve_apk_dex_result(
 def build_step_reuse_key(
     *,
     task_type: str,
+    release_tag: str | None,
     step_kind: str,
     step_args: dict[str, object],
     step_cache_keys: list[str],
@@ -533,6 +535,7 @@ def build_step_reuse_key(
         {
             "schema_version": SCHEMA_VERSION,
             "task_type": task_type,
+            "release_tag": release_tag or "",
             "step_kind": step_kind,
             "args": semantic_args,
         }
@@ -646,6 +649,10 @@ def prepare_step_args_for_storage(
 
 
 def resolve_release_tag() -> str | None:
+    override = os.environ.get("DEXCLUB_ANALYST_RELEASE_TAG_OVERRIDE")
+    if override is not None:
+        normalized = override.strip()
+        return normalized or None
     launcher_dir = Path(__file__).resolve().parents[2] / "launcher" / "scripts"
     if sys.platform == "win32":
         command = ["cmd.exe", "/c", str((launcher_dir / "run_latest_release.bat").resolve()), "--print-latest-tag"]
@@ -971,6 +978,7 @@ def load_step_reuse_index() -> dict[str, object]:
                 "step_id": item.get("step_id"),
                 "step_kind": step_kind,
                 "step_result_path": step_result_path,
+                "release_tag": item.get("release_tag"),
                 "updated_at": item.get("updated_at"),
             }
     return {
@@ -982,6 +990,46 @@ def load_step_reuse_index() -> dict[str, object]:
 
 def save_step_reuse_index(payload: dict[str, object]) -> None:
     write_json(step_reuse_index_path(), payload)
+
+
+def remove_step_reuse_entry(reuse_key: str) -> None:
+    index = load_step_reuse_index()
+    entries = dict(index.get("entries", {})) if isinstance(index.get("entries", {}), dict) else {}
+    if reuse_key not in entries:
+        return
+    entries.pop(reuse_key, None)
+    save_step_reuse_index(
+        {
+            "schema_version": SCHEMA_VERSION,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "entries": entries,
+        }
+    )
+
+
+def prune_invalid_step_reuse_entries() -> int:
+    index = load_step_reuse_index()
+    entries = dict(index.get("entries", {})) if isinstance(index.get("entries", {}), dict) else {}
+    removed = 0
+    for reuse_key, entry in list(entries.items()):
+        step_result_path = entry.get("step_result_path")
+        if not isinstance(step_result_path, str) or not step_result_path:
+            entries.pop(reuse_key, None)
+            removed += 1
+            continue
+        step_result = load_step_result_file(Path(step_result_path))
+        if step_result is None or not is_reusable_step(step_result):
+            entries.pop(reuse_key, None)
+            removed += 1
+    if removed:
+        save_step_reuse_index(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "entries": entries,
+            }
+        )
+    return removed
 
 
 def load_step_result_file(path: Path) -> dict[str, object] | None:
@@ -1004,14 +1052,16 @@ def find_reusable_step_entry(reuse_key: str) -> tuple[dict[str, object], dict[st
         return None
     step_result_path = entry.get("step_result_path")
     if not isinstance(step_result_path, str) or not step_result_path:
+        remove_step_reuse_entry(reuse_key)
         return None
     step_result = load_step_result_file(Path(step_result_path))
     if step_result is None or not is_reusable_step(step_result):
+        remove_step_reuse_entry(reuse_key)
         return None
     return entry, step_result
 
 
-def update_step_reuse_index(*, run_id: str, run_root: Path, step_results: list[dict[str, object]]) -> None:
+def update_step_reuse_index(*, run_id: str, run_root: Path, release_tag: str | None, step_results: list[dict[str, object]]) -> None:
     index = load_step_reuse_index()
     entries = dict(index.get("entries", {})) if isinstance(index.get("entries", {}), dict) else {}
     updated_at = datetime.now(timezone.utc).isoformat()
@@ -1033,6 +1083,7 @@ def update_step_reuse_index(*, run_id: str, run_root: Path, step_results: list[d
             "step_id": step_id,
             "step_kind": step_kind,
             "step_result_path": str(step_result_path.resolve()),
+            "release_tag": release_tag,
             "updated_at": updated_at,
         }
     save_step_reuse_index(
@@ -1228,6 +1279,7 @@ def persist_run_outputs(
     run_result: dict[str, object],
     plan: dict[str, object],
     primary_inputs: list[str],
+    release_tag: str | None,
     started_at: str,
     finished_at: str,
 ) -> dict[str, object]:
@@ -1275,6 +1327,7 @@ def persist_run_outputs(
         update_step_reuse_index(
             run_id=str(run_result.get("run_id", run_root.name)),
             run_root=run_root,
+            release_tag=release_tag,
             step_results=step_results,
         )
     final_result_path = run_root / "final_result.json"
@@ -1287,6 +1340,7 @@ def execute_step(
     task_type: str,
     step: dict[str, object],
     artifact_root: Path,
+    release_tag: str | None,
     anchor: dict[str, object] | None = None,
     prior_step_results: dict[str, dict[str, object]] | None = None,
     cache_refs: dict[str, CachedInputRef] | None = None,
@@ -1318,6 +1372,7 @@ def execute_step(
 
     reuse_key = build_step_reuse_key(
         task_type=task_type,
+        release_tag=release_tag,
         step_kind=str(step["kind"]),
         step_args=step_args,
         step_cache_keys=step_cache_keys,
@@ -1688,6 +1743,7 @@ def run_plan(plan: dict[str, object], *, artifact_root: str | None = None, run_i
         _, cache_ref = cache_input_path(input_path, ensure_apk_extracted_dex=False)
         register_cache_ref(cache_refs, cache_ref)
     release_tag = resolve_release_tag()
+    prune_invalid_step_reuse_entries()
     run_created_at = datetime.now(timezone.utc).isoformat()
 
     run_meta_path = run_root / "run-meta.json"
@@ -1724,6 +1780,7 @@ def run_plan(plan: dict[str, object], *, artifact_root: str | None = None, run_i
             task_type=task_type,
             step=step,
             artifact_root=run_root,
+            release_tag=release_tag,
             anchor=relation_anchor,
             prior_step_results=prior_step_results,
             cache_refs=cache_refs,
@@ -1772,6 +1829,7 @@ def run_plan(plan: dict[str, object], *, artifact_root: str | None = None, run_i
         run_result=final_result,
         plan=rewritten_plan,
         primary_inputs=input_paths,
+        release_tag=release_tag,
         started_at=run_created_at,
         finished_at=datetime.now(timezone.utc).isoformat(),
     )

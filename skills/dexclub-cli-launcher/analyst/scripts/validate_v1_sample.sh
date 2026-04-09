@@ -335,6 +335,71 @@ assert_expr "$run_find_reuse_second_output" "payload['step_results'][0]['reused_
 assert_expr "$run_find_reuse_second_output" "payload['step_results'][0]['result']['relation_direction'] == 'callees'" "reused run_find step should preserve the normalized relation payload"
 assert_expr "$run_find_reuse_second_output" 'any(item["method_name"] == "setContent$default" for item in payload["step_results"][0]["result"]["items"])' "reused run_find step should preserve the original hit set"
 
+release_tag_reuse_work_root="$TMP_ROOT/release-tag-reuse-work"
+release_tag_reuse_cache_root="$TMP_ROOT/release-tag-reuse-cache"
+release_tag_reuse_input=$(cat <<JSON
+{"input":["$SAMPLE_APK"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate"},"limit":5}
+JSON
+)
+release_tag_first_output="$RESULT_DIR/release_tag_reuse_first_run.json"
+DEXCLUB_ANALYST_WORK_ROOT="$release_tag_reuse_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$release_tag_reuse_cache_root" \
+DEXCLUB_ANALYST_RELEASE_TAG_OVERRIDE="release-a" \
+python3 "$ANALYZE" run --task-type trace_callees --input-json "$release_tag_reuse_input" >"$release_tag_first_output"
+echo "validated_output=$release_tag_first_output"
+release_tag_second_output="$RESULT_DIR/release_tag_reuse_second_run.json"
+DEXCLUB_ANALYST_WORK_ROOT="$release_tag_reuse_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$release_tag_reuse_cache_root" \
+DEXCLUB_ANALYST_RELEASE_TAG_OVERRIDE="release-b" \
+python3 "$ANALYZE" run --task-type trace_callees --input-json "$release_tag_reuse_input" >"$release_tag_second_output"
+echo "validated_output=$release_tag_second_output"
+assert_expr "$release_tag_second_output" "all('reused_from' not in step for step in payload['step_results'])" "different release tags should isolate step reuse"
+release_tag_second_run_id="$(python3 - "$release_tag_second_output" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(payload["run_id"])
+PY
+)"
+release_tag_index_path="$release_tag_reuse_work_root/runs/v1/reusable-step-index-v1.json"
+python3 - "$release_tag_index_path" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+payload.setdefault("entries", {})["bogus-entry"] = {
+    "run_id": "stale-run",
+    "run_root": "/nonexistent/run",
+    "step_id": "step-9",
+    "step_kind": "run_find",
+    "step_result_path": "/nonexistent/step-result.json",
+    "release_tag": "release-b",
+    "updated_at": "1970-01-01T00:00:00+00:00",
+}
+path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+release_tag_third_output="$RESULT_DIR/release_tag_reuse_third_run.json"
+DEXCLUB_ANALYST_WORK_ROOT="$release_tag_reuse_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$release_tag_reuse_cache_root" \
+DEXCLUB_ANALYST_RELEASE_TAG_OVERRIDE="release-b" \
+python3 "$ANALYZE" run --task-type trace_callees --input-json "$release_tag_reuse_input" >"$release_tag_third_output"
+echo "validated_output=$release_tag_third_output"
+assert_expr "$release_tag_third_output" "payload['step_results'][0]['reused_from']['run_id'] == '$release_tag_second_run_id'" "matching release tags should still allow run_find reuse"
+release_tag_index_has_bogus="$(python3 - "$release_tag_index_path" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+print("true" if "bogus-entry" in payload.get("entries", {}) else "false")
+PY
+)"
+assert_expr "$release_tag_third_output" "'$release_tag_index_has_bogus' == 'false'" "invalid reusable-step-index entries should be pruned"
+
 overflow_input=$(cat <<JSON
 {"input":["$SAMPLE_APK"],"string":"description"}
 JSON

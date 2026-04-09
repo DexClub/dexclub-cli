@@ -131,6 +131,7 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   - Input caches live under `<workspace>/.dexclub-cli/cache/v1/inputs/`.
   - `export_and_scan.py` keeps derived export/scan caches under `<workspace>/.dexclub-cli/cache/v1/export-and-scan/`.
   - `analyze.py run` also keeps `<workspace>/.dexclub-cli/runs/v1/reusable-step-index-v1.json` to reuse prior `run_find` / `resolve_apk_dex` / `export_and_scan` steps across runs.
+  - Cross-run step reuse is isolated by the selected CLI `release_tag`.
   - The run root now contains `run-meta.json`, `final_result.json`, `run-summary.json`, and per-step data under `steps/<step-id>/`.
   - Override the work root with `DEXCLUB_ANALYST_WORK_ROOT` when the current workspace should not own `.dexclub-cli/`.
   - Override the cache root with `DEXCLUB_ANALYST_CACHE_DIR` when input caches should live outside the default work root.

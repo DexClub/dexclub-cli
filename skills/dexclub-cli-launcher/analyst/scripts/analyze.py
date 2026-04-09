@@ -81,6 +81,7 @@ def main() -> None:
                 "steps": [],
             },
             primary_inputs=primary_inputs,
+            release_tag=None,
             started_at=timestamp,
             finished_at=timestamp,
         )
