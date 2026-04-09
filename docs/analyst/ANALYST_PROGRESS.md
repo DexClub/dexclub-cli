@@ -71,7 +71,7 @@
   - `DEXCLUB_CLI_CACHE_DIR=<cache-dir> python3 ./skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py --input-dex <dex-path> --class androidx.compose.foundation.ImageKt --method Image --method-descriptor 'Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V' --language java --mode summary --format json`
   - `DEXCLUB_CLI_CACHE_DIR=<cache-dir> python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run --task-type summarize_method_logic --input-json '{"input":["<apk-path>"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image","descriptor":"Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V"},"language":"java"}'`
 - 最近一次通过验证的结果目录
-  - `<results-dir>`
+  - `/root/termux-home/AndroidProjects/dexclub-cli/.dexclub-cli/tmp/dexclub-analyst-v1.apkbZO/results`
 
 ## 当前边界
 
@@ -276,6 +276,7 @@
   - 当前真实实现已补 `output_contract.py`，并对 `run-summary.json`、`latest.json` 落地前做最小校验
   - 当前真实实现已补 `process_exec.py`，并让 `runner.py`、`resolve_apk_dex.py`、`export_and_scan.py` 复用同一套执行捕获逻辑
   - 当前真实实现已补 `step-result.json` 的轻量 envelope 校验，并为 step 结果补了最小 `diagnostics`
+  - 已基于 `/data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk` 重新跑通 `validate_v1_sample.sh`，覆盖当前目录收口、接续对象、执行捕获层与 step-result 校验后的真实链路
 
 ## 下一步推荐入口
 
