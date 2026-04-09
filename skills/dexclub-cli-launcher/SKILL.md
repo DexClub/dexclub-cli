@@ -112,6 +112,12 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   --input-json '{"input":["./inputs/app.apk"],"method_anchor":{"class_name":"com.example.Target","method_name":"login"}}'
 ```
 
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py cache inspect --format json
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py cache prune --format json
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py cache clear --scope inputs --scope export-and-scan --format json
+```
+
 - Prefer `Contains` with `ignoreCase: true` for `usingStrings` unless exact matching is explicitly required.
 - For class, method, and field identifiers, `Equals` is usually the better default.
 - When the user asks which methods call a known target method, prefer `invokeMethods` on candidate callers.
@@ -132,6 +138,7 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   - `export_and_scan.py` keeps derived export/scan caches under `<workspace>/.dexclub-cli/cache/v1/export-and-scan/`.
   - `analyze.py run` also keeps `<workspace>/.dexclub-cli/runs/v1/reusable-step-index-v1.json` to reuse prior `run_find` / `resolve_apk_dex` / `export_and_scan` steps across runs.
   - Cross-run step reuse is isolated by the selected CLI `release_tag`.
+  - `analyze.py cache clear` manages `inputs`, `export-and-scan`, `reusable-steps`, and `tmp`; when no `--scope` is provided it clears all of them.
   - The run root now contains `run-meta.json`, `final_result.json`, `run-summary.json`, and per-step data under `steps/<step-id>/`.
   - Override the work root with `DEXCLUB_ANALYST_WORK_ROOT` when the current workspace should not own `.dexclub-cli/`.
   - Override the cache root with `DEXCLUB_ANALYST_CACHE_DIR` when input caches should live outside the default work root.

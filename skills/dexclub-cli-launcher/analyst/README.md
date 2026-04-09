@@ -65,6 +65,12 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   --input-json '{"input":["./inputs/app.apk"],"method_anchor":{"class_name":"com.example.Target","method_name":"login"}}'
 ```
 
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py cache inspect --format json
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py cache prune --format json
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py cache clear --scope inputs --scope export-and-scan --format json
+```
+
 Descriptor-aware anchors are now supported for direct relation tracing and smali summarize:
 
 ```bash
@@ -121,6 +127,7 @@ Default local storage layout:
 - The export/scan cache keys are normalized by dex content plus export/scope arguments, so APK-extracted dex and direct dex inputs can reuse the same cached export/analysis result
 - When a run step is reused from a prior run, the new `step_results[]` item includes `reused_from` metadata and still materializes the current run's step artifacts
 - Invalid `reusable-step-index-v1.json` entries are pruned automatically before new runs continue
+- `analyze.py cache clear` manages `inputs`, `export-and-scan`, `reusable-steps`, and `tmp`; when no `--scope` is provided it clears all of them
 - Override the work root with `DEXCLUB_ANALYST_WORK_ROOT`
 - Override the cache root with `DEXCLUB_ANALYST_CACHE_DIR`
 - `export_and_scan.py` now creates its default direct-run output directory under the analyst work root instead of the anonymous system temp directory

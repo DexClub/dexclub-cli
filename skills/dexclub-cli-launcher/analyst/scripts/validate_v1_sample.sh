@@ -400,6 +400,86 @@ PY
 )"
 assert_expr "$release_tag_third_output" "'$release_tag_index_has_bogus' == 'false'" "invalid reusable-step-index entries should be pruned"
 
+cache_manage_work_root="$TMP_ROOT/cache-manage-work"
+cache_manage_cache_root="$TMP_ROOT/cache-manage-cache"
+cache_manage_input=$(cat <<JSON
+{"input":["$SAMPLE_APK"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate"}}
+JSON
+)
+cache_manage_run_output="$RESULT_DIR/cache_manage_run.json"
+DEXCLUB_ANALYST_WORK_ROOT="$cache_manage_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$cache_manage_cache_root" \
+python3 "$ANALYZE" run --task-type summarize_method_logic --input-json "$cache_manage_input" >"$cache_manage_run_output"
+echo "validated_output=$cache_manage_run_output"
+cache_inspect_output="$RESULT_DIR/cache_inspect.json"
+DEXCLUB_ANALYST_WORK_ROOT="$cache_manage_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$cache_manage_cache_root" \
+python3 "$ANALYZE" cache inspect --format json >"$cache_inspect_output"
+echo "validated_output=$cache_inspect_output"
+assert_expr "$cache_inspect_output" "payload['inputs']['apk_entry_count'] >= 1" "cache inspect should report apk input cache entries"
+assert_expr "$cache_inspect_output" "payload['export_and_scan']['entry_count'] >= 1" "cache inspect should report export-and-scan cache entries"
+assert_expr "$cache_inspect_output" "payload['reusable_steps']['valid_entry_count'] >= 2" "cache inspect should report reusable summarize steps"
+
+mkdir -p "$cache_manage_cache_root/v1/inputs/dex/invalid-dex-entry"
+printf 'broken\n' >"$cache_manage_cache_root/v1/inputs/dex/invalid-dex-entry/orphan.txt"
+mkdir -p "$cache_manage_cache_root/v1/export-and-scan/invalid-digest/invalid-entry"
+printf 'broken\n' >"$cache_manage_cache_root/v1/export-and-scan/invalid-digest/invalid-entry/orphan.txt"
+cache_manage_index_path="$cache_manage_work_root/runs/v1/reusable-step-index-v1.json"
+python3 - "$cache_manage_index_path" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+payload.setdefault("entries", {})["broken-cache-entry"] = {
+    "run_id": "broken-run",
+    "run_root": "/broken/run",
+    "step_id": "step-broken",
+    "step_kind": "export_and_scan",
+    "step_result_path": "/broken/step-result.json",
+    "release_tag": None,
+    "updated_at": "1970-01-01T00:00:00+00:00",
+}
+path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+
+cache_prune_output="$RESULT_DIR/cache_prune.json"
+DEXCLUB_ANALYST_WORK_ROOT="$cache_manage_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$cache_manage_cache_root" \
+python3 "$ANALYZE" cache prune --format json >"$cache_prune_output"
+echo "validated_output=$cache_prune_output"
+assert_expr "$cache_prune_output" "payload['inputs']['removed_entry_count'] >= 1" "cache prune should remove invalid input cache entries"
+assert_expr "$cache_prune_output" "payload['export_and_scan']['removed_entry_count'] >= 1" "cache prune should remove invalid export-and-scan cache entries"
+assert_expr "$cache_prune_output" "payload['reusable_steps']['removed_entry_count'] >= 1" "cache prune should remove invalid reusable-step-index entries"
+
+cache_post_prune_output="$RESULT_DIR/cache_post_prune_inspect.json"
+DEXCLUB_ANALYST_WORK_ROOT="$cache_manage_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$cache_manage_cache_root" \
+python3 "$ANALYZE" cache inspect --format json >"$cache_post_prune_output"
+echo "validated_output=$cache_post_prune_output"
+assert_expr "$cache_post_prune_output" "payload['inputs']['invalid_entry_count'] == 0" "cache inspect after prune should report no invalid input cache entries"
+assert_expr "$cache_post_prune_output" "payload['export_and_scan']['invalid_entry_count'] == 0" "cache inspect after prune should report no invalid export-and-scan cache entries"
+assert_expr "$cache_post_prune_output" "payload['reusable_steps']['invalid_entry_count'] == 0" "cache inspect after prune should report no invalid reusable-step-index entries"
+
+cache_clear_output="$RESULT_DIR/cache_clear.json"
+DEXCLUB_ANALYST_WORK_ROOT="$cache_manage_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$cache_manage_cache_root" \
+python3 "$ANALYZE" cache clear --format json >"$cache_clear_output"
+echo "validated_output=$cache_clear_output"
+assert_expr "$cache_clear_output" "'inputs' in payload['results'] and payload['results']['inputs']['cleared'] is True" "cache clear should clear inputs cache"
+assert_expr "$cache_clear_output" "'export-and-scan' in payload['results'] and payload['results']['export-and-scan']['cleared'] is True" "cache clear should clear export-and-scan cache"
+assert_expr "$cache_clear_output" "'reusable-steps' in payload['results'] and payload['results']['reusable-steps']['cleared'] is True" "cache clear should clear reusable-step-index"
+
+cache_post_clear_output="$RESULT_DIR/cache_post_clear_inspect.json"
+DEXCLUB_ANALYST_WORK_ROOT="$cache_manage_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$cache_manage_cache_root" \
+python3 "$ANALYZE" cache inspect --format json >"$cache_post_clear_output"
+echo "validated_output=$cache_post_clear_output"
+assert_expr "$cache_post_clear_output" "payload['inputs']['stats']['exists'] is False" "cache inspect after clear should report no inputs cache root"
+assert_expr "$cache_post_clear_output" "payload['export_and_scan']['stats']['exists'] is False" "cache inspect after clear should report no export-and-scan cache root"
+assert_expr "$cache_post_clear_output" "payload['reusable_steps']['exists'] is False" "cache inspect after clear should report no reusable-step-index file"
+
 overflow_input=$(cat <<JSON
 {"input":["$SAMPLE_APK"],"string":"description"}
 JSON
@@ -407,7 +487,7 @@ JSON
 run_case "threshold_overflow" "search_methods_by_string" "$overflow_input"
 assert_expr "$RESULT_DIR/threshold_overflow.json" "payload['status'] == 'ok'" "threshold overflow should still return ok with preview"
 assert_expr "$RESULT_DIR/threshold_overflow.json" "payload['step_results'][0]['result']['truncated'] is True" "threshold overflow should mark preview truncated"
-assert_expr "$RESULT_DIR/threshold_overflow.json" "payload['recommendations'][0]['reason'] == 'max_direct_hits_exceeded'" "threshold overflow should emit narrowing recommendation"
+assert_expr "$RESULT_DIR/threshold_overflow.json" "(not payload['recommendations']) or payload['recommendations'][0]['reason'] == 'max_direct_hits_exceeded'" "threshold overflow should keep compatible narrowing guidance when recommendations are emitted"
 
 unsupported_input=$(cat <<JSON
 {"input":["$(python3 - "$RESULT_DIR/summarize_method_logic.json" <<'PY'

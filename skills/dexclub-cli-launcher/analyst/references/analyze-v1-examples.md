@@ -21,6 +21,7 @@ Notes:
 - The export/scan cache is keyed by dex content plus export/scope arguments, so APK-extracted dex and direct dex inputs can converge on the same cached result.
 - Reused run steps include `reused_from` metadata in `step_results[]`, while the current run still gets its own `step-result.json` and step-local export artifact path.
 - Invalid reusable-step-index entries are pruned automatically when later runs touch the index.
+- `analyze.py cache inspect|prune|clear` now exposes the managed cache roots and index maintenance path directly from the stable entry point.
 - `stdout` in `step_results[]` is preserved exactly as captured from helper scripts, including current DexKit info lines.
 - For full current sample outputs, run `scripts/validate_v1_sample.sh`; it keeps the JSON files under its reported temporary `results_dir`.
 - `summarize_method_logic` accepts either one direct dex input or one APK input. When the input is an APK, the planner inserts a `resolve_apk_dex` step before export.
