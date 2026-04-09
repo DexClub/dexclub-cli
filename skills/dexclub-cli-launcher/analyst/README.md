@@ -113,10 +113,12 @@ Default local storage layout:
   - `raw.stdout.log`
   - `raw.stderr.log`
 - Runs root also keeps `<workspace>/.dexclub-cli/runs/v1/latest.json`
+- Runs root also keeps `<workspace>/.dexclub-cli/runs/v1/reusable-step-index-v1.json` for cross-run `resolve_apk_dex` / `export_and_scan` reuse
 - APK / dex input caches live under `<workspace>/.dexclub-cli/cache/v1/inputs/`
 - APK-backed class resolution also keeps a `class-dex-index-v1.json` cache under the APK input cache directory
 - `export_and_scan.py` also keeps derived export/scan cache entries under `<workspace>/.dexclub-cli/cache/v1/export-and-scan/`
 - The export/scan cache keys are normalized by dex content plus export/scope arguments, so APK-extracted dex and direct dex inputs can reuse the same cached export/analysis result
+- When a run step is reused from a prior run, the new `step_results[]` item includes `reused_from` metadata and still materializes the current run's step artifacts
 - Override the work root with `DEXCLUB_ANALYST_WORK_ROOT`
 - Override the cache root with `DEXCLUB_ANALYST_CACHE_DIR`
 - `export_and_scan.py` now creates its default direct-run output directory under the analyst work root instead of the anonymous system temp directory

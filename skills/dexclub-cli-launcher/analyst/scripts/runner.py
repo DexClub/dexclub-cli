@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 import subprocess
 import sys
@@ -17,6 +18,7 @@ from analyst_storage import (
     ensure_default_run_root,
     ensure_dex_input_cache,
     inputs_cache_root,
+    runs_root,
 )
 from process_exec import extract_json_payload, run_captured_process
 from output_contract import validate_latest_index, validate_run_summary, validate_step_result_envelope
@@ -24,6 +26,7 @@ from plan_schema import RUN_ARTIFACT_ROOT_PLACEHOLDER, SCHEMA_VERSION, TASK_REGI
 
 RUN_STATUS_OK = {"ok", "empty", "ambiguous", "unsupported"}
 RUN_SUMMARY_PREFERRED = {"ok", "partial"}
+STEP_REUSE_INDEX_FILE_NAME = "reusable-step-index-v1.json"
 
 
 def camel_to_snake(name: str) -> str:
@@ -49,6 +52,12 @@ def ensure_run_root(*, run_id: str, artifact_root: str | None = None) -> Path:
 def write_json(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def write_text(path: Path, content: str) -> int:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return len(content.encode("utf-8"))
 
 
 def ensure_step_root(run_root: Path, step_id: str) -> Path:
@@ -106,6 +115,15 @@ def add_artifact(
             "produced_by_step": produced_by_step,
         }
     )
+
+
+def deep_copy_mapping(value: dict[str, object]) -> dict[str, object]:
+    return json.loads(json.dumps(value, ensure_ascii=False))
+
+
+def stable_hash(payload: dict[str, object]) -> str:
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def replace_placeholder(value: object, artifact_root: str) -> object:
@@ -473,6 +491,38 @@ def normalize_resolve_apk_dex_result(
     return status, normalized_payload, [], evidence, []
 
 
+def build_step_reuse_key(
+    *,
+    step_kind: str,
+    step_args: dict[str, object],
+    step_cache_keys: list[str],
+) -> str | None:
+    if step_kind == "resolve_apk_dex":
+        semantic_args = {
+            "class_name": step_args.get("class_name"),
+            "input_cache_keys": step_cache_keys,
+            "input_apk": None if step_cache_keys else step_args.get("input_apk"),
+        }
+    elif step_kind == "export_and_scan":
+        semantic_args = {
+            "input_dex": step_args.get("input_dex"),
+            "class_name": step_args.get("class_name"),
+            "method": step_args.get("method"),
+            "method_descriptor": step_args.get("method_descriptor"),
+            "language": step_args.get("language"),
+            "mode": step_args.get("mode"),
+        }
+    else:
+        return None
+    return stable_hash(
+        {
+            "schema_version": SCHEMA_VERSION,
+            "step_kind": step_kind,
+            "args": semantic_args,
+        }
+    )
+
+
 def resolve_step_arguments(
     step_args: dict[str, object],
     *,
@@ -537,8 +587,9 @@ def prepare_step_args_for_storage(
     *,
     step_kind: str,
     cache_refs: dict[str, CachedInputRef],
-) -> dict[str, object]:
+) -> tuple[dict[str, object], list[str]]:
     prepared_args = dict(step_args)
+    step_cache_keys: list[str] = []
 
     if step_kind == "run_find":
         prepared_inputs: list[str] = []
@@ -549,16 +600,20 @@ def prepare_step_args_for_storage(
                 _, cache_ref = cache_input_path(original_path, ensure_apk_extracted_dex=False)
                 prepared_inputs.append(original_path)
                 register_cache_ref(cache_refs, cache_ref)
+                if cache_ref is not None:
+                    step_cache_keys.append(cache_ref.cache_key)
         prepared_args["inputs"] = prepared_inputs
-        return prepared_args
+        return prepared_args, sorted(set(step_cache_keys))
 
     if step_kind == "resolve_apk_dex" and "input_apk" in prepared_args:
         input_apk = str(prepared_args["input_apk"])
         _, apk_ref = cache_input_path(input_apk, ensure_apk_extracted_dex=True)
         register_cache_ref(cache_refs, apk_ref)
+        if apk_ref is not None:
+            step_cache_keys.append(apk_ref.cache_key)
         if apk_ref is not None and apk_ref.extracted_dex_dir is not None:
             prepared_args["output_dir"] = str(apk_ref.extracted_dex_dir.resolve())
-        return prepared_args
+        return prepared_args, sorted(set(step_cache_keys))
 
     if step_kind == "export_and_scan" and "input_dex" in prepared_args:
         cached_path, cache_ref = cache_input_path(
@@ -567,9 +622,11 @@ def prepare_step_args_for_storage(
         )
         prepared_args["input_dex"] = cached_path
         register_cache_ref(cache_refs, cache_ref)
-        return prepared_args
+        if cache_ref is not None:
+            step_cache_keys.append(cache_ref.cache_key)
+        return prepared_args, sorted(set(step_cache_keys))
 
-    return prepared_args
+    return prepared_args, sorted(set(step_cache_keys))
 
 
 def resolve_release_tag() -> str | None:
@@ -868,6 +925,277 @@ def should_update_latest(*, latest_path: Path, current_summary: dict[str, object
     return existing_status not in RUN_SUMMARY_PREFERRED
 
 
+def step_reuse_index_path() -> Path:
+    return runs_root() / STEP_REUSE_INDEX_FILE_NAME
+
+
+def load_step_reuse_index() -> dict[str, object]:
+    payload = load_json_file(step_reuse_index_path())
+    if payload is None:
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "updated_at": None,
+            "entries": {},
+        }
+    raw_entries = payload.get("entries", {})
+    normalized_entries: dict[str, dict[str, object]] = {}
+    if isinstance(raw_entries, dict):
+        for reuse_key, item in raw_entries.items():
+            if not isinstance(reuse_key, str) or not reuse_key or not isinstance(item, dict):
+                continue
+            step_result_path = item.get("step_result_path")
+            step_kind = item.get("step_kind")
+            run_id = item.get("run_id")
+            run_root = item.get("run_root")
+            if not all(isinstance(value, str) and value for value in (step_result_path, step_kind, run_id, run_root)):
+                continue
+            normalized_entries[reuse_key] = {
+                "run_id": run_id,
+                "run_root": run_root,
+                "step_id": item.get("step_id"),
+                "step_kind": step_kind,
+                "step_result_path": step_result_path,
+                "updated_at": item.get("updated_at"),
+            }
+    return {
+        "schema_version": payload.get("schema_version", SCHEMA_VERSION),
+        "updated_at": payload.get("updated_at"),
+        "entries": normalized_entries,
+    }
+
+
+def save_step_reuse_index(payload: dict[str, object]) -> None:
+    write_json(step_reuse_index_path(), payload)
+
+
+def load_step_result_file(path: Path) -> dict[str, object] | None:
+    payload = load_json_file(path)
+    if payload is None:
+        return None
+    try:
+        return validate_step_result_envelope(payload)
+    except ValueError:
+        return None
+
+
+def find_reusable_step_entry(reuse_key: str) -> tuple[dict[str, object], dict[str, object]] | None:
+    index = load_step_reuse_index()
+    entries = index.get("entries", {})
+    if not isinstance(entries, dict):
+        return None
+    entry = entries.get(reuse_key)
+    if not isinstance(entry, dict):
+        return None
+    step_result_path = entry.get("step_result_path")
+    if not isinstance(step_result_path, str) or not step_result_path:
+        return None
+    step_result = load_step_result_file(Path(step_result_path))
+    if step_result is None or not is_reusable_step(step_result):
+        return None
+    return entry, step_result
+
+
+def update_step_reuse_index(*, run_id: str, run_root: Path, step_results: list[dict[str, object]]) -> None:
+    index = load_step_reuse_index()
+    entries = dict(index.get("entries", {})) if isinstance(index.get("entries", {}), dict) else {}
+    updated_at = datetime.now(timezone.utc).isoformat()
+    for step_result in step_results:
+        if not is_reusable_step(step_result):
+            continue
+        reuse_key = step_result.get("reuse_key")
+        step_id = step_result.get("step_id")
+        step_kind = step_result.get("step_kind")
+        step_root = step_result.get("step_root")
+        if not all(isinstance(value, str) and value for value in (reuse_key, step_id, step_kind, step_root)):
+            continue
+        step_result_path = Path(step_root) / "step-result.json"
+        if not step_result_path.is_file():
+            continue
+        entries[reuse_key] = {
+            "run_id": run_id,
+            "run_root": str(run_root.resolve()),
+            "step_id": step_id,
+            "step_kind": step_kind,
+            "step_result_path": str(step_result_path.resolve()),
+            "updated_at": updated_at,
+        }
+    save_step_reuse_index(
+        {
+            "schema_version": SCHEMA_VERSION,
+            "updated_at": updated_at,
+            "entries": entries,
+        }
+    )
+
+
+def build_reuse_logs(
+    *,
+    step_root: Path,
+    payload: dict[str, object],
+) -> tuple[list[dict[str, object]], dict[str, object], str]:
+    stdout_content = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    stderr_content = ""
+    stdout_path = step_root / "raw.stdout.log"
+    stderr_path = step_root / "raw.stderr.log"
+    stdout_size = write_text(stdout_path, stdout_content)
+    stderr_size = write_text(stderr_path, stderr_content)
+    artifacts = [
+        {
+            "type": "raw_stdout",
+            "path": str(stdout_path.resolve()),
+            "produced_by_step": step_root.name,
+        },
+        {
+            "type": "raw_stderr",
+            "path": str(stderr_path.resolve()),
+            "produced_by_step": step_root.name,
+        },
+    ]
+    raw_process = {
+        "stdout_path": str(stdout_path.resolve()),
+        "stderr_path": str(stderr_path.resolve()),
+        "stdout_size": stdout_size,
+        "stderr_size": stderr_size,
+    }
+    return artifacts, raw_process, stdout_content
+
+
+def materialize_reused_export(
+    *,
+    step_args: dict[str, object],
+    result: dict[str, object],
+    artifact_dir: Path,
+) -> dict[str, object] | None:
+    updated_result = deep_copy_mapping(result)
+    suffix = ".java" if str(step_args.get("language")) == "java" else ".smali"
+    file_name = str(step_args["class_name"]).replace(".", "_") + suffix
+    source_path: Path | None = None
+    cache_path = updated_result.get("cache_path")
+    if isinstance(cache_path, str) and cache_path:
+        candidate = Path(cache_path) / file_name
+        if candidate.is_file():
+            source_path = candidate.resolve()
+    if source_path is None:
+        export_path = updated_result.get("export_path")
+        if isinstance(export_path, str) and export_path and Path(export_path).is_file():
+            source_path = Path(export_path).resolve()
+    if source_path is None:
+        return None
+    target_path = (artifact_dir / file_name).resolve()
+    if target_path != source_path:
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_bytes(source_path.read_bytes())
+    updated_result["export_path"] = str(target_path)
+    if "artifactRoot" in updated_result:
+        updated_result["artifactRoot"] = str(artifact_dir.resolve())
+    if "temporaryPaths" in updated_result:
+        updated_result["temporaryPaths"] = []
+    scope = updated_result.get("scope")
+    if isinstance(scope, dict):
+        scope["path"] = str(target_path)
+    return updated_result
+
+
+def build_reused_step_result(
+    *,
+    step: dict[str, object],
+    step_root: Path,
+    command: list[str],
+    reuse_key: str,
+    reuse_entry: dict[str, object],
+    source_step_result: dict[str, object],
+    step_args: dict[str, object],
+) -> tuple[dict[str, object], list[dict[str, object]], list[dict[str, object]], list[str]] | None:
+    step_kind = str(step["kind"])
+    source_result = source_step_result.get("result")
+    if not isinstance(source_result, dict):
+        return None
+    if step_kind == "export_and_scan":
+        current_result = materialize_reused_export(
+            step_args=step_args,
+            result=source_result,
+            artifact_dir=step_root / "artifacts",
+        )
+        if current_result is None:
+            return None
+        evidence = build_export_evidence(str(step["step_id"]), current_result)
+    elif step_kind == "resolve_apk_dex":
+        current_result = deep_copy_mapping(source_result)
+        evidence = [
+            {
+                "step_id": str(step["step_id"]),
+                "kind": "resolved_dex_candidate",
+                "value": candidate_path,
+                "source_path": candidate_path,
+            }
+            for candidate_path in current_result.get("candidate_dex_paths", [])
+            if isinstance(candidate_path, str)
+        ]
+    else:
+        return None
+
+    artifacts, raw_process, stdout_content = build_reuse_logs(step_root=step_root, payload=current_result)
+    step_result: dict[str, object] = {
+        "step_id": str(step["step_id"]),
+        "step_kind": step_kind,
+        "step_root": str(step_root.resolve()),
+        "status": str(source_step_result.get("status", "execution_error")),
+        "exit_code": 0,
+        "command": command,
+        "stdout": stdout_content,
+        "stderr": "",
+        "raw_process": raw_process,
+        "diagnostics": {
+            "message": "Step result reused from prior run.",
+            "notes": [
+                f"reused_from_run={reuse_entry['run_id']}",
+                f"reused_from_step={reuse_entry.get('step_id')}",
+            ],
+        },
+        "artifacts": artifacts,
+        "result": current_result,
+        "reuse_key": reuse_key,
+        "reused_from": {
+            "run_id": reuse_entry["run_id"],
+            "run_root": reuse_entry["run_root"],
+            "step_id": reuse_entry.get("step_id"),
+            "step_kind": reuse_entry["step_kind"],
+            "step_result_path": reuse_entry["step_result_path"],
+        },
+    }
+    if step_kind == "export_and_scan":
+        export_path = current_result.get("export_path")
+        if isinstance(export_path, str):
+            step_result["artifacts"].append(
+                {
+                    "type": "exported_code",
+                    "path": export_path,
+                    "produced_by_step": str(step["step_id"]),
+                }
+            )
+    elif step_kind == "resolve_apk_dex":
+        resolved_dex_path = current_result.get("resolved_dex_path")
+        if isinstance(resolved_dex_path, str):
+            step_result["artifacts"].append(
+                {
+                    "type": "resolved_dex",
+                    "path": resolved_dex_path,
+                    "produced_by_step": str(step["step_id"]),
+                }
+            )
+    step_result_path = step_root / "step-result.json"
+    validate_step_result_envelope(step_result)
+    write_json(step_result_path, step_result)
+    step_result["artifacts"].append(
+        {
+            "type": "step_result",
+            "path": str(step_result_path.resolve()),
+            "produced_by_step": str(step["step_id"]),
+        }
+    )
+    return step_result, [], evidence, []
+
+
 def persist_run_outputs(
     *,
     run_root: Path,
@@ -916,6 +1244,13 @@ def persist_run_outputs(
             path=str(latest_path.resolve()),
             produced_by_step="run",
         )
+    step_results = run_result.get("step_results")
+    if isinstance(step_results, list):
+        update_step_reuse_index(
+            run_id=str(run_result.get("run_id", run_root.name)),
+            run_root=run_root,
+            step_results=step_results,
+        )
     final_result_path = run_root / "final_result.json"
     write_json(final_result_path, run_result)
     return run_result
@@ -939,7 +1274,7 @@ def execute_step(
         step_args,
         prior_step_results=prior_step_results or {},
     )
-    step_args = prepare_step_args_for_storage(
+    step_args, step_cache_keys = prepare_step_args_for_storage(
         step_args,
         step_kind=str(step["kind"]),
         cache_refs={} if cache_refs is None else cache_refs,
@@ -954,6 +1289,28 @@ def execute_step(
         command = build_resolve_apk_dex_command(step_args)
     else:
         raise ValueError(f"Unsupported step kind: {step['kind']}")
+
+    reuse_key = build_step_reuse_key(
+        step_kind=str(step["kind"]),
+        step_args=step_args,
+        step_cache_keys=step_cache_keys,
+    )
+    if reuse_key is not None:
+        reusable_entry = find_reusable_step_entry(reuse_key)
+        if reusable_entry is not None:
+            reuse_entry, source_step_result = reusable_entry
+            reused_result = build_reused_step_result(
+                step=step,
+                step_root=step_root,
+                command=command,
+                reuse_key=reuse_key,
+                reuse_entry=reuse_entry,
+                source_step_result=source_step_result,
+                step_args=step_args,
+            )
+            if reused_result is not None:
+                step_result, recommendations, evidence, extra_limits = reused_result
+                return step_result, recommendations, evidence, extra_limits
 
     process_result = run_captured_process(
         step_id=step_id,
@@ -981,6 +1338,8 @@ def execute_step(
         "artifacts": step_artifacts,
         "result": {},
     }
+    if reuse_key is not None:
+        step_result["reuse_key"] = reuse_key
 
     if process_result.status == "ok":
         try:

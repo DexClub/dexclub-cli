@@ -267,6 +267,45 @@ PY
 assert_expr "$direct_cache_reuse_output" "payload['cachePath'] == '$apk_cache_path'" "apk and direct dex export_and_scan should converge to the same cache path"
 assert_expr "$direct_cache_reuse_output" "Path(payload['exportPath']).is_file()" "cache-backed direct dex export_and_scan should still materialize the exported artifact"
 
+step_reuse_work_root="$TMP_ROOT/step-reuse-work"
+step_reuse_cache_root="$TMP_ROOT/step-reuse-cache"
+step_reuse_input=$(cat <<JSON
+{"input":["$SAMPLE_APK"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate"}}
+JSON
+)
+step_reuse_first_output="$RESULT_DIR/step_reuse_first_run.json"
+DEXCLUB_ANALYST_WORK_ROOT="$step_reuse_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$step_reuse_cache_root" \
+python3 "$ANALYZE" run --task-type summarize_method_logic --input-json "$step_reuse_input" >"$step_reuse_first_output"
+echo "validated_output=$step_reuse_first_output"
+step_reuse_first_run_id="$(python3 - "$step_reuse_first_output" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(payload["run_id"])
+PY
+)"
+step_reuse_first_export_path="$(python3 - "$step_reuse_first_output" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(payload["step_results"][1]["result"]["export_path"])
+PY
+)"
+step_reuse_second_output="$RESULT_DIR/step_reuse_second_run.json"
+DEXCLUB_ANALYST_WORK_ROOT="$step_reuse_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$step_reuse_cache_root" \
+python3 "$ANALYZE" run --task-type summarize_method_logic --input-json "$step_reuse_input" >"$step_reuse_second_output"
+echo "validated_output=$step_reuse_second_output"
+assert_expr "$step_reuse_second_output" "payload['step_results'][0]['reused_from']['run_id'] == '$step_reuse_first_run_id'" "second summarize run should reuse the prior resolve_apk_dex step"
+assert_expr "$step_reuse_second_output" "payload['step_results'][1]['reused_from']['run_id'] == '$step_reuse_first_run_id'" "second summarize run should reuse the prior export_and_scan step"
+assert_expr "$step_reuse_second_output" "payload['step_results'][1]['result']['export_path'] != '$step_reuse_first_export_path'" "reused export_and_scan should materialize a fresh run-local export artifact"
+assert_expr "$step_reuse_second_output" "Path(payload['step_results'][1]['result']['export_path']).is_file()" "reused export_and_scan should keep the rematerialized export artifact"
+
 overflow_input=$(cat <<JSON
 {"input":["$SAMPLE_APK"],"string":"description"}
 JSON
