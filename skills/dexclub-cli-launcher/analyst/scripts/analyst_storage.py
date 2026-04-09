@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -8,6 +9,7 @@ import json
 import os
 import shutil
 import tempfile
+import time
 import uuid
 import zipfile
 from pathlib import Path
@@ -105,9 +107,55 @@ def ensure_dir(path: Path) -> Path:
     return path
 
 
-def write_json(path: Path, payload: dict[str, object]) -> None:
+def write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp_path = path.parent / f".{path.name}.tmp-{uuid.uuid4().hex[:8]}"
+    try:
+        tmp_path.write_text(content, encoding="utf-8")
+        tmp_path.replace(path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+
+
+def write_json(path: Path, payload: dict[str, object]) -> None:
+    write_text(path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+
+
+def lock_path(target: Path) -> Path:
+    return target.parent / f".{target.name}.lock"
+
+
+@contextmanager
+def filesystem_lock(
+    target: Path,
+    *,
+    timeout_seconds: float = 30.0,
+    poll_interval_seconds: float = 0.1,
+):
+    lock_dir = lock_path(target)
+    lock_dir.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        try:
+            lock_dir.mkdir(parents=False, exist_ok=False)
+            write_json(
+                lock_dir / "owner.json",
+                {
+                    "pid": os.getpid(),
+                    "created_at": utc_now_iso(),
+                    "target": str(target.resolve()),
+                },
+            )
+            break
+        except FileExistsError:
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"Timed out waiting for lock: {lock_dir}")
+            time.sleep(poll_interval_seconds)
+    try:
+        yield
+    finally:
+        shutil.rmtree(lock_dir, ignore_errors=True)
 
 
 def build_input_meta(*, input_kind: str, original_path: Path, sha256: str) -> dict[str, object]:
@@ -199,28 +247,29 @@ def ensure_dex_input_cache(path: str | Path) -> CachedInputRef:
     cache_dir = inputs_cache_root() / "dex" / digest
     cached_path = cache_dir / "input.dex"
     meta_path = cache_dir / "input-meta.json"
-    if cached_path.is_file() and meta_path.is_file():
-        return CachedInputRef(
-            input_kind="dex",
-            cache_key=f"dex:{digest}",
-            cache_dir=cache_dir,
-            original_path=path_obj,
-            cached_path=cached_path,
-        )
+    with filesystem_lock(cache_dir):
+        if cached_path.is_file() and meta_path.is_file():
+            return CachedInputRef(
+                input_kind="dex",
+                cache_key=f"dex:{digest}",
+                cache_dir=cache_dir,
+                original_path=path_obj,
+                cached_path=cached_path,
+            )
 
-    ensure_dir(cache_dir.parent)
-    tmp_dir = cache_dir.parent / f".{digest}.tmp-{uuid.uuid4().hex[:8]}"
-    shutil.rmtree(tmp_dir, ignore_errors=True)
-    tmp_dir.mkdir(parents=True, exist_ok=False)
-    try:
-        shutil.copy2(path_obj, tmp_dir / "input.dex")
-        write_json(
-            tmp_dir / "input-meta.json",
-            build_input_meta(input_kind="dex", original_path=path_obj, sha256=digest),
-        )
-        _move_tmp_dir(tmp_dir, cache_dir)
-    finally:
+        ensure_dir(cache_dir.parent)
+        tmp_dir = cache_dir.parent / f".{digest}.tmp-{uuid.uuid4().hex[:8]}"
         shutil.rmtree(tmp_dir, ignore_errors=True)
+        tmp_dir.mkdir(parents=True, exist_ok=False)
+        try:
+            shutil.copy2(path_obj, tmp_dir / "input.dex")
+            write_json(
+                tmp_dir / "input-meta.json",
+                build_input_meta(input_kind="dex", original_path=path_obj, sha256=digest),
+            )
+            _move_tmp_dir(tmp_dir, cache_dir)
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
     return CachedInputRef(
         input_kind="dex",
@@ -236,34 +285,36 @@ def ensure_apk_input_cache(path: str | Path, *, ensure_extracted_dex: bool) -> C
     digest = sha256_file(path_obj)
     cache_dir = inputs_cache_root() / "apk" / digest
     meta_path = cache_dir / "input-meta.json"
-    ensure_dir(cache_dir)
-    if not meta_path.is_file():
-        write_json(
-            meta_path,
-            build_input_meta(input_kind="apk", original_path=path_obj, sha256=digest),
-        )
 
-    extracted_dir = cache_dir / "extracted-dex"
-    extracted_paths: tuple[Path, ...] = ()
-    if ensure_extracted_dex:
-        entry_names = _sorted_apk_dex_entries(path_obj)
-        if not _is_valid_extracted_dex_dir(extracted_dir, entry_names):
-            if extracted_dir.exists():
-                shutil.rmtree(extracted_dir, ignore_errors=True)
-            tmp_dir = cache_dir / f".extracted-dex.tmp-{uuid.uuid4().hex[:8]}"
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-            tmp_dir.mkdir(parents=True, exist_ok=False)
-            try:
-                with zipfile.ZipFile(path_obj) as apk_zip:
-                    for entry_name in entry_names:
-                        extracted_path = tmp_dir / entry_name
-                        extracted_path.parent.mkdir(parents=True, exist_ok=True)
-                        with apk_zip.open(entry_name) as src, extracted_path.open("wb") as dst:
-                            dst.write(src.read())
-                _move_tmp_dir(tmp_dir, extracted_dir)
-            finally:
+    with filesystem_lock(cache_dir):
+        ensure_dir(cache_dir)
+        if not meta_path.is_file():
+            write_json(
+                meta_path,
+                build_input_meta(input_kind="apk", original_path=path_obj, sha256=digest),
+            )
+
+        extracted_dir = cache_dir / "extracted-dex"
+        extracted_paths: tuple[Path, ...] = ()
+        if ensure_extracted_dex:
+            entry_names = _sorted_apk_dex_entries(path_obj)
+            if not _is_valid_extracted_dex_dir(extracted_dir, entry_names):
+                if extracted_dir.exists():
+                    shutil.rmtree(extracted_dir, ignore_errors=True)
+                tmp_dir = cache_dir / f".extracted-dex.tmp-{uuid.uuid4().hex[:8]}"
                 shutil.rmtree(tmp_dir, ignore_errors=True)
-        extracted_paths = tuple((extracted_dir / entry_name).resolve() for entry_name in entry_names)
+                tmp_dir.mkdir(parents=True, exist_ok=False)
+                try:
+                    with zipfile.ZipFile(path_obj) as apk_zip:
+                        for entry_name in entry_names:
+                            extracted_path = tmp_dir / entry_name
+                            extracted_path.parent.mkdir(parents=True, exist_ok=True)
+                            with apk_zip.open(entry_name) as src, extracted_path.open("wb") as dst:
+                                dst.write(src.read())
+                    _move_tmp_dir(tmp_dir, extracted_dir)
+                finally:
+                    shutil.rmtree(tmp_dir, ignore_errors=True)
+            extracted_paths = tuple((extracted_dir / entry_name).resolve() for entry_name in entry_names)
 
     return CachedInputRef(
         input_kind="apk",

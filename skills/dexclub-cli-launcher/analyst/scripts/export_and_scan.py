@@ -13,6 +13,7 @@ from analyst_storage import (
     allocate_helper_output_dir,
     ensure_dex_input_cache,
     export_and_scan_cache_root,
+    filesystem_lock,
     inputs_cache_root,
     sha256_file,
     utc_now_iso,
@@ -162,76 +163,77 @@ def main() -> None:
     cache_dir = (export_and_scan_cache_root() / dex_digest / cache_key).resolve()
     cached_export_path = (cache_dir / file_name).resolve()
     cached_report_path = (cache_dir / "analysis-report.json").resolve()
-    cached_report = load_cached_report(cached_report_path) if is_valid_cache_dir(
-        cache_dir=cache_dir,
-        export_path=cached_export_path,
-        report_path=cached_report_path,
-    ) else None
-
-    if cached_report is None and cache_dir.exists():
-        shutil.rmtree(cache_dir, ignore_errors=True)
-
     skill_root = Path(__file__).resolve().parents[2]
-    cache_hit = cached_report is not None
-    if cached_report is None:
-        cache_dir.parent.mkdir(parents=True, exist_ok=True)
-        tmp_cache_dir = cache_dir.parent / f".{cache_key}.tmp-{uuid.uuid4().hex[:8]}"
-        shutil.rmtree(tmp_cache_dir, ignore_errors=True)
-        tmp_cache_dir.mkdir(parents=True, exist_ok=False)
-        try:
-            tmp_export_path = (tmp_cache_dir / file_name).resolve()
-            export_command = build_launcher_command(
-                skill_root,
-                [
-                    f"export-{args.language}",
-                    "--input",
-                    str(export_input_dex),
-                    "--class",
-                    args.class_name,
-                    "--output",
-                    str(tmp_export_path),
-                ],
-            )
-            export_logs_root = tmp_cache_dir / ".export-and-scan-logs" / "launcher_export"
-            execution = run_captured_process(
-                step_id="launcher_export",
-                command=export_command,
-                artifact_dir=export_logs_root,
-                payload_kind="none",
-            )
-            if execution.status != "ok":
-                message = execution.diagnostics.get("cause") or execution.diagnostics.get("message") or "Export failed."
-                raise SystemExit(str(message))
+    with filesystem_lock(cache_dir):
+        cached_report = load_cached_report(cached_report_path) if is_valid_cache_dir(
+            cache_dir=cache_dir,
+            export_path=cached_export_path,
+            report_path=cached_report_path,
+        ) else None
 
-            report = analyze_code(
-                tmp_export_path,
-                method_name=args.method,
-                method_descriptor=args.method_descriptor,
-            )
-            write_json(tmp_cache_dir / "analysis-report.json", report)
-            write_json(
-                tmp_cache_dir / "cache-meta.json",
-                {
-                    "schema_version": CACHE_SCHEMA_VERSION,
-                    "created_at": utc_now_iso(),
-                    "dex_sha256": dex_digest,
-                    "input_dex": str(dex_path),
-                    "cached_input_dex": str(export_input_dex),
-                    "class_name": args.class_name,
-                    "language": args.language,
-                    "method_name": args.method,
-                    "method_descriptor": args.method_descriptor,
-                },
-            )
-            try:
-                tmp_cache_dir.replace(cache_dir)
-            except FileExistsError:
-                shutil.rmtree(tmp_cache_dir, ignore_errors=True)
-        finally:
+        if cached_report is None and cache_dir.exists():
+            shutil.rmtree(cache_dir, ignore_errors=True)
+
+        cache_hit = cached_report is not None
+        if cached_report is None:
+            cache_dir.parent.mkdir(parents=True, exist_ok=True)
+            tmp_cache_dir = cache_dir.parent / f".{cache_key}.tmp-{uuid.uuid4().hex[:8]}"
             shutil.rmtree(tmp_cache_dir, ignore_errors=True)
-        cached_report = load_cached_report(cached_report_path)
-        if cached_report is None or not cached_export_path.is_file():
-            raise SystemExit("Export cache write failed.")
+            tmp_cache_dir.mkdir(parents=True, exist_ok=False)
+            try:
+                tmp_export_path = (tmp_cache_dir / file_name).resolve()
+                export_command = build_launcher_command(
+                    skill_root,
+                    [
+                        f"export-{args.language}",
+                        "--input",
+                        str(export_input_dex),
+                        "--class",
+                        args.class_name,
+                        "--output",
+                        str(tmp_export_path),
+                    ],
+                )
+                export_logs_root = tmp_cache_dir / ".export-and-scan-logs" / "launcher_export"
+                execution = run_captured_process(
+                    step_id="launcher_export",
+                    command=export_command,
+                    artifact_dir=export_logs_root,
+                    payload_kind="none",
+                )
+                if execution.status != "ok":
+                    message = execution.diagnostics.get("cause") or execution.diagnostics.get("message") or "Export failed."
+                    raise SystemExit(str(message))
+
+                report = analyze_code(
+                    tmp_export_path,
+                    method_name=args.method,
+                    method_descriptor=args.method_descriptor,
+                )
+                write_json(tmp_cache_dir / "analysis-report.json", report)
+                write_json(
+                    tmp_cache_dir / "cache-meta.json",
+                    {
+                        "schema_version": CACHE_SCHEMA_VERSION,
+                        "created_at": utc_now_iso(),
+                        "dex_sha256": dex_digest,
+                        "input_dex": str(dex_path),
+                        "cached_input_dex": str(export_input_dex),
+                        "class_name": args.class_name,
+                        "language": args.language,
+                        "method_name": args.method,
+                        "method_descriptor": args.method_descriptor,
+                    },
+                )
+                try:
+                    tmp_cache_dir.replace(cache_dir)
+                except FileExistsError:
+                    shutil.rmtree(tmp_cache_dir, ignore_errors=True)
+            finally:
+                shutil.rmtree(tmp_cache_dir, ignore_errors=True)
+            cached_report = load_cached_report(cached_report_path)
+            if cached_report is None or not cached_export_path.is_file():
+                raise SystemExit("Export cache write failed.")
 
     export_path = materialize_export(
         cached_export_path=cached_export_path,

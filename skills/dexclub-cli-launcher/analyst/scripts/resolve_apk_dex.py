@@ -7,7 +7,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-from analyst_storage import ensure_apk_input_cache, inputs_cache_root, utc_now_iso, write_json
+from analyst_storage import ensure_apk_input_cache, filesystem_lock, inputs_cache_root, utc_now_iso, write_json
 from process_exec import run_captured_process
 
 INDEX_FILE_NAME = "class-dex-index-v1.json"
@@ -181,6 +181,18 @@ def save_index_cache(cache_dir: Path, payload: dict[str, object]) -> None:
     write_json(index_cache_path(cache_dir), payload)
 
 
+def mutate_index_cache(
+    cache_dir: Path,
+    mutate,
+) -> dict[str, object]:
+    index_path = index_cache_path(cache_dir)
+    with filesystem_lock(index_path):
+        current_payload = load_index_cache(cache_dir)
+        updated_payload = mutate(current_payload)
+        save_index_cache(cache_dir, updated_payload)
+        return updated_payload
+
+
 def build_full_apk_index(
     *,
     cache_dir: Path,
@@ -204,9 +216,9 @@ def build_full_apk_index(
     }
     if not normalized_map:
         raise FullIndexUnavailable("class inventory returned an empty mapping for the APK dex set")
-    save_index_cache(
+    mutate_index_cache(
         cache_dir,
-        {
+        lambda _current: {
             "schema_version": INDEX_SCHEMA_VERSION,
             "index_state": "ready",
             "updated_at": utc_now_iso(),
@@ -223,16 +235,22 @@ def record_direct_lookup_cache(
     class_name: str,
     candidate_entry_names: list[str],
 ) -> None:
-    class_to_dex_entries = dict(index_cache.get("class_to_dex_entries", {}))
-    class_to_dex_entries[class_name] = sort_dex_entries(candidate_entry_names)
-    save_index_cache(
-        cache_dir,
-        {
+    def mutate(current_payload: dict[str, object]) -> dict[str, object]:
+        current_entries = dict(current_payload.get("class_to_dex_entries", {}))
+        fallback_entries = dict(index_cache.get("class_to_dex_entries", {}))
+        if not current_entries and fallback_entries:
+            current_entries = fallback_entries
+        current_entries[class_name] = sort_dex_entries(candidate_entry_names)
+        return {
             "schema_version": INDEX_SCHEMA_VERSION,
-            "index_state": index_cache.get("index_state", "unsupported"),
+            "index_state": current_payload.get("index_state", index_cache.get("index_state", "unsupported")),
             "updated_at": utc_now_iso(),
-            "class_to_dex_entries": class_to_dex_entries,
-        },
+            "class_to_dex_entries": current_entries,
+        }
+
+    mutate_index_cache(
+        cache_dir,
+        mutate,
     )
 
 
@@ -317,13 +335,14 @@ def main() -> None:
                 candidate_entry_names = sort_dex_entries(class_to_dex_entries.get(args.class_name, []))
             except FullIndexUnavailable:
                 index_state = "unsupported"
-                save_index_cache(
+                mutate_index_cache(
                     cache_dir,
-                    {
+                    lambda current_payload: {
                         "schema_version": INDEX_SCHEMA_VERSION,
                         "index_state": "unsupported",
                         "updated_at": utc_now_iso(),
-                        "class_to_dex_entries": class_to_dex_entries,
+                        "class_to_dex_entries": dict(current_payload.get("class_to_dex_entries", {}))
+                        or class_to_dex_entries,
                     },
                 )
 

@@ -480,6 +480,40 @@ assert_expr "$cache_post_clear_output" "payload['inputs']['stats']['exists'] is 
 assert_expr "$cache_post_clear_output" "payload['export_and_scan']['stats']['exists'] is False" "cache inspect after clear should report no export-and-scan cache root"
 assert_expr "$cache_post_clear_output" "payload['reusable_steps']['exists'] is False" "cache inspect after clear should report no reusable-step-index file"
 
+parallel_run_work_root="$TMP_ROOT/parallel-run-work"
+parallel_run_cache_root="$TMP_ROOT/parallel-run-cache"
+parallel_run_input=$(cat <<JSON
+{"input":["$SAMPLE_APK"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate"}}
+JSON
+)
+parallel_run_first_output="$RESULT_DIR/parallel_run_first.json"
+parallel_run_second_output="$RESULT_DIR/parallel_run_second.json"
+(
+  DEXCLUB_ANALYST_WORK_ROOT="$parallel_run_work_root" \
+  DEXCLUB_ANALYST_CACHE_DIR="$parallel_run_cache_root" \
+  python3 "$ANALYZE" run --task-type summarize_method_logic --input-json "$parallel_run_input" >"$parallel_run_first_output"
+) &
+parallel_pid_one=$!
+(
+  DEXCLUB_ANALYST_WORK_ROOT="$parallel_run_work_root" \
+  DEXCLUB_ANALYST_CACHE_DIR="$parallel_run_cache_root" \
+  python3 "$ANALYZE" run --task-type summarize_method_logic --input-json "$parallel_run_input" >"$parallel_run_second_output"
+) &
+parallel_pid_two=$!
+wait "$parallel_pid_one"
+wait "$parallel_pid_two"
+echo "validated_output=$parallel_run_first_output"
+echo "validated_output=$parallel_run_second_output"
+assert_expr "$parallel_run_first_output" "payload['status'] == 'ok'" "parallel summarize run one should succeed"
+assert_expr "$parallel_run_second_output" "payload['status'] == 'ok'" "parallel summarize run two should succeed"
+parallel_cache_inspect_output="$RESULT_DIR/parallel_cache_inspect.json"
+DEXCLUB_ANALYST_WORK_ROOT="$parallel_run_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$parallel_run_cache_root" \
+python3 "$ANALYZE" cache inspect --format json >"$parallel_cache_inspect_output"
+echo "validated_output=$parallel_cache_inspect_output"
+assert_expr "$parallel_cache_inspect_output" "payload['reusable_steps']['invalid_entry_count'] == 0" "parallel summarize runs should keep reusable-step-index valid"
+assert_expr "$parallel_cache_inspect_output" "payload['export_and_scan']['invalid_entry_count'] == 0" "parallel summarize runs should keep export-and-scan cache valid"
+
 overflow_input=$(cat <<JSON
 {"input":["$SAMPLE_APK"],"string":"description"}
 JSON

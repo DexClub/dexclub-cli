@@ -18,6 +18,7 @@ from analyst_storage import (
     ensure_apk_input_cache,
     ensure_default_run_root,
     ensure_dex_input_cache,
+    filesystem_lock,
     inputs_cache_root,
     runs_root,
 )
@@ -52,7 +53,13 @@ def ensure_run_root(*, run_id: str, artifact_root: str | None = None) -> Path:
 
 def write_json(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp_path = path.parent / f".{path.name}.tmp-{uuid.uuid4().hex[:8]}"
+    try:
+        tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        tmp_path.replace(path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
 
 
 def write_text(path: Path, content: str) -> int:
@@ -993,35 +1000,13 @@ def save_step_reuse_index(payload: dict[str, object]) -> None:
 
 
 def remove_step_reuse_entry(reuse_key: str) -> None:
-    index = load_step_reuse_index()
-    entries = dict(index.get("entries", {})) if isinstance(index.get("entries", {}), dict) else {}
-    if reuse_key not in entries:
-        return
-    entries.pop(reuse_key, None)
-    save_step_reuse_index(
-        {
-            "schema_version": SCHEMA_VERSION,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-            "entries": entries,
-        }
-    )
-
-
-def prune_invalid_step_reuse_entries() -> int:
-    index = load_step_reuse_index()
-    entries = dict(index.get("entries", {})) if isinstance(index.get("entries", {}), dict) else {}
-    removed = 0
-    for reuse_key, entry in list(entries.items()):
-        step_result_path = entry.get("step_result_path")
-        if not isinstance(step_result_path, str) or not step_result_path:
-            entries.pop(reuse_key, None)
-            removed += 1
-            continue
-        step_result = load_step_result_file(Path(step_result_path))
-        if step_result is None or not is_reusable_step(step_result):
-            entries.pop(reuse_key, None)
-            removed += 1
-    if removed:
+    index_path = step_reuse_index_path()
+    with filesystem_lock(index_path):
+        index = load_step_reuse_index()
+        entries = dict(index.get("entries", {})) if isinstance(index.get("entries", {}), dict) else {}
+        if reuse_key not in entries:
+            return
+        entries.pop(reuse_key, None)
         save_step_reuse_index(
             {
                 "schema_version": SCHEMA_VERSION,
@@ -1029,7 +1014,33 @@ def prune_invalid_step_reuse_entries() -> int:
                 "entries": entries,
             }
         )
-    return removed
+
+
+def prune_invalid_step_reuse_entries() -> int:
+    index_path = step_reuse_index_path()
+    with filesystem_lock(index_path):
+        index = load_step_reuse_index()
+        entries = dict(index.get("entries", {})) if isinstance(index.get("entries", {}), dict) else {}
+        removed = 0
+        for reuse_key, entry in list(entries.items()):
+            step_result_path = entry.get("step_result_path")
+            if not isinstance(step_result_path, str) or not step_result_path:
+                entries.pop(reuse_key, None)
+                removed += 1
+                continue
+            step_result = load_step_result_file(Path(step_result_path))
+            if step_result is None or not is_reusable_step(step_result):
+                entries.pop(reuse_key, None)
+                removed += 1
+        if removed:
+            save_step_reuse_index(
+                {
+                    "schema_version": SCHEMA_VERSION,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "entries": entries,
+                }
+            )
+        return removed
 
 
 def load_step_result_file(path: Path) -> dict[str, object] | None:
@@ -1062,37 +1073,39 @@ def find_reusable_step_entry(reuse_key: str) -> tuple[dict[str, object], dict[st
 
 
 def update_step_reuse_index(*, run_id: str, run_root: Path, release_tag: str | None, step_results: list[dict[str, object]]) -> None:
-    index = load_step_reuse_index()
-    entries = dict(index.get("entries", {})) if isinstance(index.get("entries", {}), dict) else {}
-    updated_at = datetime.now(timezone.utc).isoformat()
-    for step_result in step_results:
-        if not is_reusable_step(step_result):
-            continue
-        reuse_key = step_result.get("reuse_key")
-        step_id = step_result.get("step_id")
-        step_kind = step_result.get("step_kind")
-        step_root = step_result.get("step_root")
-        if not all(isinstance(value, str) and value for value in (reuse_key, step_id, step_kind, step_root)):
-            continue
-        step_result_path = Path(step_root) / "step-result.json"
-        if not step_result_path.is_file():
-            continue
-        entries[reuse_key] = {
-            "run_id": run_id,
-            "run_root": str(run_root.resolve()),
-            "step_id": step_id,
-            "step_kind": step_kind,
-            "step_result_path": str(step_result_path.resolve()),
-            "release_tag": release_tag,
-            "updated_at": updated_at,
-        }
-    save_step_reuse_index(
-        {
-            "schema_version": SCHEMA_VERSION,
-            "updated_at": updated_at,
-            "entries": entries,
-        }
-    )
+    index_path = step_reuse_index_path()
+    with filesystem_lock(index_path):
+        index = load_step_reuse_index()
+        entries = dict(index.get("entries", {})) if isinstance(index.get("entries", {}), dict) else {}
+        updated_at = datetime.now(timezone.utc).isoformat()
+        for step_result in step_results:
+            if not is_reusable_step(step_result):
+                continue
+            reuse_key = step_result.get("reuse_key")
+            step_id = step_result.get("step_id")
+            step_kind = step_result.get("step_kind")
+            step_root = step_result.get("step_root")
+            if not all(isinstance(value, str) and value for value in (reuse_key, step_id, step_kind, step_root)):
+                continue
+            step_result_path = Path(step_root) / "step-result.json"
+            if not step_result_path.is_file():
+                continue
+            entries[reuse_key] = {
+                "run_id": run_id,
+                "run_root": str(run_root.resolve()),
+                "step_id": step_id,
+                "step_kind": step_kind,
+                "step_result_path": str(step_result_path.resolve()),
+                "release_tag": release_tag,
+                "updated_at": updated_at,
+            }
+        save_step_reuse_index(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "updated_at": updated_at,
+                "entries": entries,
+            }
+        )
 
 
 def build_reuse_logs(
