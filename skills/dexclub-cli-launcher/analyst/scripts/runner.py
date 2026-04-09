@@ -17,6 +17,7 @@ from analyst_storage import (
     ensure_default_run_root,
     ensure_dex_input_cache,
 )
+from output_contract import validate_latest_index, validate_run_summary
 from plan_schema import RUN_ARTIFACT_ROOT_PLACEHOLDER, SCHEMA_VERSION, TASK_REGISTRY
 
 RUN_STATUS_OK = {"ok", "empty", "ambiguous", "unsupported"}
@@ -894,15 +895,18 @@ def persist_run_outputs(
         finished_at=finished_at,
         updated_at=updated_at,
     )
+    validate_run_summary(run_summary)
     write_json(run_summary_path, run_summary)
     if should_update_latest(latest_path=latest_path, current_summary=run_summary):
+        latest_index = build_latest_index_payload(
+            run_root=run_root,
+            run_summary=run_summary,
+            updated_at=updated_at,
+        )
+        validate_latest_index(latest_index)
         write_json(
             latest_path,
-            build_latest_index_payload(
-                run_root=run_root,
-                run_summary=run_summary,
-                updated_at=updated_at,
-            ),
+            latest_index,
         )
     artifacts = run_result.get("artifacts")
     if isinstance(artifacts, list):
