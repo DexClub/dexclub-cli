@@ -3,9 +3,17 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import datetime, timezone
 
 from planner import PlannerError, build_plan, build_plan_error_payload
-from runner import build_analysis_error_result, ensure_run_root, make_run_id, run_plan
+from runner import (
+    build_analysis_error_result,
+    collect_input_paths,
+    ensure_run_root,
+    make_run_id,
+    persist_run_outputs,
+    run_plan,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -53,14 +61,28 @@ def main() -> None:
             raise SystemExit(1 if error.status in {"input_error", "execution_error"} else 0)
 
         run_id = make_run_id()
-        artifact_root = str(ensure_run_root(run_id=run_id, artifact_root=args.artifact_root).resolve())
+        run_root = ensure_run_root(run_id=run_id, artifact_root=args.artifact_root).resolve()
         result = build_analysis_error_result(
             run_id=run_id,
             task_type=task_type,
-            artifact_root=artifact_root,
+            artifact_root=str(run_root),
             status=error.status,
             message=error.message,
             limits=[],
+        )
+        primary_inputs = collect_input_paths(inputs.get("input")) if "inputs" in locals() else []
+        timestamp = datetime.now(timezone.utc).isoformat()
+        persist_run_outputs(
+            run_root=run_root,
+            run_result=result,
+            plan={
+                "task_type": task_type,
+                "inputs": inputs if "inputs" in locals() and isinstance(inputs, dict) else {},
+                "steps": [],
+            },
+            primary_inputs=primary_inputs,
+            started_at=timestamp,
+            finished_at=timestamp,
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         raise SystemExit(1 if error.status in {"input_error", "execution_error"} else 0)

@@ -20,6 +20,7 @@ from analyst_storage import (
 from plan_schema import RUN_ARTIFACT_ROOT_PLACEHOLDER, SCHEMA_VERSION, TASK_REGISTRY
 
 RUN_STATUS_OK = {"ok", "empty", "ambiguous", "unsupported"}
+RUN_SUMMARY_PREFERRED = {"ok", "partial"}
 
 
 def camel_to_snake(name: str) -> str:
@@ -87,6 +88,24 @@ def build_analysis_error_result(
         "limits": limits or [],
         "evidence": [],
     }
+
+
+def add_artifact(
+    artifacts: list[dict[str, object]],
+    *,
+    artifact_type: str,
+    path: str,
+    produced_by_step: str,
+) -> None:
+    if any(item.get("type") == artifact_type and item.get("path") == path for item in artifacts):
+        return
+    artifacts.append(
+        {
+            "type": artifact_type,
+            "path": path,
+            "produced_by_step": produced_by_step,
+        }
+    )
 
 
 def replace_placeholder(value: object, artifact_root: str) -> object:
@@ -598,6 +617,312 @@ def build_run_meta(
     }
 
 
+def detect_input_source(primary_inputs: list[str]) -> str:
+    suffixes = {Path(path).suffix.lower() for path in primary_inputs}
+    if ".apk" in suffixes:
+        return "apk_direct"
+    return "workspace_dex_set"
+
+
+def get_required_step_kinds(plan: dict[str, object]) -> set[str]:
+    task_type = str(plan.get("task_type", ""))
+    if task_type == "summarize_method_logic":
+        step_kinds = {
+            str(step.get("kind"))
+            for step in plan.get("steps", [])
+            if isinstance(step, dict) and isinstance(step.get("kind"), str)
+        }
+        if "resolve_apk_dex" in step_kinds:
+            return {"resolve_apk_dex", "export_and_scan"}
+        return {"export_and_scan"}
+    if task_type in {
+        "search_methods_by_string",
+        "search_methods_by_number",
+        "trace_callers",
+        "trace_callees",
+    }:
+        return {"run_find"}
+    return set()
+
+
+def is_reusable_step(step_result: dict[str, object]) -> bool:
+    if step_result.get("status") not in RUN_STATUS_OK:
+        return False
+    result = step_result.get("result", {})
+    if not isinstance(result, dict):
+        return False
+    step_kind = step_result.get("step_kind")
+    if step_kind == "resolve_apk_dex":
+        candidate_dex_paths = result.get("candidate_dex_paths")
+        return bool(result.get("resolved_dex_path")) or bool(candidate_dex_paths)
+    if step_kind == "run_find":
+        items = result.get("items")
+        return isinstance(items, list) and len(items) > 0
+    if step_kind == "export_and_scan":
+        return bool(result.get("export_path"))
+    return False
+
+
+def is_run_successful(
+    *,
+    plan: dict[str, object],
+    step_results: list[dict[str, object]],
+    run_status: str,
+) -> bool:
+    task_type = str(plan.get("task_type", ""))
+    if task_type in {"search_methods_by_string", "search_methods_by_number"}:
+        return any(
+            step.get("step_kind") == "run_find" and step.get("status") in {"ok", "empty"}
+            for step in step_results
+        )
+    if task_type in {"trace_callers", "trace_callees"}:
+        return any(step.get("step_kind") == "run_find" and step.get("status") == "ok" for step in step_results)
+    if task_type == "summarize_method_logic":
+        return run_status == "ok"
+    return run_status == "ok"
+
+
+def aggregate_run_summary_status(
+    *,
+    plan: dict[str, object],
+    step_results: list[dict[str, object]],
+    run_status: str,
+) -> str:
+    if run_status in {"input_error", "unsupported"}:
+        return "input_error"
+    if is_run_successful(plan=plan, step_results=step_results, run_status=run_status):
+        return "ok"
+    if any(is_reusable_step(step_result) for step_result in step_results):
+        return "partial"
+    if any(step_result.get("status") == "input_error" for step_result in step_results):
+        return "input_error"
+    return "execution_error"
+
+
+def build_step_index(
+    *,
+    run_root: Path,
+    step_results: list[dict[str, object]],
+    required_step_kinds: set[str],
+) -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
+    for step_result in step_results:
+        step_id = str(step_result.get("step_id"))
+        step_root = step_result.get("step_root")
+        if not isinstance(step_root, str) or not step_root:
+            step_root = str((run_root / "steps" / step_id).resolve())
+        items.append(
+            {
+                "step_id": step_id,
+                "step_kind": step_result.get("step_kind"),
+                "status": step_result.get("status"),
+                "step_root": step_root,
+                "attempt_count": 1,
+                "is_reusable_step": is_reusable_step(step_result),
+                "is_required": step_result.get("step_kind") in required_step_kinds,
+            }
+        )
+    return items
+
+
+def build_key_artifacts(
+    *,
+    task_type: str,
+    artifacts: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    candidates: list[tuple[int, dict[str, object]]] = []
+    seen_paths: set[str] = set()
+    for artifact in artifacts:
+        path = artifact.get("path")
+        if not isinstance(path, str) or not path or path in seen_paths:
+            continue
+        artifact_type = artifact.get("type")
+        if artifact_type == "exported_code":
+            seen_paths.add(path)
+            candidates.append(
+                (
+                    3,
+                    {
+                        "type": "exported_code",
+                        "path": path,
+                        "label": "导出的目标类代码",
+                        "reason": "本次 run 已导出可直接复核的代码实体，适合作为接手入口",
+                    },
+                )
+            )
+        elif artifact_type == "resolved_dex":
+            seen_paths.add(path)
+            candidates.append(
+                (
+                    1 if task_type == "summarize_method_logic" else 2,
+                    {
+                        "type": "resolved_target",
+                        "path": path,
+                        "label": "已解析出的目标 dex",
+                        "reason": "本次 run 已收敛到可直接复用的 dex 结果，后续会话可继续利用",
+                    },
+                )
+            )
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return [item for _, item in candidates[:5]]
+
+
+def build_run_summary_payload(
+    *,
+    run_root: Path,
+    plan: dict[str, object],
+    run_result: dict[str, object],
+    primary_inputs: list[str],
+    started_at: str,
+    finished_at: str,
+    updated_at: str,
+) -> dict[str, object]:
+    step_results = run_result.get("step_results", [])
+    if not isinstance(step_results, list):
+        step_results = []
+    required_step_kinds = get_required_step_kinds(plan)
+    run_summary_status = aggregate_run_summary_status(
+        plan=plan,
+        step_results=step_results,
+        run_status=str(run_result.get("status", "execution_error")),
+    )
+    latest_step_id = next(
+        (str(step.get("step_id")) for step in reversed(step_results) if step.get("step_id")),
+        None,
+    )
+    latest_successful_step_id = next(
+        (
+            str(step.get("step_id"))
+            for step in reversed(step_results)
+            if step.get("step_id") and step.get("status") in RUN_STATUS_OK
+        ),
+        None,
+    )
+    summary_style = "ok" if run_summary_status == "ok" else "warning" if run_summary_status == "partial" else "error"
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "run_id": run_result["run_id"],
+        "run_root": str(run_root.resolve()),
+        "status": run_summary_status,
+        "task_type": plan.get("task_type"),
+        "input_source": detect_input_source(primary_inputs),
+        "primary_inputs": primary_inputs,
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "updated_at": updated_at,
+        "latest_step_id": latest_step_id,
+        "latest_successful_step_id": latest_successful_step_id,
+        "key_artifacts": build_key_artifacts(
+            task_type=str(plan.get("task_type", "")),
+            artifacts=run_result.get("artifacts", []) if isinstance(run_result.get("artifacts"), list) else [],
+        ),
+        "step_index": build_step_index(
+            run_root=run_root,
+            step_results=step_results,
+            required_step_kinds=required_step_kinds,
+        ),
+        "summary": {
+            "text": str(run_result.get("summary", {}).get("text", "")),
+            "style": summary_style,
+        },
+    }
+
+
+def load_json_file(path: Path) -> dict[str, object] | None:
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def build_latest_index_payload(
+    *,
+    run_root: Path,
+    run_summary: dict[str, object],
+    updated_at: str,
+) -> dict[str, object]:
+    run_status = str(run_summary["status"])
+    if run_status == "ok":
+        selection_reason = "latest_successful"
+    elif run_status == "partial":
+        selection_reason = "latest_partial"
+    else:
+        selection_reason = "latest_active"
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "run_id": run_summary["run_id"],
+        "run_root": str(run_root.resolve()),
+        "summary_path": str((run_root / "run-summary.json").resolve()),
+        "status": run_status,
+        "updated_at": updated_at,
+        "selection_reason": selection_reason,
+    }
+
+
+def should_update_latest(*, latest_path: Path, current_summary: dict[str, object]) -> bool:
+    current_status = str(current_summary["status"])
+    existing = load_json_file(latest_path)
+    if existing is None:
+        return True
+    existing_status = str(existing.get("status", "execution_error"))
+    if current_status in RUN_SUMMARY_PREFERRED:
+        return True
+    return existing_status not in RUN_SUMMARY_PREFERRED
+
+
+def persist_run_outputs(
+    *,
+    run_root: Path,
+    run_result: dict[str, object],
+    plan: dict[str, object],
+    primary_inputs: list[str],
+    started_at: str,
+    finished_at: str,
+) -> dict[str, object]:
+    updated_at = finished_at
+    run_summary_path = run_root / "run-summary.json"
+    latest_path = run_root.parent / "latest.json"
+    run_summary = build_run_summary_payload(
+        run_root=run_root,
+        plan=plan,
+        run_result=run_result,
+        primary_inputs=primary_inputs,
+        started_at=started_at,
+        finished_at=finished_at,
+        updated_at=updated_at,
+    )
+    write_json(run_summary_path, run_summary)
+    if should_update_latest(latest_path=latest_path, current_summary=run_summary):
+        write_json(
+            latest_path,
+            build_latest_index_payload(
+                run_root=run_root,
+                run_summary=run_summary,
+                updated_at=updated_at,
+            ),
+        )
+    artifacts = run_result.get("artifacts")
+    if isinstance(artifacts, list):
+        add_artifact(
+            artifacts,
+            artifact_type="run_summary",
+            path=str(run_summary_path.resolve()),
+            produced_by_step="run",
+        )
+        add_artifact(
+            artifacts,
+            artifact_type="latest_index",
+            path=str(latest_path.resolve()),
+            produced_by_step="run",
+        )
+    final_result_path = run_root / "final_result.json"
+    write_json(final_result_path, run_result)
+    return run_result
+
+
 def execute_step(
     *,
     task_type: str,
@@ -1040,6 +1365,11 @@ def run_plan(plan: dict[str, object], *, artifact_root: str | None = None, run_i
             created_at=run_created_at,
         ),
     )
-    final_result_path = run_root / "final_result.json"
-    write_json(final_result_path, final_result)
-    return final_result
+    return persist_run_outputs(
+        run_root=run_root,
+        run_result=final_result,
+        plan=rewritten_plan,
+        primary_inputs=input_paths,
+        started_at=run_created_at,
+        finished_at=datetime.now(timezone.utc).isoformat(),
+    )

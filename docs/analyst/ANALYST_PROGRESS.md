@@ -57,9 +57,11 @@
     - 下面这些是“当前已实现状态”，不是新的目标目录方案
     - `analyze.py run` 默认写入 `.dexclub-cli/runs/v1/<run-id>/`
     - APK / dex 输入缓存写入 `.dexclub-cli/cache/v1/inputs/`
-    - run 目录当前会写入 `run-meta.json`、`final_result.json`
+    - run 目录当前会写入 `run-meta.json`、`final_result.json`、`run-summary.json`
     - 单步结果当前聚合到 `.dexclub-cli/runs/v1/<run-id>/steps/<step-id>/`
     - step 目录当前会写入 `step-result.json`、`raw.stdout.log`、`raw.stderr.log`
+    - runs 根当前会写入 `.dexclub-cli/runs/v1/latest.json`
+    - `run-summary.json` 当前已包含最小 `step_index`、`key_artifacts`
     - 输入缓存目录会写入 `input-meta.json`
 - 当前验证脚本
   - [validate_v1_sample.sh](../../skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh)
@@ -157,6 +159,7 @@
 | A-08 | 基于结构化摘要的局部片段提取 | 已完成 | 本次会话完成。新增 `focus_snippets`，按高信号 block / cluster 回抽原始 smali 片段 |
 | A-09 | `export-java` 导出失败定位与修复 | 已完成 | 本次会话完成。根因包括 fat jar 中缺失 Jadx `dex-input` service 声明，以及 Java 导出时在 decompiler 生命周期外读取 `JavaClass.code` |
 | A-10 | analyst 工作目录产物与输入缓存落地 | 已完成 | 提交 `c102896`。后续已把当前真实实现默认 run 根目录切到 `.dexclub-cli/runs/v1`，输入缓存切到 `.dexclub-cli/cache/v1/inputs`，并把单步结果收口到 `steps/<step-id>/`；更完整的目标方案另见 [OUTPUT_NORMALIZATION.md](./OUTPUT_NORMALIZATION.md) |
+| A-11 | run 接续索引最小落地 | 已完成 | 本次会话完成。当前真实实现已补 `run-summary.json`、`latest.json`、最小 `step_index` 与 `key_artifacts`，并覆盖 `run_plan` 与 `analyze.py run` 的 `input_error` 落盘路径 |
 
 ## 最近一次状态流转
 
@@ -224,12 +227,20 @@
     - 已完成同 APK 连续执行复用、删 `runs/` 不影响缓存、删 `cache/` 可重建的最小验证
     - `README`、样例文档与进度文档已同步当时的存储口径
     - 代码与文档已提交到 `c102896`
+- `A-11`
+  - `待开始 -> 进行中`
+  - `进行中 -> 已完成`
+  - 完成依据
+    - [`runner.py`](../../skills/dexclub-cli-launcher/analyst/scripts/runner.py) 已补 `run-summary.json`、`latest.json`、最小 `step_index` 与 `key_artifacts`
+    - [`analyze.py`](../../skills/dexclub-cli-launcher/analyst/scripts/analyze.py) 已把 `run` 的 `input_error` 路径纳入同一套 run 级落盘
+    - 已完成 `run_plan` 成功链路与 `analyze.py run` 输入错误链路的最小验证
 
 - 本次会话补充
   - 当前真实实现默认内部状态根已从 `build/dexclub-cli/` 切到工作区 `.dexclub-cli/`
   - 当前真实实现已把单步结果收口到 `steps/<step-id>/step-result.json`，并为每步补 `raw.stdout.log`、`raw.stderr.log`
   - `final_result.json` 已回收到 run 根，不再写入 run 根下的 `results/` 目录
-  - 当前仍未落地 `latest.json`、`run-summary.json`、轻量 validator 或公共执行器
+  - 当前真实实现已补 `run-summary.json`、`latest.json`、最小 `step_index` 与 `key_artifacts`
+  - 当前仍未落地轻量 validator 或公共执行器
 
 ## 下一步推荐入口
 
