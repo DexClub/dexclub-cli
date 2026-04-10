@@ -8,6 +8,7 @@ import zipfile
 from pathlib import Path
 
 from analyst_storage import ensure_apk_input_cache, filesystem_lock, inputs_cache_root, utc_now_iso, write_json
+from dex_path_order import sort_dex_names
 from helper_cli import ActionableArgumentParser, format_actionable_error, require_existing_file
 from process_exec import run_captured_process
 
@@ -52,17 +53,8 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def dex_entry_sort_key(name: str) -> tuple[int, str]:
-    if name == "classes.dex":
-        return (1, name)
-    suffix = name.removeprefix("classes").removesuffix(".dex")
-    if suffix.isdigit():
-        return (int(suffix), name)
-    return (10**9, name)
-
-
 def sort_dex_entries(names: list[str]) -> list[str]:
-    return sorted(names, key=dex_entry_sort_key)
+    return sort_dex_names(names)
 
 
 class FullIndexUnavailable(RuntimeError):

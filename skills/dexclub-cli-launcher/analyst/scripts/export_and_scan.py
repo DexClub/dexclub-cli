@@ -141,8 +141,10 @@ def finalize_payload(
     cache_key: str,
     cache_hit: bool,
     method_descriptor: str | None,
+    class_name: str,
 ) -> dict[str, object]:
     payload = select_payload(report, mode)
+    payload["className"] = class_name
     payload["artifactRoot"] = str(output_dir.resolve())
     payload["cacheRoot"] = str(inputs_cache_root().resolve())
     payload["exportScanCacheRoot"] = str(export_and_scan_cache_root().resolve())
@@ -310,6 +312,7 @@ def main() -> None:
         cache_key=cache_key,
         cache_hit=cache_hit,
         method_descriptor=args.method_descriptor,
+        class_name=args.class_name,
     )
 
     if args.output_format == "json":

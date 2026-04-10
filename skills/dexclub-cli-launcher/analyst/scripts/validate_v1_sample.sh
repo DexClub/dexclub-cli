@@ -122,6 +122,26 @@ while IFS= read -r dex_name; do
   unzip -p "$SAMPLE_APK" "$dex_name" >"$DEX_DIR/$dex_name"
 done < <(unzip -Z1 "$SAMPLE_APK" 'classes*.dex' | sort)
 
+dex_list_json="$(python3 - "$DEX_DIR"/classes*.dex <<'PY'
+import json
+import pathlib
+import sys
+
+paths = [str(pathlib.Path(path).resolve()) for path in sys.argv[1:]]
+print(json.dumps(paths, ensure_ascii=False))
+PY
+)"
+reversed_dex_list_json="$(python3 - "$DEX_DIR"/classes*.dex <<'PY'
+import json
+import pathlib
+import sys
+
+paths = [str(pathlib.Path(path).resolve()) for path in sys.argv[1:]]
+paths.reverse()
+print(json.dumps(paths, ensure_ascii=False))
+PY
+)"
+
 main_activity_dex="$(locate_class_dex "com.shadcn.ui.compose.MainActivity" "onCreate")"
 ambiguous_image_dex="$(locate_class_dex "androidx.compose.foundation.ImageKt" "Image")"
 echo "main_activity_dex=$main_activity_dex"
@@ -135,6 +155,16 @@ run_case "search_methods_by_string" "search_methods_by_string" "$string_input"
 assert_expr "$RESULT_DIR/search_methods_by_string.json" "payload['status'] == 'ok'" "search string should succeed"
 assert_expr "$RESULT_DIR/search_methods_by_string.json" "payload['step_results'][0]['result']['count'] == 1" "search string should return exactly one hit"
 assert_expr "$RESULT_DIR/search_methods_by_string.json" "payload['step_results'][0]['result']['items'][0]['class_name'] == 'com.shadcn.ui.compose.showcase.docs.AvatarDocsPageKt'" "search string should hit AvatarDocsPageKt"
+assert_expr "$RESULT_DIR/search_methods_by_string.json" "payload['input_source'] == 'apk_direct'" "apk-backed string search should report apk_direct input source"
+
+string_dex_dir_input=$(cat <<JSON
+{"input":{"dex_dir":"$DEX_DIR"},"string":"https://github.com/shadcn.png","declared_class":"com.shadcn.ui.compose.showcase.docs.AvatarDocsPageKt"}
+JSON
+)
+run_case "search_methods_by_string_dex_dir" "search_methods_by_string" "$string_dex_dir_input"
+assert_expr "$RESULT_DIR/search_methods_by_string_dex_dir.json" "payload['status'] == 'ok'" "dex-dir string search should succeed"
+assert_expr "$RESULT_DIR/search_methods_by_string_dex_dir.json" "payload['input_source'] == 'workspace_dex_set'" "dex-dir string search should report workspace_dex_set input source"
+assert_expr "$RESULT_DIR/search_methods_by_string_dex_dir.json" "payload['step_results'][0]['result']['items'][0]['class_name'] == 'com.shadcn.ui.compose.showcase.docs.AvatarDocsPageKt'" "dex-dir string search should preserve the matching class"
 
 number_input=$(cat <<JSON
 {"input":["$main_activity_dex"],"number":"0x3","declared_class":"com.shadcn.ui.compose.MainActivity"}
@@ -162,6 +192,15 @@ assert_expr "$RESULT_DIR/trace_callees.json" "payload['status'] == 'ok'" "trace 
 assert_expr "$RESULT_DIR/trace_callees.json" "payload['step_results'][0]['result']['relation_direction'] == 'callees'" "trace callees should keep relation direction"
 assert_expr "$RESULT_DIR/trace_callees.json" 'any(item["method_name"] == "setContent$default" for item in payload["step_results"][0]["result"]["items"])' "trace callees should include setContent\$default"
 
+trace_callees_dex_list_input=$(cat <<JSON
+{"input":{"dex_list":$reversed_dex_list_json},"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate"},"limit":5}
+JSON
+)
+run_case "trace_callees_dex_list" "trace_callees" "$trace_callees_dex_list_input"
+assert_expr "$RESULT_DIR/trace_callees_dex_list.json" "payload['status'] == 'ok'" "dex-list trace callees should succeed"
+assert_expr "$RESULT_DIR/trace_callees_dex_list.json" "payload['input_source'] == 'workspace_dex_set'" "dex-list trace callees should report workspace_dex_set input source"
+assert_expr "$RESULT_DIR/trace_callees_dex_list.json" 'any(item["method_name"] == "setContent$default" for item in payload["step_results"][0]["result"]["items"])' "dex-list trace callees should preserve exact hits"
+
 trace_callees_descriptor_input=$(cat <<JSON
 {"input":["$SAMPLE_APK"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate","descriptor":"(Landroid/os/Bundle;)V"},"limit":5}
 JSON
@@ -177,6 +216,7 @@ JSON
 )
 run_case "summarize_method_logic" "summarize_method_logic" "$summarize_input"
 assert_expr "$RESULT_DIR/summarize_method_logic.json" "payload['status'] == 'ok'" "summarize method logic should succeed"
+assert_expr "$RESULT_DIR/summarize_method_logic.json" "payload['input_source'] == 'workspace_dex_set'" "direct dex summarize should report workspace_dex_set input source"
 assert_expr "$RESULT_DIR/summarize_method_logic.json" "payload['step_results'][0]['result']['kind'] == 'smali'" "summarize method logic should export smali by default"
 assert_expr "$RESULT_DIR/summarize_method_logic.json" "payload['step_results'][0]['result']['method_call_count'] == 4" "summarize method logic should report four direct calls in sample"
 assert_expr "$RESULT_DIR/summarize_method_logic.json" "payload['step_results'][0]['result']['structured_summary']['supported'] is True" "smali summarize should expose a structured block outline"
@@ -198,11 +238,25 @@ JSON
 )
 run_case "summarize_method_logic_apk" "summarize_method_logic" "$summarize_apk_input"
 assert_expr "$RESULT_DIR/summarize_method_logic_apk.json" "payload['status'] == 'ok'" "apk summarize should succeed"
+assert_expr "$RESULT_DIR/summarize_method_logic_apk.json" "payload['input_source'] == 'apk_cached_extracted_dex'" "apk summarize should report apk_cached_extracted_dex input source"
 assert_expr "$RESULT_DIR/summarize_method_logic_apk.json" "len(payload['plan']['steps']) == 2" "apk summarize should plan a resolve step plus export step"
 assert_expr "$RESULT_DIR/summarize_method_logic_apk.json" "payload['step_results'][0]['step_kind'] == 'resolve_apk_dex'" "apk summarize should resolve a target dex first"
 assert_expr "$RESULT_DIR/summarize_method_logic_apk.json" "payload['step_results'][1]['step_kind'] == 'export_and_scan'" "apk summarize should export after dex resolution"
 assert_expr "$RESULT_DIR/summarize_method_logic_apk.json" "payload['step_results'][0]['result']['resolved_dex_path'].endswith('classes4.dex')" "apk summarize should resolve MainActivity to classes4.dex in sample"
 assert_expr "$RESULT_DIR/summarize_method_logic_apk.json" "payload['step_results'][1]['result']['method_call_count'] == 4" "apk summarize should preserve exported method analysis"
+
+summarize_dex_dir_input=$(cat <<JSON
+{"input":{"dex_dir":"$DEX_DIR"},"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate"}}
+JSON
+)
+run_case "summarize_method_logic_dex_dir" "summarize_method_logic" "$summarize_dex_dir_input"
+assert_expr "$RESULT_DIR/summarize_method_logic_dex_dir.json" "payload['status'] == 'ok'" "dex-dir summarize should succeed"
+assert_expr "$RESULT_DIR/summarize_method_logic_dex_dir.json" "payload['input_source'] == 'workspace_dex_set'" "dex-dir summarize should report workspace_dex_set input source"
+assert_expr "$RESULT_DIR/summarize_method_logic_dex_dir.json" "len(payload['plan']['steps']) == 2" "dex-dir summarize should plan a resolve step plus export step"
+assert_expr "$RESULT_DIR/summarize_method_logic_dex_dir.json" "payload['step_results'][0]['step_kind'] == 'resolve_workspace_dex_set'" "dex-dir summarize should resolve within the workspace dex set first"
+assert_expr "$RESULT_DIR/summarize_method_logic_dex_dir.json" "payload['step_results'][1]['step_kind'] == 'export_and_scan'" "dex-dir summarize should export after workspace dex resolution"
+assert_expr "$RESULT_DIR/summarize_method_logic_dex_dir.json" "payload['step_results'][0]['result']['resolved_dex_path'].endswith('classes4.dex')" "dex-dir summarize should resolve MainActivity to classes4.dex in sample"
+assert_expr "$RESULT_DIR/summarize_method_logic_dex_dir.json" "payload['step_results'][1]['result']['method_call_count'] == 4" "dex-dir summarize should preserve exported method analysis"
 
 cache_reuse_work_root="$TMP_ROOT/cache-reuse-work"
 cache_reuse_cache_root="$TMP_ROOT/cache-reuse-cache"

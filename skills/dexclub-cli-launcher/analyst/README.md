@@ -65,6 +65,20 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   --input-json '{"input":["./inputs/app.apk"],"method_anchor":{"class_name":"com.example.Target","method_name":"login"}}'
 ```
 
+Explicit workspace dex-set inputs are also supported through the same stable `input` field:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type search_methods_by_string \
+  --input-json '{"input":{"dex_dir":"./artifacts/demo_dex"},"string":"login"}'
+```
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type summarize_method_logic \
+  --input-json '{"input":{"dex_list":["./artifacts/demo_dex/classes.dex","./artifacts/demo_dex/classes2.dex"]},"method_anchor":{"class_name":"com.example.Target","method_name":"login"}}'
+```
+
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py cache inspect --format json
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py cache prune --format json
@@ -79,6 +93,9 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py runs list --lim
 `runs latest` and `runs inspect` expose the same persisted run projection directly from `latest.json`, `run-summary.json`, and `final_result.json`.
 `runs inspect --include-final-result` additionally embeds the persisted `final_result.json` payload under `run.final_result`.
 `runs list` returns recent `run-summary.json` items ordered by `updated_at` descending, with `is_latest` plus the same reuse/cache counters.
+- When a key artifact maps to one concrete target class, `run-summary.json.key_artifacts` now keeps both the artifact `path` and the target `class_name` / `package_name`.
+- High-frequency summaries such as `summarize_method_logic`, `trace_callers`, and `trace_callees` now prefer surfacing the target class FQCN in `summary.text`, not only a generic count sentence.
+- `search_methods_by_string` / `search_methods_by_number` keep the generic summary when hits span multiple classes, but now surface the target FQCN in `summary.text` once the visible hit set collapses to one concrete class.
 
 Descriptor-aware anchors are now supported for direct relation tracing and smali summarize:
 
@@ -93,6 +110,12 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   --task-type summarize_method_logic \
   --input-json '{"input":["./inputs/classes.dex"],"method_anchor":{"class_name":"com.example.Target","method_name":"login","descriptor":"Lcom/example/Target;->login(Ljava/lang/String;)V"}}'
 ```
+
+Workspace dex-set rules:
+
+- `input.dex_dir` only scans the first directory level for `.dex` files.
+- `input.dex_list` accepts a string array, resolves all paths, removes duplicates, and then applies the same stable dex ordering as `classes.dex`, `classes2.dex`, ...
+- Query tasks and `summarize_method_logic` both report `input_source`, so downstream consumers can distinguish `apk_direct`, `apk_cached_extracted_dex`, and `workspace_dex_set`.
 
 Current exact-anchor limits:
 

@@ -184,7 +184,7 @@ actual class DexKitBridge {
 
         @Suppress("UnsafeDynamicallyLoadedCode")
         private fun loadFromClasspathResource(name: String): Boolean {
-            val cacheDir = File(System.getProperty("user.home"), ".dexclub/natives")
+            val cacheDir = resolveNativeCacheDir()
             cacheDir.mkdirs()
 
             nativeLibFileNames(name).forEach { fileName ->
@@ -225,6 +225,31 @@ actual class DexKitBridge {
             return "$prefix-$hash$suffix"
         }
 
+        private fun resolveNativeCacheDir(): File {
+            val configuredPath = configuredNativeCacheDirPath()
+            return configuredPath ?: File(System.getProperty("user.home"), ".dexclub/natives")
+        }
+
+        private fun configuredNativeCacheDirPath(): File? {
+            val configured = System.getProperty(NATIVE_CACHE_DIR_PROPERTY)
+                ?: System.getenv(NATIVE_CACHE_DIR_ENV)
+            if (configured.isNullOrBlank()) return null
+            return resolveConfiguredDirectory(configured)
+        }
+
+        private fun resolveConfiguredDirectory(rawPath: String): File {
+            val trimmed = rawPath.trim()
+            val homeDir = File(System.getProperty("user.home"))
+            val expanded = if (trimmed == "~") {
+                homeDir
+            } else if (trimmed.startsWith("~/")) {
+                File(homeDir, trimmed.removePrefix("~/"))
+            } else {
+                File(trimmed)
+            }
+            return if (expanded.isAbsolute) expanded else File(homeDir, trimmed)
+        }
+
         private fun sha256Hex(data: ByteArray): String =
             MessageDigest.getInstance("SHA-256")
                 .digest(data)
@@ -235,6 +260,9 @@ actual class DexKitBridge {
             isMac() -> listOf("lib$name.dylib")
             else -> listOf("lib$name.so")
         }
+
+        private const val NATIVE_CACHE_DIR_PROPERTY = "dexclub.dexkit.native.cache.dir"
+        private const val NATIVE_CACHE_DIR_ENV = "DEXCLUB_DEXKIT_NATIVE_CACHE_DIR"
 
         private fun findLibraryInDevBuild(name: String): Pair<File?, List<File>> {
             val candidateDirs = linkedSetOf<File>().apply {

@@ -23,6 +23,12 @@ from runner import (
     step_reuse_index_path,
 )
 
+INPUT_JSON_HELP = (
+    "Task input JSON object. `input` accepts one APK/dex path string, a path array, "
+    "or a dex-set object such as `{\"input\":{\"dex_dir\":\"./artifacts/demo_dex\"}}` "
+    "or `{\"input\":{\"dex_list\":[\"./classes.dex\",\"./classes2.dex\"]}}`."
+)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -32,12 +38,12 @@ def parse_args() -> argparse.Namespace:
 
     plan_parser = subparsers.add_parser("plan", help="Emit a structured execution plan.")
     plan_parser.add_argument("--task-type", required=True, help="Version 1 task type.")
-    plan_parser.add_argument("--input-json", required=True, help="Task input JSON object.")
+    plan_parser.add_argument("--input-json", required=True, help=INPUT_JSON_HELP)
     plan_parser.add_argument("--artifact-root", help="Optional explicit artifact root for planned steps.")
 
     run_parser = subparsers.add_parser("run", help="Plan and immediately execute a version 1 task.")
     run_parser.add_argument("--task-type", required=True, help="Version 1 task type.")
-    run_parser.add_argument("--input-json", required=True, help="Task input JSON object.")
+    run_parser.add_argument("--input-json", required=True, help=INPUT_JSON_HELP)
     run_parser.add_argument("--artifact-root", help="Optional explicit artifact root.")
 
     cache_parser = subparsers.add_parser("cache", help="Inspect, prune, or clear analyst-managed caches.")

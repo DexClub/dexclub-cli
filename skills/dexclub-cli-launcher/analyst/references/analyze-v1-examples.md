@@ -236,6 +236,81 @@ Observed result excerpt:
 }
 ```
 
+## `search_methods_by_string` with workspace dex directory input
+
+Command:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type search_methods_by_string \
+  --input-json '{"input":{"dex_dir":"<workspace-dex-dir>"},"string":"login"}'
+```
+
+Observed result excerpt:
+
+```json
+{
+  "status": "ok",
+  "task_type": "search_methods_by_string",
+  "input_source": "workspace_dex_set",
+  "step_results": [
+    {
+      "step_kind": "run_find",
+      "status": "ok",
+      "result": {
+        "count": 1,
+        "items": [
+          {
+            "class_name": "com.example.Target",
+            "method_name": "login",
+            "source_dex_path": "<workspace-dex-dir>/classes2.dex"
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+## `summarize_method_logic` with workspace dex list input
+
+Command:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type summarize_method_logic \
+  --input-json '{"input":{"dex_list":["<workspace-dex-dir>/classes.dex","<workspace-dex-dir>/classes2.dex"]},"method_anchor":{"class_name":"com.example.Target","method_name":"login"}}'
+```
+
+Observed result excerpt:
+
+```json
+{
+  "status": "ok",
+  "task_type": "summarize_method_logic",
+  "input_source": "workspace_dex_set",
+  "step_results": [
+    {
+      "step_kind": "resolve_workspace_dex_set",
+      "status": "ok",
+      "result": {
+        "candidate_dex_paths": [
+          "<workspace-dex-dir>/classes2.dex"
+        ],
+        "resolved_dex_path": "<workspace-dex-dir>/classes2.dex"
+      }
+    },
+    {
+      "step_kind": "export_and_scan",
+      "status": "ok",
+      "result": {
+        "export_path": "<workspace>/.dexclub-cli/runs/v1/<run-id>/steps/step-2/artifacts/com_example_Target.smali"
+      }
+    }
+  ]
+}
+```
+
 ## `summarize_method_logic` with APK input and exact Java anchor
 
 Command:

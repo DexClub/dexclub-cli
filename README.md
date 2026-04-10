@@ -22,6 +22,7 @@
 - `dexkit` 负责提供 `io.github.dexclub.dexkit` 这一层 KMP API。
 - Android 侧通过上游 `DexKit` 的 `dexkit-android` 产物提供底层实现。
 - JVM 侧通过 included build 使用本地 `vendor/DexKit`，并在 `jvmProcessResources` 时拷贝 native 库。
+- JVM 侧 `DexKitBridge` 默认把 classpath native 复用到 `~/.dexclub/natives`；如需最小覆盖，可优先使用 JVM system property `dexclub.dexkit.native.cache.dir`，也可使用环境变量 `DEXCLUB_DEXKIT_NATIVE_CACHE_DIR`。Android 侧不使用这套目录逻辑。
 - 根工程启用了 `mavenLocal()`，用于解析当前 Android 构建所需的 `dev.rikka.ndk.thirdparty:libcxx:1.3.0`。
 
 ## 技术工具链

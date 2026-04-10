@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from analysis_sections import build_analysis_sections
+from dex_path_order import sort_dex_paths
 from method_descriptor import build_full_method_descriptor, parse_method_descriptor
 from plan_schema import (
     PLANNER_VERSION,
@@ -57,7 +58,7 @@ def ensure_mapping(value: object, *, field_name: str) -> dict[str, object]:
     return dict(value)
 
 
-def normalize_paths(value: object) -> tuple[object, list[str]]:
+def normalize_direct_input_paths(value: object) -> tuple[object, list[str]]:
     if isinstance(value, str):
         raw_input: object = value
         path_values = [value]
@@ -65,7 +66,7 @@ def normalize_paths(value: object) -> tuple[object, list[str]]:
         raw_input = list(value)
         path_values = list(value)
     else:
-        raise PlannerError("input_error", "`input` must be a non-empty path string or path array.")
+        raise PlannerError("input_error", "`input` must be a non-empty path string, path array, or dex-set object.")
 
     resolved_paths: list[str] = []
     for raw_path in path_values:
@@ -78,6 +79,47 @@ def normalize_paths(value: object) -> tuple[object, list[str]]:
             raise PlannerError("input_error", f"Input path is not readable: {path_obj.resolve()}")
         resolved_paths.append(str(path_obj.resolve()))
     return raw_input, resolved_paths
+
+
+def normalize_dex_dir_input(raw_path: object) -> tuple[dict[str, object], list[str]]:
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        raise PlannerError("input_error", "`input.dex_dir` must be a non-empty string.")
+    dex_dir = Path(raw_path).expanduser()
+    if not dex_dir.exists():
+        raise PlannerError("input_error", f"Dex directory not found: {dex_dir}")
+    if not dex_dir.is_dir():
+        raise PlannerError("input_error", f"`input.dex_dir` is not a directory: {dex_dir.resolve()}")
+    if not os.access(dex_dir, os.R_OK):
+        raise PlannerError("input_error", f"Dex directory is not readable: {dex_dir.resolve()}")
+    dex_paths = sort_dex_paths(
+        [
+            str(path.resolve())
+            for path in dex_dir.iterdir()
+            if path.is_file() and path.suffix.lower() == ".dex"
+        ]
+    )
+    if not dex_paths:
+        raise PlannerError("input_error", f"`input.dex_dir` does not contain any `.dex` files: {dex_dir.resolve()}")
+    return {"dex_dir": str(dex_dir.resolve())}, dex_paths
+
+
+def normalize_dex_list_input(raw_value: object) -> tuple[dict[str, object], list[str]]:
+    if not isinstance(raw_value, list) or not raw_value or not all(isinstance(item, str) for item in raw_value):
+        raise PlannerError("input_error", "`input.dex_list` must be a non-empty string array.")
+    deduped_paths: set[str] = set()
+    for raw_path in raw_value:
+        path_obj = Path(raw_path).expanduser()
+        if not path_obj.exists():
+            raise PlannerError("input_error", f"Dex list path not found: {path_obj}")
+        if not path_obj.is_file():
+            raise PlannerError("input_error", f"Dex list path is not a file: {path_obj.resolve()}")
+        if path_obj.suffix.lower() != ".dex":
+            raise PlannerError("input_error", f"Dex list path must be a `.dex` file: {path_obj.resolve()}")
+        if not os.access(path_obj, os.R_OK):
+            raise PlannerError("input_error", f"Dex list path is not readable: {path_obj.resolve()}")
+        deduped_paths.add(str(path_obj.resolve()))
+    sorted_paths = sort_dex_paths(list(deduped_paths))
+    return {"dex_list": sorted_paths}, sorted_paths
 
 
 def detect_primary_kind(paths: list[str]) -> str:
@@ -110,12 +152,34 @@ def detect_primary_kind(paths: list[str]) -> str:
 
 
 def normalize_inputs(raw_input: object) -> tuple[object, dict[str, object]]:
-    preserved_input, paths = normalize_paths(raw_input)
+    source_kind = "direct_input"
+    input_locator: object = None
+    if isinstance(raw_input, dict):
+        if "dex_dir" in raw_input and "dex_list" in raw_input:
+            raise PlannerError("input_error", "`input.dex_dir` and `input.dex_list` are mutually exclusive.")
+        if "dex_dir" in raw_input:
+            preserved_input, paths = normalize_dex_dir_input(raw_input.get("dex_dir"))
+            source_kind = "dex_dir"
+            input_locator = preserved_input["dex_dir"]
+        elif "dex_list" in raw_input:
+            preserved_input, paths = normalize_dex_list_input(raw_input.get("dex_list"))
+            source_kind = "dex_list"
+            input_locator = list(preserved_input["dex_list"])
+        else:
+            raise PlannerError(
+                "input_error",
+                "`input` object must contain exactly one of `dex_dir` or `dex_list` in this version.",
+            )
+    else:
+        preserved_input, paths = normalize_direct_input_paths(raw_input)
+        input_locator = preserved_input
     primary_kind = detect_primary_kind(paths)
     return preserved_input, {
         "primary_kind": primary_kind,
         "paths": paths,
         "path_count": len(paths),
+        "source_kind": source_kind,
+        "input_locator": input_locator,
     }
 
 
@@ -245,6 +309,8 @@ def build_summarize_limits(
     limits = build_common_limits("summarize_method_logic", method_anchor)
     if normalized_inputs["primary_kind"] == "apk":
         limits.append("APK summarize resolves the target class to one extracted dex before export")
+    elif normalized_inputs["primary_kind"] == "dex_set":
+        limits.append("dex-set summarize resolves the target class to one workspace dex before export")
     return limits
 
 
@@ -357,6 +423,24 @@ def build_resolve_apk_dex_step(
     }
 
 
+def build_resolve_workspace_dex_set_step(
+    *,
+    normalized_inputs: dict[str, object],
+    method_anchor: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "step_id": "step-1",
+        "kind": "resolve_workspace_dex_set",
+        "tool": "resolve_workspace_dex_set.py",
+        "args": {
+            "input_dex_paths": list(normalized_inputs["paths"]),
+            "class_name": method_anchor["class_name"],
+            "format": "json",
+        },
+        "allow_empty_result": False,
+    }
+
+
 def build_plan(
     *,
     task_type: str,
@@ -458,7 +542,8 @@ def build_plan(
         ]
     elif task_type == "summarize_method_logic":
         if int(normalized_inputs["path_count"]) != 1:
-            raise PlannerError("unsupported", "`summarize_method_logic` requires exactly one APK or dex input.")
+            if normalized_inputs["primary_kind"] != "dex_set":
+                raise PlannerError("unsupported", "`summarize_method_logic` requires exactly one APK or dex input.")
         method_anchor = normalize_method_anchor(normalized_external_inputs["method_anchor"])
         if not bool(method_anchor.get("is_relaxed", True)) and "descriptor" not in method_anchor:
             raise PlannerError(
@@ -520,8 +605,40 @@ def build_plan(
                     mode=mode if isinstance(mode, str) else task_definition.default_mode,
                 )
             ]
+        elif normalized_inputs["primary_kind"] == "dex_set":
+            steps = [
+                build_resolve_workspace_dex_set_step(
+                    normalized_inputs=normalized_inputs,
+                    method_anchor=method_anchor,
+                ),
+                {
+                    "step_id": "step-2",
+                    "kind": "export_and_scan",
+                    "tool": "export_and_scan.py",
+                    "args": {
+                        "input_dex_from_step": "step-1",
+                        "class_name": method_anchor["class_name"],
+                        "method": method_anchor["method_name"],
+                        "language": language if isinstance(language, str) else task_definition.default_language,
+                        "mode": mode if isinstance(mode, str) else task_definition.default_mode,
+                        "format": "json",
+                        "output_dir": join_artifact_path(
+                            artifact_root or RUN_ARTIFACT_ROOT_PLACEHOLDER,
+                            "steps",
+                            "step-2",
+                            "artifacts",
+                        ),
+                    },
+                    "allow_empty_result": False,
+                },
+            ]
+            if method_anchor.get("descriptor"):
+                steps[1]["args"]["method_descriptor"] = method_anchor["descriptor"]
         else:
-            raise PlannerError("unsupported", "`summarize_method_logic` accepts one APK or one dex input in this version.")
+            raise PlannerError(
+                "unsupported",
+                "`summarize_method_logic` accepts one APK, one dex, or one dex set in this version.",
+            )
     else:
         raise PlannerError("unsupported", f"Unsupported task type: `{task_type}`.")
 

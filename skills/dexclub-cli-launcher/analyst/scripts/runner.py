@@ -23,6 +23,7 @@ from analyst_storage import (
     inputs_cache_root,
     runs_root,
 )
+from dex_path_order import sort_dex_paths
 from process_exec import extract_json_payload, run_captured_process
 from output_contract import (
     validate_analysis_sections,
@@ -35,6 +36,7 @@ from plan_schema import RUN_ARTIFACT_ROOT_PLACEHOLDER, SCHEMA_VERSION, TASK_REGI
 RUN_STATUS_OK = {"ok", "empty", "ambiguous", "unsupported"}
 RUN_SUMMARY_PREFERRED = {"ok", "partial"}
 STEP_REUSE_INDEX_FILE_NAME = "reusable-step-index-v1.json"
+RESOLVE_DEX_STEP_KINDS = {"resolve_apk_dex", "resolve_workspace_dex_set"}
 
 
 def camel_to_snake(name: str) -> str:
@@ -191,6 +193,7 @@ def normalize_export_and_scan_payload(raw_payload: object) -> dict[str, object]:
         raise ValueError("Expected object payload from export_and_scan.")
     normalized: dict[str, object] = {}
     key_map = {
+        "className": "class_name",
         "status": "status",
         "exportPath": "export_path",
         "cacheHit": "cache_hit",
@@ -269,6 +272,25 @@ def normalize_resolve_apk_dex_payload(raw_payload: object) -> dict[str, object]:
     return normalized
 
 
+def normalize_resolve_workspace_dex_set_payload(raw_payload: object) -> dict[str, object]:
+    if not isinstance(raw_payload, dict):
+        raise ValueError("Expected object payload from resolve_workspace_dex_set.")
+    normalized: dict[str, object] = {}
+    for key in (
+        "status",
+        "class_name",
+        "input_dex_paths",
+        "candidate_dex_paths",
+        "resolved_dex_path",
+        "lookup_strategy",
+        "cache_hit",
+        "diagnostics",
+    ):
+        if key in raw_payload:
+            normalized[key] = raw_payload[key]
+    return normalized
+
+
 def build_run_find_command(step_args: dict[str, object], *, limit: int | None) -> list[str]:
     script_path = Path(__file__).resolve().parent / "run_find.py"
     command: list[str] = [sys.executable, str(script_path)]
@@ -337,6 +359,21 @@ def build_resolve_apk_dex_command(step_args: dict[str, object]) -> list[str]:
     output_dir = step_args.get("output_dir")
     if output_dir:
         command.extend(["--output-dir", str(output_dir)])
+    return command
+
+
+def build_resolve_workspace_dex_set_command(step_args: dict[str, object]) -> list[str]:
+    script_path = Path(__file__).resolve().parent / "resolve_workspace_dex_set.py"
+    command = [
+        sys.executable,
+        str(script_path),
+        "--class",
+        str(step_args["class_name"]),
+        "--output-format",
+        "json",
+    ]
+    for input_path in step_args.get("input_dex_paths", []):
+        command.extend(["--input-dex", str(input_path)])
     return command
 
 
@@ -527,6 +564,37 @@ def normalize_resolve_apk_dex_result(
     return status, normalized_payload, [], evidence, []
 
 
+def normalize_resolve_workspace_dex_set_result(
+    *,
+    step_id: str,
+    payload: object,
+) -> tuple[str, dict[str, object], list[dict[str, object]], list[dict[str, object]], list[str]]:
+    normalized_payload = normalize_resolve_workspace_dex_set_payload(payload)
+    candidate_dex_paths = normalized_payload.get("candidate_dex_paths", [])
+    if not isinstance(candidate_dex_paths, list):
+        raise ValueError("`candidate_dex_paths` must be a list.")
+    helper_status = normalized_payload.get("status")
+    if helper_status == "ambiguous":
+        status = "ambiguous"
+    elif normalized_payload.get("resolved_dex_path"):
+        status = "ok"
+    elif candidate_dex_paths:
+        status = "ok"
+    else:
+        status = "empty"
+    evidence: list[dict[str, object]] = []
+    for candidate_path in candidate_dex_paths:
+        evidence.append(
+            {
+                "step_id": step_id,
+                "kind": "resolved_dex_candidate",
+                "value": candidate_path,
+                "source_path": candidate_path,
+            }
+        )
+    return status, normalized_payload, [], evidence, []
+
+
 def build_step_reuse_key(
     *,
     task_type: str,
@@ -554,6 +622,12 @@ def build_step_reuse_key(
             "class_name": step_args.get("class_name"),
             "input_cache_keys": step_cache_keys,
             "input_apk": None if step_cache_keys else step_args.get("input_apk"),
+        }
+    elif step_kind == "resolve_workspace_dex_set":
+        semantic_args = {
+            "class_name": step_args.get("class_name"),
+            "input_cache_keys": step_cache_keys,
+            "input_dex_paths": step_args.get("input_dex_paths"),
         }
     elif step_kind == "export_and_scan":
         semantic_args = {
@@ -602,7 +676,18 @@ def collect_input_paths(raw_input: object) -> list[str]:
     if isinstance(raw_input, str):
         return [str(Path(raw_input).expanduser().resolve())]
     if isinstance(raw_input, list):
-        return [str(Path(item).expanduser().resolve()) for item in raw_input if isinstance(item, str)]
+        return sort_dex_paths([str(Path(item).expanduser().resolve()) for item in raw_input if isinstance(item, str)])
+    if isinstance(raw_input, dict):
+        if isinstance(raw_input.get("dex_dir"), str):
+            dex_dir = Path(str(raw_input["dex_dir"])).expanduser().resolve()
+            if dex_dir.is_dir():
+                return sort_dex_paths(
+                    [str(path.resolve()) for path in dex_dir.iterdir() if path.is_file() and path.suffix.lower() == ".dex"]
+                )
+        if isinstance(raw_input.get("dex_list"), list):
+            return sort_dex_paths(
+                [str(Path(item).expanduser().resolve()) for item in raw_input["dex_list"] if isinstance(item, str)]
+            )
     return []
 
 
@@ -669,6 +754,20 @@ def prepare_step_args_for_storage(
             prepared_args["output_dir"] = str(apk_ref.extracted_dex_dir.resolve())
         return prepared_args, sorted(set(step_cache_keys))
 
+    if step_kind == "resolve_workspace_dex_set" and "input_dex_paths" in prepared_args:
+        prepared_inputs: list[str] = []
+        raw_inputs = prepared_args.get("input_dex_paths", [])
+        if isinstance(raw_inputs, list):
+            for input_path in raw_inputs:
+                original_path = str(Path(str(input_path)).expanduser().resolve())
+                _, cache_ref = cache_input_path(original_path, ensure_apk_extracted_dex=False)
+                prepared_inputs.append(original_path)
+                register_cache_ref(cache_refs, cache_ref)
+                if cache_ref is not None:
+                    step_cache_keys.append(cache_ref.cache_key)
+        prepared_args["input_dex_paths"] = prepared_inputs
+        return prepared_args, sorted(set(step_cache_keys))
+
     if step_kind == "export_and_scan" and "input_dex" in prepared_args:
         cached_path, cache_ref = cache_input_path(
             str(prepared_args["input_dex"]),
@@ -727,7 +826,24 @@ def build_run_meta(
     }
 
 
-def detect_input_source(primary_inputs: list[str]) -> str:
+def detect_input_source(
+    *,
+    plan: dict[str, object],
+    primary_inputs: list[str],
+    step_results: list[dict[str, object]] | None = None,
+) -> str:
+    normalized_inputs = plan.get("normalized_inputs", {})
+    if isinstance(normalized_inputs, dict):
+        primary_kind = normalized_inputs.get("primary_kind")
+        if primary_kind == "apk":
+            if any(
+                isinstance(step, dict) and step.get("step_kind") == "resolve_apk_dex"
+                for step in (step_results or [])
+            ):
+                return "apk_cached_extracted_dex"
+            return "apk_direct"
+        if primary_kind in {"dex", "dex_set"}:
+            return "workspace_dex_set"
     suffixes = {Path(path).suffix.lower() for path in primary_inputs}
     if ".apk" in suffixes:
         return "apk_direct"
@@ -744,6 +860,8 @@ def get_required_step_kinds(plan: dict[str, object]) -> set[str]:
         }
         if "resolve_apk_dex" in step_kinds:
             return {"resolve_apk_dex", "export_and_scan"}
+        if "resolve_workspace_dex_set" in step_kinds:
+            return {"resolve_workspace_dex_set", "export_and_scan"}
         return {"export_and_scan"}
     if task_type in {
         "search_methods_by_string",
@@ -762,7 +880,7 @@ def is_reusable_step(step_result: dict[str, object]) -> bool:
     if not isinstance(result, dict):
         return False
     step_kind = step_result.get("step_kind")
-    if step_kind == "resolve_apk_dex":
+    if step_kind in RESOLVE_DEX_STEP_KINDS:
         candidate_dex_paths = result.get("candidate_dex_paths")
         return bool(result.get("resolved_dex_path")) or bool(candidate_dex_paths)
     if step_kind == "run_find":
@@ -862,14 +980,21 @@ def build_key_artifacts(
     *,
     task_type: str,
     artifacts: list[dict[str, object]],
+    plan: dict[str, object],
+    step_results: list[dict[str, object]],
 ) -> list[dict[str, object]]:
     candidates: list[tuple[int, dict[str, object]]] = []
     seen_paths: set[str] = set()
+    target_class_name, _ = extract_primary_target_reference(plan=plan, step_results=step_results)
     for artifact in artifacts:
         path = artifact.get("path")
         if not isinstance(path, str) or not path or path in seen_paths:
             continue
         artifact_type = artifact.get("type")
+        class_name = artifact.get("class_name")
+        if not isinstance(class_name, str) or not class_name:
+            class_name = target_class_name if artifact_type in {"exported_code", "resolved_dex"} else None
+        package_name = package_name_from_class_name(class_name)
         if artifact_type == "exported_code":
             seen_paths.add(path)
             candidates.append(
@@ -880,6 +1005,7 @@ def build_key_artifacts(
                         "path": path,
                         "label": "导出的目标类代码",
                         "reason": "本次 run 已导出可直接复核的代码实体，适合作为接手入口",
+                        **artifact_class_details(class_name=class_name, package_name=package_name),
                     },
                 )
             )
@@ -893,11 +1019,75 @@ def build_key_artifacts(
                         "path": path,
                         "label": "已解析出的目标 dex",
                         "reason": "本次 run 已收敛到可直接复用的 dex 结果，后续会话可继续利用",
+                        **artifact_class_details(class_name=class_name, package_name=package_name),
                     },
                 )
             )
     candidates.sort(key=lambda item: item[0], reverse=True)
     return [item for _, item in candidates[:5]]
+
+
+def package_name_from_class_name(class_name: str | None) -> str | None:
+    if not isinstance(class_name, str) or "." not in class_name:
+        return None
+    package_name = class_name.rsplit(".", 1)[0].strip()
+    return package_name or None
+
+
+def artifact_class_details(*, class_name: str | None, package_name: str | None) -> dict[str, object]:
+    details: dict[str, object] = {}
+    if isinstance(class_name, str) and class_name:
+        details["class_name"] = class_name
+    if isinstance(package_name, str) and package_name:
+        details["package_name"] = package_name
+    return details
+
+
+def extract_primary_target_reference(
+    *,
+    plan: dict[str, object],
+    step_results: list[dict[str, object]],
+) -> tuple[str | None, str | None]:
+    inputs = plan.get("inputs")
+    if isinstance(inputs, dict):
+        method_anchor = inputs.get("method_anchor")
+        if isinstance(method_anchor, dict):
+            class_name = method_anchor.get("class_name")
+            method_name = method_anchor.get("method_name")
+            if isinstance(class_name, str) and class_name:
+                return class_name, method_name if isinstance(method_name, str) and method_name else None
+
+    for step_result in step_results:
+        if not isinstance(step_result, dict):
+            continue
+        result = step_result.get("result")
+        if not isinstance(result, dict):
+            continue
+        class_name = result.get("class_name")
+        if isinstance(class_name, str) and class_name:
+            method_name = result.get("method_name")
+            return class_name, method_name if isinstance(method_name, str) and method_name else None
+        items = result.get("items")
+        if not isinstance(items, list):
+            continue
+        class_names = sorted(
+            {
+                str(item.get("class_name"))
+                for item in items
+                if isinstance(item, dict) and isinstance(item.get("class_name"), str) and item.get("class_name")
+            }
+        )
+        if len(class_names) == 1:
+            return class_names[0], None
+    return None, None
+
+
+def format_target_reference(*, class_name: str | None, method_name: str | None = None) -> str | None:
+    if not isinstance(class_name, str) or not class_name:
+        return None
+    if isinstance(method_name, str) and method_name:
+        return f"`{class_name}#{method_name}`"
+    return f"`{class_name}`"
 
 
 def build_run_summary_payload(
@@ -938,7 +1128,7 @@ def build_run_summary_payload(
         "run_root": str(run_root.resolve()),
         "status": run_summary_status,
         "task_type": plan.get("task_type"),
-        "input_source": detect_input_source(primary_inputs),
+        "input_source": detect_input_source(plan=plan, primary_inputs=primary_inputs, step_results=step_results),
         "primary_inputs": primary_inputs,
         "started_at": started_at,
         "finished_at": finished_at,
@@ -951,6 +1141,8 @@ def build_run_summary_payload(
         "key_artifacts": build_key_artifacts(
             task_type=str(plan.get("task_type", "")),
             artifacts=run_result.get("artifacts", []) if isinstance(run_result.get("artifacts"), list) else [],
+            plan=plan,
+            step_results=step_results,
         ),
         "step_index": build_step_index(
             run_root=run_root,
@@ -1266,7 +1458,7 @@ def build_reused_step_result(
         if current_result is None:
             return None
         evidence = build_export_evidence(str(step["step_id"]), current_result)
-    elif step_kind == "resolve_apk_dex":
+    elif step_kind in RESOLVE_DEX_STEP_KINDS:
         current_result = deep_copy_mapping(source_result)
         evidence = [
             {
@@ -1318,9 +1510,10 @@ def build_reused_step_result(
                     "type": "exported_code",
                     "path": export_path,
                     "produced_by_step": str(step["step_id"]),
+                    "class_name": step_args.get("class_name"),
                 }
             )
-    elif step_kind == "resolve_apk_dex":
+    elif step_kind in {"resolve_apk_dex", "resolve_workspace_dex_set"}:
         resolved_dex_path = current_result.get("resolved_dex_path")
         if isinstance(resolved_dex_path, str):
             step_result["artifacts"].append(
@@ -1328,6 +1521,7 @@ def build_reused_step_result(
                     "type": "resolved_dex",
                     "path": resolved_dex_path,
                     "produced_by_step": str(step["step_id"]),
+                    "class_name": current_result.get("class_name") or step_args.get("class_name"),
                 }
             )
     step_result_path = step_root / "step-result.json"
@@ -1438,6 +1632,8 @@ def execute_step(
         command = build_export_and_scan_command(step_args)
     elif step["kind"] == "resolve_apk_dex":
         command = build_resolve_apk_dex_command(step_args)
+    elif step["kind"] == "resolve_workspace_dex_set":
+        command = build_resolve_workspace_dex_set_command(step_args)
     else:
         raise ValueError(f"Unsupported step kind: {step['kind']}")
 
@@ -1511,6 +1707,11 @@ def execute_step(
                     step_id=step_id,
                     payload=payload,
                 )
+            elif step["kind"] == "resolve_workspace_dex_set":
+                status, normalized_result, recommendations, evidence, extra_limits = normalize_resolve_workspace_dex_set_result(
+                    step_id=step_id,
+                    payload=payload,
+                )
             else:
                 status, normalized_result, recommendations, evidence, extra_limits = normalize_export_result(
                     step_id=step_id,
@@ -1566,9 +1767,10 @@ def execute_step(
                     "type": "exported_code",
                     "path": export_path,
                     "produced_by_step": step_id,
+                    "class_name": step_args.get("class_name"),
                 }
             )
-    elif step["kind"] == "resolve_apk_dex":
+    elif step["kind"] in {"resolve_apk_dex", "resolve_workspace_dex_set"}:
         resolved_dex_path = step_result["result"].get("resolved_dex_path")
         if isinstance(resolved_dex_path, str):
             step_artifacts.append(
@@ -1576,6 +1778,7 @@ def execute_step(
                     "type": "resolved_dex",
                     "path": resolved_dex_path,
                     "produced_by_step": step_id,
+                    "class_name": step_result["result"].get("class_name") or step_args.get("class_name"),
                 }
             )
     step_result_path = step_root / "step-result.json"
@@ -1607,6 +1810,16 @@ def finalize_run_result(
     status = "empty"
     summary_text = "No results."
     summary_style = "empty"
+    target_class_name, target_method_name = extract_primary_target_reference(
+        plan=plan,
+        step_results=step_results,
+    )
+    target_reference = format_target_reference(
+        class_name=target_class_name,
+        method_name=target_method_name,
+    )
+    target_reference_suffix = f" for {target_reference}" if target_reference else ""
+    target_class_label = target_reference or "the target class"
 
     execution_failure = next((step for step in step_results if step["status"] == "execution_error"), None)
     if execution_failure is not None:
@@ -1615,6 +1828,11 @@ def finalize_run_result(
         summary_style = "error"
     elif task_type == "summarize_method_logic":
         resolve_step = next((step for step in step_results if step["step_kind"] == "resolve_apk_dex"), None)
+        workspace_resolve_step = next(
+            (step for step in step_results if step["step_kind"] == "resolve_workspace_dex_set"),
+            None,
+        )
+        resolve_step = resolve_step or workspace_resolve_step
         export_step = next((step for step in step_results if step["step_kind"] == "export_and_scan"), None)
         method_anchor = plan["inputs"].get("method_anchor", {})
         exact_anchor = isinstance(method_anchor, dict) and any(
@@ -1626,23 +1844,71 @@ def finalize_run_result(
                 candidate_dex_paths = []
             if resolve_step["status"] == "empty":
                 status = "empty"
-                summary_text = "Target class was not found in the APK dex set."
+                summary_text = (
+                    f"Target class {target_reference} was not found in the APK dex set."
+                    if target_reference and resolve_step["step_kind"] == "resolve_apk_dex"
+                    else (
+                        f"Target class {target_reference} was not found in the workspace dex set."
+                        if target_reference
+                        else (
+                            "Target class was not found in the APK dex set."
+                            if resolve_step["step_kind"] == "resolve_apk_dex"
+                            else "Target class was not found in the workspace dex set."
+                        )
+                    )
+                )
                 summary_style = "empty"
             elif len(candidate_dex_paths) > 1:
                 status = "ambiguous"
-                summary_text = "APK resolution matched multiple dex files for the target class."
+                summary_text = (
+                    f"APK resolution matched multiple dex files for target class {target_reference}."
+                    if target_reference and resolve_step["step_kind"] == "resolve_apk_dex"
+                    else (
+                        f"Workspace dex-set resolution matched multiple dex files for target class {target_reference}."
+                        if target_reference
+                        else (
+                            "APK resolution matched multiple dex files for the target class."
+                            if resolve_step["step_kind"] == "resolve_apk_dex"
+                            else "Workspace dex-set resolution matched multiple dex files for the target class."
+                        )
+                    )
+                )
                 summary_style = "ambiguous"
                 recommendations.append(
                     {
                         "kind": "narrow_search",
-                        "message": "Use a direct dex input if the class is duplicated across extracted APK dex files.",
-                        "reason": "apk_resolution_ambiguity",
+                        "message": (
+                            "Use a direct dex input if the class is duplicated across extracted APK dex files."
+                            if resolve_step["step_kind"] == "resolve_apk_dex"
+                            else "Narrow the workspace dex set or use one direct dex input if the class is duplicated."
+                        ),
+                        "reason": (
+                            "apk_resolution_ambiguity"
+                            if resolve_step["step_kind"] == "resolve_apk_dex"
+                            else "workspace_dex_set_resolution_ambiguity"
+                        ),
                     }
                 )
-                limits.append("APK summarize must resolve to exactly one extracted dex before export")
+                limits.append(
+                    "APK summarize must resolve to exactly one extracted dex before export"
+                    if resolve_step["step_kind"] == "resolve_apk_dex"
+                    else "dex-set summarize must resolve to exactly one workspace dex before export"
+                )
             elif export_step is None:
                 status = "execution_error"
-                summary_text = "APK resolution completed, but no export step ran."
+                summary_text = (
+                    f"APK resolution completed for {target_reference}, but no export step ran."
+                    if target_reference and resolve_step["step_kind"] == "resolve_apk_dex"
+                    else (
+                        f"Workspace dex-set resolution completed for {target_reference}, but no export step ran."
+                        if target_reference
+                        else (
+                            "APK resolution completed, but no export step ran."
+                            if resolve_step["step_kind"] == "resolve_apk_dex"
+                            else "Workspace dex-set resolution completed, but no export step ran."
+                        )
+                    )
+                )
                 summary_style = "error"
             else:
                 step_result = export_step
@@ -1666,8 +1932,9 @@ def finalize_run_result(
                     if not exact_anchor and overload_count > 1:
                         status = "ambiguous"
                         summary_text = (
-                            f"Exported class contains {overload_count} overloads for "
-                            f"`{method_anchor.get('method_name')}`; current path cannot isolate one precisely."
+                            f"Exported class {target_class_label} "
+                            f"contains {overload_count} overloads for `{method_anchor.get('method_name')}`; "
+                            "current path cannot isolate one precisely."
                         )
                         summary_style = "ambiguous"
                         recommendations.append(
@@ -1681,9 +1948,17 @@ def finalize_run_result(
                     else:
                         status = "ok"
                         summary_text = (
-                            "Resolved one APK dex and summarized one exact method body."
-                            if exact_anchor
-                            else "Resolved one APK dex and summarized one exported method body."
+                            (
+                                f"Resolved one APK dex and summarized one exact method body{target_reference_suffix}."
+                                if exact_anchor
+                                else f"Resolved one APK dex and summarized one exported method body{target_reference_suffix}."
+                            )
+                            if resolve_step["step_kind"] == "resolve_apk_dex"
+                            else (
+                                f"Resolved one workspace dex and summarized one exact method body{target_reference_suffix}."
+                                if exact_anchor
+                                else f"Resolved one workspace dex and summarized one exported method body{target_reference_suffix}."
+                            )
                         )
                         if has_structured_summary:
                             summary_text += " Included a smali block outline."
@@ -1719,8 +1994,9 @@ def finalize_run_result(
                     if not exact_anchor and overload_count > 1:
                         status = "ambiguous"
                         summary_text = (
-                            f"Exported class contains {overload_count} overloads for "
-                            f"`{method_anchor.get('method_name')}`; current path cannot isolate one precisely."
+                            f"Exported class {target_class_label} "
+                            f"contains {overload_count} overloads for `{method_anchor.get('method_name')}`; "
+                            "current path cannot isolate one precisely."
                         )
                         summary_style = "ambiguous"
                         recommendations.append(
@@ -1734,9 +2010,9 @@ def finalize_run_result(
                     else:
                         status = "ok"
                         summary_text = (
-                            "Summarized one exact method body."
+                            f"Summarized one exact method body{target_reference_suffix}."
                             if exact_anchor
-                            else "Summarized one exported method body."
+                            else f"Summarized one exported method body{target_reference_suffix}."
                         )
                         if has_structured_summary:
                             summary_text += " Included a smali block outline."
@@ -1761,22 +2037,46 @@ def finalize_run_result(
         if step_result and step_result["status"] == "ok":
             status = "ok"
             if task_type == "trace_callers":
-                summary_text = f"Found {count} direct callers."
+                summary_text = (
+                    f"Found {count} direct callers of {target_reference}."
+                    if target_reference
+                    else f"Found {count} direct callers."
+                )
             elif task_type == "trace_callees":
-                summary_text = f"Found {count} direct callees."
+                summary_text = (
+                    f"Found {count} direct callees of {target_reference}."
+                    if target_reference
+                    else f"Found {count} direct callees."
+                )
             else:
-                summary_text = f"Found {count} matching methods."
+                summary_text = (
+                    f"Found {count} matching methods in {target_reference}."
+                    if target_reference
+                    else f"Found {count} matching methods."
+                )
             if truncated:
                 summary_text += " Preview is truncated."
             summary_style = "partial_support"
         else:
             status = "empty"
             if task_type == "trace_callers":
-                summary_text = "No direct callers found."
+                summary_text = (
+                    f"No direct callers found for {target_reference}."
+                    if target_reference
+                    else "No direct callers found."
+                )
             elif task_type == "trace_callees":
-                summary_text = "No direct callees found."
+                summary_text = (
+                    f"No direct callees found for {target_reference}."
+                    if target_reference
+                    else "No direct callees found."
+                )
             else:
-                summary_text = "No matching methods found."
+                summary_text = (
+                    f"No matching methods found in {target_reference}."
+                    if target_reference
+                    else "No matching methods found."
+                )
             summary_style = "empty"
 
     result = {
@@ -1786,6 +2086,7 @@ def finalize_run_result(
         "task_type": task_type,
         "artifact_root": str(artifact_root.resolve()),
         "cache_root": str(inputs_cache_root().resolve()),
+        "input_source": detect_input_source(plan=plan, primary_inputs=plan.get("normalized_inputs", {}).get("paths", []), step_results=step_results),
         "temporary_paths": [],
         "plan": plan,
         "step_results": step_results,
@@ -1823,7 +2124,11 @@ def run_plan(plan: dict[str, object], *, artifact_root: str | None = None, run_i
 
     task_type = str(rewritten_plan["task_type"])
     plan_inputs = rewritten_plan.get("inputs", {})
-    input_paths = collect_input_paths(plan_inputs.get("input") if isinstance(plan_inputs, dict) else None)
+    normalized_inputs = rewritten_plan.get("normalized_inputs", {})
+    if isinstance(normalized_inputs, dict) and isinstance(normalized_inputs.get("paths"), list):
+        input_paths = [str(Path(path).expanduser().resolve()) for path in normalized_inputs["paths"] if isinstance(path, str)]
+    else:
+        input_paths = collect_input_paths(plan_inputs.get("input") if isinstance(plan_inputs, dict) else None)
     cache_refs: dict[str, CachedInputRef] = {}
     for input_path in input_paths:
         _, cache_ref = cache_input_path(input_path, ensure_apk_extracted_dex=False)
@@ -1883,7 +2188,7 @@ def run_plan(plan: dict[str, object], *, artifact_root: str | None = None, run_i
         if step_result["status"] == "empty" and not bool(step.get("allow_empty_result", False)):
             break
         if (
-            step_result["step_kind"] == "resolve_apk_dex"
+            step_result["step_kind"] in {"resolve_apk_dex", "resolve_workspace_dex_set"}
             and not step_result.get("result", {}).get("resolved_dex_path")
         ):
             break

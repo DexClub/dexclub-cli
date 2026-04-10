@@ -39,6 +39,14 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   --input-json '{"input":["./inputs/classes.dex"],"method_anchor":{"class_name":"com.example.TargetClass","method_name":"targetMethod","descriptor":"Lcom/example/TargetClass;->targetMethod()V"}}'
 ```
 
+When the workspace already contains a dex set, prefer the same stable analyst entry instead of re-wrapping shell globs:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type summarize_method_logic \
+  --input-json '{"input":{"dex_list":["./artifacts/demo_dex/classes.dex","./artifacts/demo_dex/classes2.dex"]},"method_anchor":{"class_name":"com.example.TargetClass","method_name":"targetMethod"}}'
+```
+
 ## Internal helper path
 
 For exported code:

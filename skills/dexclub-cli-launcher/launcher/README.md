@@ -26,6 +26,8 @@ bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh --prin
 bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- --help
 ```
 
+If this launcher is accidentally executed with `python3`, it now exits with a direct usage hint instead of surfacing a raw Python `SyntaxError`.
+
 ## Operational rules
 
 - Reuse local cache by default.

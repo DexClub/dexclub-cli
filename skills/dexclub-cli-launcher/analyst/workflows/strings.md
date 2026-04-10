@@ -28,6 +28,14 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
   --input-json '{"input":["./inputs/app.apk"],"string":"login"}'
 ```
 
+If the workspace already has extracted `classes*.dex`, keep the same stable entry and switch only the `input` shape:
+
+```bash
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
+  --task-type search_methods_by_string \
+  --input-json '{"input":{"dex_dir":"./artifacts/demo_dex"},"string":"login"}'
+```
+
 ## Internal helper path
 
 When you already have an exported Java or smali file and are debugging the exported artifact directly, use:
