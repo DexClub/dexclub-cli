@@ -67,6 +67,10 @@ def parse_args() -> argparse.Namespace:
     runs_inspect_parser = runs_subparsers.add_parser("inspect", help="Inspect one persisted run by run id.")
     runs_inspect_parser.add_argument("--run-id", required=True, help="Persisted run id under runs/v1.")
     runs_inspect_parser.add_argument("--format", choices=("text", "json"), default="json", help="Output format.")
+
+    runs_list_parser = runs_subparsers.add_parser("list", help="List recent persisted runs.")
+    runs_list_parser.add_argument("--limit", type=int, default=20, help="Maximum number of runs to return.")
+    runs_list_parser.add_argument("--format", choices=("text", "json"), default="json", help="Output format.")
     return parser.parse_args()
 
 
@@ -354,6 +358,69 @@ def build_runs_inspect_payload(run_id: str) -> dict[str, object]:
     }
 
 
+def build_run_list_item(
+    *,
+    run_root: Path,
+    summary_payload: dict[str, object],
+    latest_run_id: str | None,
+) -> dict[str, object]:
+    summary = summary_payload.get("summary")
+    summary_text = summary.get("text") if isinstance(summary, dict) else None
+    run_id = summary_payload.get("run_id")
+    return {
+        "run_id": run_id,
+        "run_root": str(run_root.resolve()),
+        "summary_path": str((run_root / "run-summary.json").resolve()),
+        "status": summary_payload.get("status"),
+        "task_type": summary_payload.get("task_type"),
+        "input_source": summary_payload.get("input_source"),
+        "started_at": summary_payload.get("started_at"),
+        "finished_at": summary_payload.get("finished_at"),
+        "updated_at": summary_payload.get("updated_at"),
+        "summary_text": summary_text if isinstance(summary_text, str) else None,
+        "reused_step_count": int(summary_payload.get("reused_step_count", 0)),
+        "reused_step_kinds": list(summary_payload.get("reused_step_kinds", [])),
+        "cache_hit_count": int(summary_payload.get("cache_hit_count", 0)),
+        "is_latest": isinstance(run_id, str) and run_id == latest_run_id,
+    }
+
+
+def build_runs_list_payload(limit: int) -> dict[str, object]:
+    normalized_limit = max(1, limit)
+    latest_payload = load_json_object(runs_root() / "latest.json")
+    latest_run_id = latest_payload.get("run_id") if isinstance(latest_payload, dict) and isinstance(latest_payload.get("run_id"), str) else None
+    items: list[dict[str, object]] = []
+    if runs_root().is_dir():
+        for run_root in runs_root().iterdir():
+            if not run_root.is_dir():
+                continue
+            summary_payload = load_json_object(run_root / "run-summary.json")
+            if not isinstance(summary_payload, dict):
+                continue
+            items.append(
+                build_run_list_item(
+                    run_root=run_root,
+                    summary_payload=summary_payload,
+                    latest_run_id=latest_run_id,
+                )
+            )
+    items.sort(
+        key=lambda item: (
+            str(item.get("updated_at") or ""),
+            str(item.get("run_id") or ""),
+        ),
+        reverse=True,
+    )
+    return {
+        "kind": "runs_list",
+        "work_root": str(work_root().resolve()),
+        "runs_root": str(runs_root().resolve()),
+        "limit": normalized_limit,
+        "count": min(len(items), normalized_limit),
+        "items": items[:normalized_limit],
+    }
+
+
 def build_cache_inspect_payload() -> dict[str, object]:
     return {
         "kind": "cache_inspect",
@@ -501,11 +568,20 @@ def format_cache_payload(payload: dict[str, object]) -> str:
 def format_runs_payload(payload: dict[str, object]) -> str:
     kind = str(payload.get("kind"))
     lines = [f"kind={kind}", f"work_root={payload['work_root']}", f"runs_root={payload['runs_root']}"]
-    run = payload.get("run", {})
+    run = payload.get("run")
     if isinstance(run, dict):
         lines.append("[run]")
         for key, value in run.items():
             lines.append(f"run.{key}={value}")
+    items = payload.get("items")
+    if isinstance(items, list):
+        lines.append(f"count={payload.get('count')}")
+        for index, item in enumerate(items):
+            if not isinstance(item, dict):
+                continue
+            lines.append(f"[item.{index}]")
+            for key, value in item.items():
+                lines.append(f"item.{index}.{key}={value}")
     return "\n".join(lines)
 
 
@@ -526,10 +602,15 @@ def main() -> None:
     if args.command == "runs":
         if args.runs_command == "latest":
             payload = build_runs_latest_payload()
-        else:
+            run = payload.get("run", {})
+            exit_code = 0 if isinstance(run, dict) and run.get("summary_exists") else 1
+        elif args.runs_command == "inspect":
             payload = build_runs_inspect_payload(args.run_id)
-        run = payload.get("run", {})
-        exit_code = 0 if isinstance(run, dict) and run.get("summary_exists") else 1
+            run = payload.get("run", {})
+            exit_code = 0 if isinstance(run, dict) and run.get("summary_exists") else 1
+        else:
+            payload = build_runs_list_payload(args.limit)
+            exit_code = 0
         if args.format == "json":
             print(json.dumps(payload, ensure_ascii=False, indent=2))
         else:

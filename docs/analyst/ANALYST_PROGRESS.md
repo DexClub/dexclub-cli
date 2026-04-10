@@ -167,6 +167,7 @@
 | A-15 | `step-result` 轻量 envelope 校验 | 已完成 | 本次会话完成。已补 `validate_step_result_envelope(...)`，并在 `runner.py` 写 `step-result.json` 前做最小字段、raw_process、diagnostics 与 artifact 形状校验 |
 | A-16 | reuse/cache 统计消费侧契约说明 | 已完成 | 本次会话完成。已在 README 与样例文档补充 `final_result.json` / `run-summary.json` / `latest.json` / `cache inspect.latest_run` 的复用与 cache-hit 统计字段定义与示例 |
 | A-17 | run 浏览入口最小命令面 | 已完成 | 本次会话完成。已新增 `analyze.py runs latest` 与 `runs inspect --run-id`，直接复用 `latest.json` / `run-summary.json` / `final_result.json` 输出最近 run 或指定 run 的概览 |
+| A-18 | recent runs 列表入口 | 已完成 | 本次会话完成。已新增 `analyze.py runs list --limit <n>`，按 `run-summary.json.updated_at` 倒序列出最近 run，并暴露 `is_latest` 与 reuse/cache 统计 |
 
 ## 最近一次状态流转
 
@@ -280,6 +281,7 @@
   - 当前真实实现已让 `analyze.py cache inspect` 直接暴露 `latest_run`，复用 `latest.json` / `run-summary.json` 作为最近 run 概览
   - 当前真实实现的 reuse/cache 统计消费侧契约已补进 README 与样例文档，调用方可直接按文档接 `final_result.json`、`run-summary.json`、`latest.json`、`cache inspect.latest_run`
   - 当前真实实现已补 `analyze.py runs latest` 与 `runs inspect --run-id`，可直接查看最近 run 或按 run id 回读落盘摘要
+  - 当前真实实现已补 `analyze.py runs list --limit <n>`，可按 `updated_at` 倒序查看最近 run 摘要列表
   - 当前真实实现已补 `output_contract.py`，并对 `run-summary.json`、`latest.json` 落地前做最小校验
   - 当前真实实现已补 `process_exec.py`，并让 `runner.py`、`resolve_apk_dex.py`、`export_and_scan.py` 复用同一套执行捕获逻辑
   - 当前真实实现已补 `step-result.json` 的轻量 envelope 校验，并为 step 结果补了最小 `diagnostics`

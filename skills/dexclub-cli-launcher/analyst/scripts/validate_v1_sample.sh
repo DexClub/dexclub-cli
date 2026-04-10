@@ -537,6 +537,17 @@ assert_expr "$runs_inspect_output" "payload['run']['summary_exists'] is True" "r
 assert_expr "$runs_inspect_output" "payload['run']['final_result_exists'] is True" "runs inspect should resolve the final result payload"
 assert_expr "$runs_inspect_output" "payload['run']['summary_path'].endswith('/$cache_manage_run_id/run-summary.json')" "runs inspect should expose the run summary path"
 assert_expr "$runs_inspect_output" "payload['run']['final_result_path'].endswith('/$cache_manage_run_id/final_result.json')" "runs inspect should expose the final result path"
+runs_list_output="$RESULT_DIR/runs_list.json"
+DEXCLUB_ANALYST_WORK_ROOT="$cache_manage_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$cache_manage_cache_root" \
+python3 "$ANALYZE" runs list --limit 2 --format json >"$runs_list_output"
+echo "validated_output=$runs_list_output"
+assert_expr "$runs_list_output" "payload['count'] >= 1" "runs list should report at least one persisted run"
+assert_expr "$runs_list_output" "payload['items'][0]['run_id'] == '$cache_manage_run_id'" "runs list should sort the latest run first"
+assert_expr "$runs_list_output" "payload['items'][0]['is_latest'] is True" "runs list should mark the latest run"
+assert_expr "$runs_list_output" "payload['items'][0]['task_type'] == 'summarize_method_logic'" "runs list should expose task type"
+assert_expr "$runs_list_output" "payload['items'][0]['reused_step_count'] == 0" "runs list should expose reuse counters"
+assert_expr "$runs_list_output" "payload['items'][0]['cache_hit_count'] == 0" "runs list should expose helper cache counters"
 
 mkdir -p "$cache_manage_cache_root/v1/inputs/dex/invalid-dex-entry"
 printf 'broken\n' >"$cache_manage_cache_root/v1/inputs/dex/invalid-dex-entry/orphan.txt"
