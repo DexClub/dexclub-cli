@@ -57,6 +57,9 @@
     - 输出：`verifiedFacts / inferences / unknowns / nextChecks`
     - 当前 `analyze.py run`、planner 错误输出与 `runs inspect --include-final-result` 已统一带出
     - 可用时附带 `source_path / line_numbers` 等轻量 evidence 定位
+  - JSON 模式下的纯净 stdout 契约
+    - `run_find.py` 的 JSON 模式已改为通过正式 `output-file` 回读后重发纯净 JSON
+    - `process_exec.py` 与样例验证脚本已移除“从 stdout 中定位 JSON 起点”的兜底解析
   - 当前本地已落地的 analyst 存储结构
     - 下面这些是“当前已实现状态”，不是新的目标目录方案
     - `analyze.py run` 默认写入 `.dexclub-cli/runs/v1/<run-id>/`
@@ -175,9 +178,17 @@
 | A-18 | recent runs 列表入口 | 已完成 | 本次会话完成。已新增 `analyze.py runs list --limit <n>`，按 `run-summary.json.updated_at` 倒序列出最近 run，并暴露 `is_latest` 与 reuse/cache 统计 |
 | A-19 | run inspect 嵌入完整结果开关 | 已完成 | 本次会话完成。已新增 `analyze.py runs inspect --include-final-result`，在保留摘要投影的同时可选内嵌持久化 `final_result.json` |
 | A-20 | 任务级输出固定事实 / 推断结构 | 已完成 | 本次会话完成。已为 `analyze.py run`、planner 错误输出和 `final_result.json` 固定 `verifiedFacts / inferences / unknowns / nextChecks`，并补充轻量校验、样例断言与文档说明 |
+| A-21 | JSON 模式输出去掉 stdout 起点猜测兜底 | 已完成 | 本次会话完成。已让 `run_find.py` 在 JSON 模式下回读正式 `output-file` 并重发纯净 JSON，`process_exec.py` 与 `validate_v1_sample.sh` 也已改成严格 JSON 解析 |
 
 ## 最近一次状态流转
 
+- `A-21`
+  - `待开始 -> 进行中`
+  - `进行中 -> 已完成`
+  - 完成依据
+    - `run_find.py` 的 JSON 模式不再透传底层 stdout
+    - `process_exec.py` 已改为严格 `json.loads(stdout.strip())`
+    - `validate_v1_sample.sh` 已完整回归通过，且样例校验不再依赖 JSON 起点猜测
 - `A-20`
   - `待开始 -> 进行中`
   - `进行中 -> 已完成`
@@ -300,6 +311,7 @@
   - 当前真实实现已补任务级固定输出结构 `verifiedFacts / inferences / unknowns / nextChecks`
   - 当前真实实现已补 `output_contract.py`，并对 `run-summary.json`、`latest.json` 落地前做最小校验
   - 当前真实实现已补 `process_exec.py`，并让 `runner.py`、`resolve_apk_dex.py`、`export_and_scan.py` 复用同一套执行捕获逻辑
+  - 当前真实实现已让 `run_find.py` 在 JSON 模式下输出单一正式 JSON 文档，`process_exec.py` 与样例验证也不再猜测 JSON 起点
   - 当前真实实现已补 `step-result.json` 的轻量 envelope 校验，并为 step 结果补了最小 `diagnostics`
   - 已基于 `/data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk` 重新跑通 `validate_v1_sample.sh`，覆盖当前目录收口、接续对象、执行捕获层与 step-result 校验后的真实链路
 
@@ -311,7 +323,6 @@
 
 - 维持当前实现不再扩命令面，只观察真实使用里的缓存体积、复用率和回归情况
 - 如果要继续收尾，先对照 [DEXCLUB_SKILL_IMPROVEMENTS.md](../../DEXCLUB_SKILL_IMPROVEMENTS.md) 中尚未完全解决的条目，再考虑推进：
-  - 条目 `9`：真正去掉 JSON 模式下对 stdout 起始位置猜测的兜底逻辑
   - 条目 `3 / 6 / 10`：补参数契约统一、纠错提示与 dex 集合显式输入
 
 ## 历史归档

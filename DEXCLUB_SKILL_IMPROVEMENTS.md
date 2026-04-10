@@ -31,13 +31,12 @@
 | 6. 增强错误消息 | 部分解决 | 已有 `PlannerError` 与 step `diagnostics` 骨架，但“原因 + 建议动作”的覆盖面仍不完整 |
 | 7. 明确“已验证事实 / 推断”结构边界 | 已解决 | `analyze.py run`、planner 错误输出与 `runs inspect --include-final-result` 已固定 `verifiedFacts / inferences / unknowns / nextChecks` 结构，并在可用时附带证据定位 |
 | 8. 增加结果复用与中间态管理 | 已解决 | APK 提取 dex、class->dex、export-and-scan、跨 run step reuse 均已支持复用并暴露来源 |
-| 9. 保证 JSON 输出纯净 | 部分解决 | 主线脚本已明显净化，但当前实现仍保留“从 stdout 中定位 JSON 起点”的兜底解析 |
+| 9. 保证 JSON 输出纯净 | 已解决 | `run_find.py` 的 JSON 模式已改为读取正式 `output-file` 后重发纯净 JSON，`process_exec.py` 与样例验证也已去掉“从 stdout 中定位 JSON 起点”的兜底解析 |
 | 10. 把工作区 dex 集合提升为一等输入源 | 部分解决 | 已支持 dex 路径数组与 `dex_set`，但尚未补 `--input-dex-dir` / `--input-dex-list` 这类显式一等入口 |
 
 如果后续继续推进，建议优先按下面顺序收尾：
 
-1. 先收紧条目 9，真正去掉 JSON 模式下对 stdout 起始位置猜测的兜底逻辑。
-2. 再补条目 3、6、10 中尚未完成的契约统一、纠错提示和 dex 集合显式输入。
+1. 先补条目 3、6、10 中尚未完成的契约统一、纠错提示和 dex 集合显式输入。
 
 ## 前置原则
 

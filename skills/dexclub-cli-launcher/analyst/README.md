@@ -140,6 +140,7 @@ Default local storage layout:
 - `run-summary.json` and `latest.json` now mirror the same reuse/cache counters for lightweight run inspection
 - Invalid `reusable-step-index-v1.json` entries are pruned automatically before new runs continue
 - `analyze.py cache clear` manages `inputs`, `export-and-scan`, `reusable-steps`, and `tmp`; when no `--scope` is provided it clears all of them
+- Internal helper JSON mode is now strict: `run_find.py` re-emits one pure JSON document from the formal `output-file`, and the runner no longer guesses a JSON start offset from helper stdout
 - Override the work root with `DEXCLUB_ANALYST_WORK_ROOT`
 - Override the cache root with `DEXCLUB_ANALYST_CACHE_DIR`
 - `export_and_scan.py` now creates its default direct-run output directory under the analyst work root instead of the anonymous system temp directory

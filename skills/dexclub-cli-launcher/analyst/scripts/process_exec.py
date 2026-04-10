@@ -35,19 +35,13 @@ def write_text(path: Path, content: str) -> int:
 
 
 def extract_json_payload(stdout: str) -> object:
-    lines = stdout.splitlines()
-    for start in range(len(lines)):
-        candidate = "\n".join(lines[start:]).strip()
-        if not candidate or candidate[0] not in "[{":
-            continue
-        try:
-            return json.loads(candidate)
-        except json.JSONDecodeError:
-            continue
     stripped = stdout.strip()
-    if stripped and stripped[0] in "[{":
+    if not stripped:
+        raise ValueError("Command stdout is empty; expected one JSON document.")
+    try:
         return json.loads(stripped)
-    raise ValueError("Unable to locate a JSON payload in command stdout.")
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Command stdout is not a pure JSON document: {exc.msg}") from exc
 
 
 def run_captured_process(

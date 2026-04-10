@@ -48,20 +48,8 @@ message = sys.argv[3]
 text = path.read_text(encoding="utf-8")
 try:
     payload = json.loads(text)
-except json.JSONDecodeError:
-    payload = None
-    lines = text.splitlines()
-    for start in range(len(lines)):
-        candidate = "\n".join(lines[start:]).strip()
-        if candidate[:1] not in "[{":
-            continue
-        try:
-            payload = json.loads(candidate)
-            break
-        except json.JSONDecodeError:
-            continue
-    if payload is None:
-        raise SystemExit(f"{path.name}: unable to locate JSON payload")
+except json.JSONDecodeError as exc:
+    raise SystemExit(f"{path.name}: stdout is not pure JSON: {exc.msg}") from exc
 ok = eval(expr, {}, {"payload": payload, "Path": pathlib.Path})
 if not ok:
     raise SystemExit(f"{path.name}: {message}")
@@ -76,17 +64,7 @@ import pathlib
 import sys
 
 text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
-lines = text.splitlines()
-payload = None
-for start in range(len(lines)):
-    candidate = "\n".join(lines[start:]).strip()
-    if candidate[:1] not in "[{":
-        continue
-    try:
-        payload = json.loads(candidate)
-        break
-    except json.JSONDecodeError:
-        continue
+payload = json.loads(text)
 if payload:
     raise SystemExit(0)
 raise SystemExit(1)

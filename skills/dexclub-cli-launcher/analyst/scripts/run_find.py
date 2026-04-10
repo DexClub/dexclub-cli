@@ -4,9 +4,11 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import sys
+import shutil
 from pathlib import Path
 
-from analyst_storage import ensure_apk_input_cache, ensure_dex_input_cache
+from analyst_storage import allocate_helper_output_dir, ensure_apk_input_cache, ensure_dex_input_cache
 from query_builder import build_query, create_query_parser, dump_query
 
 
@@ -33,6 +35,11 @@ def build_launcher_command(skill_root: Path, cli_args: list[str]) -> list[str]:
     return ["cmd.exe", "/c", str((launcher_scripts / "run_latest_release.bat").resolve()), "--", *cli_args]
 
 
+def relay_stream(content: str, *, target) -> None:
+    if content:
+        print(content, end="" if content.endswith("\n") else "\n", file=target)
+
+
 def main() -> None:
     parser = create_parser()
     args = parser.parse_args()
@@ -50,6 +57,7 @@ def main() -> None:
 
     command_name = f"find-{args.kind}"
     cli_args = [command_name]
+    managed_output_dir: Path | None = None
     for input_value in args.input:
         input_path = Path(input_value).expanduser().resolve()
         if input_path.suffix.lower() == ".dex":
@@ -61,12 +69,46 @@ def main() -> None:
     cli_args.extend(["--query-json", query_json, "--output-format", args.output_format])
     if args.limit is not None:
         cli_args.extend(["--limit", str(args.limit)])
-    if args.output_file:
-        cli_args.extend(["--output-file", str(Path(args.output_file).resolve())])
+    output_file_path: Path | None = None
+    if args.output_format == "json":
+        if args.output_file:
+            output_file_path = Path(args.output_file).expanduser().resolve()
+        else:
+            managed_output_dir = allocate_helper_output_dir("run-find-")
+            output_file_path = (managed_output_dir / "result.json").resolve()
+        cli_args.extend(["--output-file", str(output_file_path)])
+    elif args.output_file:
+        output_file_path = Path(args.output_file).expanduser().resolve()
+        cli_args.extend(["--output-file", str(output_file_path)])
 
     skill_root = Path(__file__).resolve().parents[2]
     command = build_launcher_command(skill_root, cli_args)
-    subprocess.run(command, check=True)
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True)
+        if completed.returncode != 0:
+            relay_stream(completed.stdout, target=sys.stderr)
+            relay_stream(completed.stderr, target=sys.stderr)
+            raise SystemExit(completed.returncode)
+
+        relay_stream(completed.stderr, target=sys.stderr)
+        if args.output_format == "json":
+            if output_file_path is None or not output_file_path.is_file():
+                relay_stream(completed.stdout, target=sys.stderr)
+                raise SystemExit("dexclub-cli did not produce the requested JSON output file.")
+            payload_text = output_file_path.read_text(encoding="utf-8")
+            try:
+                json.loads(payload_text)
+            except json.JSONDecodeError as exc:
+                raise SystemExit(f"Invalid JSON output from dexclub-cli: {exc.msg}") from exc
+            if completed.stdout.strip():
+                relay_stream(completed.stdout, target=sys.stderr)
+            relay_stream(payload_text, target=sys.stdout)
+            return
+
+        relay_stream(completed.stdout, target=sys.stdout)
+    finally:
+        if managed_output_dir is not None:
+            shutil.rmtree(managed_output_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":
