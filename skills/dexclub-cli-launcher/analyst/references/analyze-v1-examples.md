@@ -110,6 +110,22 @@ Meaning:
 }
 ```
 
+Adding `--include-final-result` to `runs inspect` embeds the persisted run payload:
+
+```json
+{
+  "run": {
+    "run_id": "<run-id>",
+    "final_result_included": true,
+    "final_result": {
+      "run_id": "<run-id>",
+      "task_type": "summarize_method_logic",
+      "cache_hit_count": 0
+    }
+  }
+}
+```
+
 `analyze.py runs list --limit 10 --format json` exposes recent persisted runs ordered by `updated_at` descending:
 
 ```json

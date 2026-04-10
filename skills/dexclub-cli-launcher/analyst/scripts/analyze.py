@@ -66,6 +66,11 @@ def parse_args() -> argparse.Namespace:
 
     runs_inspect_parser = runs_subparsers.add_parser("inspect", help="Inspect one persisted run by run id.")
     runs_inspect_parser.add_argument("--run-id", required=True, help="Persisted run id under runs/v1.")
+    runs_inspect_parser.add_argument(
+        "--include-final-result",
+        action="store_true",
+        help="Embed the persisted final_result.json payload in the response.",
+    )
     runs_inspect_parser.add_argument("--format", choices=("text", "json"), default="json", help="Output format.")
 
     runs_list_parser = runs_subparsers.add_parser("list", help="List recent persisted runs.")
@@ -277,6 +282,7 @@ def build_run_projection(
     *,
     run_root: Path,
     latest_payload: dict[str, object] | None = None,
+    include_final_result: bool = False,
 ) -> dict[str, object]:
     summary_path = run_root / "run-summary.json"
     final_result_path = run_root / "final_result.json"
@@ -315,11 +321,12 @@ def build_run_projection(
             cache_hit_count = int(payload.get("cache_hit_count", 0))
         if reused_step_count or reused_step_kinds or cache_hit_count:
             break
-    return {
+    projection = {
         "path": str((runs_root() / "latest.json").resolve()) if latest_payload is not None else str(summary_path.resolve()),
         "exists": run_root.is_dir(),
         "summary_exists": summary_payload is not None,
         "final_result_exists": final_result_payload is not None,
+        "final_result_included": include_final_result and final_result_payload is not None,
         "run_id": run_id,
         "run_root": str(run_root.resolve()),
         "summary_path": str(summary_path.resolve()),
@@ -333,11 +340,14 @@ def build_run_projection(
         "cache_hit_count": cache_hit_count,
         "key_artifacts": summary_payload.get("key_artifacts", []) if isinstance(summary_payload, dict) else [],
     }
+    if include_final_result and isinstance(final_result_payload, dict):
+        projection["final_result"] = final_result_payload
+    return projection
 
 
-def inspect_run_by_id(run_id: str) -> dict[str, object]:
+def inspect_run_by_id(run_id: str, *, include_final_result: bool = False) -> dict[str, object]:
     run_root = runs_root() / run_id
-    return build_run_projection(run_root=run_root)
+    return build_run_projection(run_root=run_root, include_final_result=include_final_result)
 
 
 def build_runs_latest_payload() -> dict[str, object]:
@@ -349,12 +359,12 @@ def build_runs_latest_payload() -> dict[str, object]:
     }
 
 
-def build_runs_inspect_payload(run_id: str) -> dict[str, object]:
+def build_runs_inspect_payload(run_id: str, *, include_final_result: bool = False) -> dict[str, object]:
     return {
         "kind": "runs_inspect",
         "work_root": str(work_root().resolve()),
         "runs_root": str(runs_root().resolve()),
-        "run": inspect_run_by_id(run_id),
+        "run": inspect_run_by_id(run_id, include_final_result=include_final_result),
     }
 
 
@@ -605,7 +615,7 @@ def main() -> None:
             run = payload.get("run", {})
             exit_code = 0 if isinstance(run, dict) and run.get("summary_exists") else 1
         elif args.runs_command == "inspect":
-            payload = build_runs_inspect_payload(args.run_id)
+            payload = build_runs_inspect_payload(args.run_id, include_final_result=bool(args.include_final_result))
             run = payload.get("run", {})
             exit_code = 0 if isinstance(run, dict) and run.get("summary_exists") else 1
         else:

@@ -535,8 +535,18 @@ echo "validated_output=$runs_inspect_output"
 assert_expr "$runs_inspect_output" "payload['run']['run_id'] == '$cache_manage_run_id'" "runs inspect should expose the requested run id"
 assert_expr "$runs_inspect_output" "payload['run']['summary_exists'] is True" "runs inspect should resolve the summary payload"
 assert_expr "$runs_inspect_output" "payload['run']['final_result_exists'] is True" "runs inspect should resolve the final result payload"
+assert_expr "$runs_inspect_output" "payload['run']['final_result_included'] is False" "runs inspect should keep final_result embedded output opt-in"
 assert_expr "$runs_inspect_output" "payload['run']['summary_path'].endswith('/$cache_manage_run_id/run-summary.json')" "runs inspect should expose the run summary path"
 assert_expr "$runs_inspect_output" "payload['run']['final_result_path'].endswith('/$cache_manage_run_id/final_result.json')" "runs inspect should expose the final result path"
+runs_inspect_with_final_output="$RESULT_DIR/runs_inspect_with_final.json"
+DEXCLUB_ANALYST_WORK_ROOT="$cache_manage_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$cache_manage_cache_root" \
+python3 "$ANALYZE" runs inspect --run-id "$cache_manage_run_id" --include-final-result --format json >"$runs_inspect_with_final_output"
+echo "validated_output=$runs_inspect_with_final_output"
+assert_expr "$runs_inspect_with_final_output" "payload['run']['final_result_included'] is True" "runs inspect should embed final_result when requested"
+assert_expr "$runs_inspect_with_final_output" "payload['run']['final_result']['run_id'] == '$cache_manage_run_id'" "embedded final_result should match the requested run id"
+assert_expr "$runs_inspect_with_final_output" "payload['run']['final_result']['task_type'] == 'summarize_method_logic'" "embedded final_result should keep the run task type"
+assert_expr "$runs_inspect_with_final_output" "payload['run']['final_result']['cache_hit_count'] == 0" "embedded final_result should preserve top-level reuse/cache counters"
 runs_list_output="$RESULT_DIR/runs_list.json"
 DEXCLUB_ANALYST_WORK_ROOT="$cache_manage_work_root" \
 DEXCLUB_ANALYST_CACHE_DIR="$cache_manage_cache_root" \
