@@ -24,14 +24,14 @@
 ## 当前快照
 
 - 当前最新相关提交
-  - `c102896` `Add analyst local artifact storage`
-  - `57804d9` `Finalize analyst Java summarize release validation`
-  - `8f41ae6` `Support analyst exact Java summarize`
-  - `7cc459f` `Fix export-java in packaged CLI`
-  - `dcc2030` `Add structured analyst method summaries`
-  - `3af1500` `Add analyst large-method summary compression`
-  - `7007464` `Support descriptor-aware analyst anchors`
-  - `a51c692` `Add APK summarize resolution to analyst`
+  - `ccbb2fc` `Embed persisted analyst run results on demand`
+  - `ed92062` `List recent analyst runs`
+  - `e4b84ef` `Add analyst run inspection commands`
+  - `d56b324` `Expose analyst reuse counters in summaries`
+  - `043e5f2` `Make analyst cache updates atomic`
+  - `58b3024` `Add analyst cache maintenance commands`
+  - `7c01a63` `Isolate reusable analyst steps by release tag`
+  - `8ad713f` `Reuse analyst search steps across runs`
 - 当前已稳定的 analyst v1 能力
   - `plan` / `run` 入口已经落地
   - `search_methods_by_string`
@@ -68,11 +68,12 @@
   - [validate_v1_sample.sh](../../skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh)
   - 运行时需要通过首个参数或 `DEXCLUB_ANALYST_SAMPLE_APK` 显式提供样例 APK 路径
 - 最近一次通过验证的命令
+  - `bash ./skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh /data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk`
   - `DEXCLUB_CLI_CACHE_DIR=<cache-dir> bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh --reset-remote-failures --update-cache --prepare-only`
   - `DEXCLUB_CLI_CACHE_DIR=<cache-dir> python3 ./skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py --input-dex <dex-path> --class androidx.compose.foundation.ImageKt --method Image --method-descriptor 'Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V' --language java --mode summary --format json`
   - `DEXCLUB_CLI_CACHE_DIR=<cache-dir> python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run --task-type summarize_method_logic --input-json '{"input":["<apk-path>"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image","descriptor":"Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V"},"language":"java"}'`
 - 最近一次通过验证的结果目录
-  - `/root/termux-home/AndroidProjects/dexclub-cli/.dexclub-cli/tmp/dexclub-analyst-v1.apkbZO/results`
+  - `/root/termux-home/AndroidProjects/dexclub-cli/.dexclub-cli/tmp/dexclub-analyst-v1.BRGRuU/results`
 
 ## 当前边界
 
@@ -291,12 +292,15 @@
 
 ## 下一步推荐入口
 
-当前这条 analyst 主线已收口，暂无新的主推进项。
+当前这条 analyst 主线功能面已基本收口，暂无新的主推进项。
 
 如果下一个对话继续沿这条线推进，优先做以下两类事情之一：
 
-- 推送 `c102896`，然后观察真实使用里的缓存体积、复用率和回归情况
-- 如果要继续扩展或收敛当前工程方案，先对照 [OUTPUT_NORMALIZATION.md](./OUTPUT_NORMALIZATION.md)，再考虑补充清理入口、更细的缓存复用粒度或输出契约相关整理
+- 维持当前实现不再扩命令面，只观察真实使用里的缓存体积、复用率和回归情况
+- 如果要继续收尾，先对照 [DEXCLUB_SKILL_IMPROVEMENTS.md](../../DEXCLUB_SKILL_IMPROVEMENTS.md) 中尚未完全解决的条目，再考虑推进：
+  - 条目 `7`：任务级输出固定 `verifiedFacts / inferences / unknowns / nextChecks`
+  - 条目 `9`：真正去掉 JSON 模式下对 stdout 起始位置猜测的兜底逻辑
+  - 条目 `3 / 6 / 10`：补参数契约统一、纠错提示与 dex 集合显式输入
 
 ## 历史归档
 
