@@ -100,6 +100,9 @@ def build_analysis_error_result(
             "text": message,
             "style": "error" if status in {"input_error", "execution_error"} else status,
         },
+        "reused_step_count": 0,
+        "reused_step_kinds": [],
+        "cache_hit_count": 0,
         "artifacts": [{"type": "run_root", "path": artifact_root, "produced_by_step": "run"}],
         "recommendations": recommendations or [],
         "limits": limits or [],
@@ -781,6 +784,29 @@ def aggregate_run_summary_status(
     return "execution_error"
 
 
+def build_run_reuse_stats(*, step_results: list[dict[str, object]]) -> dict[str, object]:
+    reused_step_count = 0
+    reused_step_kinds: list[str] = []
+    seen_reused_kinds: set[str] = set()
+    cache_hit_count = 0
+    for step_result in step_results:
+        reused_from = step_result.get("reused_from")
+        if isinstance(reused_from, dict):
+            reused_step_count += 1
+            step_kind = step_result.get("step_kind")
+            if isinstance(step_kind, str) and step_kind and step_kind not in seen_reused_kinds:
+                seen_reused_kinds.add(step_kind)
+                reused_step_kinds.append(step_kind)
+        result = step_result.get("result")
+        if isinstance(result, dict) and result.get("cache_hit") is True:
+            cache_hit_count += 1
+    return {
+        "reused_step_count": reused_step_count,
+        "reused_step_kinds": reused_step_kinds,
+        "cache_hit_count": cache_hit_count,
+    }
+
+
 def build_step_index(
     *,
     run_root: Path,
@@ -894,6 +920,9 @@ def build_run_summary_payload(
         "updated_at": updated_at,
         "latest_step_id": latest_step_id,
         "latest_successful_step_id": latest_successful_step_id,
+        "reused_step_count": int(run_result.get("reused_step_count", 0)),
+        "reused_step_kinds": list(run_result.get("reused_step_kinds", [])),
+        "cache_hit_count": int(run_result.get("cache_hit_count", 0)),
         "key_artifacts": build_key_artifacts(
             task_type=str(plan.get("task_type", "")),
             artifacts=run_result.get("artifacts", []) if isinstance(run_result.get("artifacts"), list) else [],
@@ -940,6 +969,9 @@ def build_latest_index_payload(
         "summary_path": str((run_root / "run-summary.json").resolve()),
         "status": run_status,
         "updated_at": updated_at,
+        "reused_step_count": int(run_summary.get("reused_step_count", 0)),
+        "reused_step_kinds": list(run_summary.get("reused_step_kinds", [])),
+        "cache_hit_count": int(run_summary.get("cache_hit_count", 0)),
         "selection_reason": selection_reason,
     }
 
@@ -1545,6 +1577,7 @@ def finalize_run_result(
     limits: list[str],
 ) -> dict[str, object]:
     task_type = str(plan["task_type"])
+    reuse_stats = build_run_reuse_stats(step_results=step_results)
     status = "empty"
     summary_text = "No results."
     summary_style = "empty"
@@ -1734,6 +1767,7 @@ def finalize_run_result(
             "text": summary_text,
             "style": summary_style,
         },
+        **reuse_stats,
         "artifacts": artifacts,
         "recommendations": recommendations,
         "limits": limits,

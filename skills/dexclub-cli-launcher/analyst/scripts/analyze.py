@@ -95,6 +95,16 @@ def file_tree_stats(path: Path) -> dict[str, object]:
     }
 
 
+def load_json_object(path: Path) -> dict[str, object] | None:
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def inspect_inputs_cache() -> dict[str, object]:
     root = inputs_cache_root()
     dex_root = root / "dex"
@@ -199,6 +209,43 @@ def inspect_tmp_root() -> dict[str, object]:
     }
 
 
+def inspect_latest_run() -> dict[str, object]:
+    latest_path = work_root() / "runs" / "v1" / "latest.json"
+    latest_payload = load_json_object(latest_path)
+    summary_path_raw = latest_payload.get("summary_path") if isinstance(latest_payload, dict) else None
+    summary_path = Path(summary_path_raw) if isinstance(summary_path_raw, str) and summary_path_raw else None
+    summary_payload = load_json_object(summary_path) if summary_path is not None else None
+    summary = summary_payload.get("summary") if isinstance(summary_payload, dict) else None
+    summary_text = summary.get("text") if isinstance(summary, dict) else None
+    return {
+        "path": str(latest_path.resolve()),
+        "exists": latest_payload is not None,
+        "summary_exists": summary_payload is not None,
+        "run_id": latest_payload.get("run_id") if isinstance(latest_payload, dict) else None,
+        "run_root": latest_payload.get("run_root") if isinstance(latest_payload, dict) else None,
+        "summary_path": summary_path_raw if isinstance(summary_path_raw, str) and summary_path_raw else None,
+        "status": latest_payload.get("status") if isinstance(latest_payload, dict) else None,
+        "selection_reason": latest_payload.get("selection_reason") if isinstance(latest_payload, dict) else None,
+        "task_type": summary_payload.get("task_type") if isinstance(summary_payload, dict) else None,
+        "summary_text": summary_text if isinstance(summary_text, str) else None,
+        "reused_step_count": (
+            int(latest_payload.get("reused_step_count", 0))
+            if isinstance(latest_payload, dict)
+            else 0
+        ),
+        "reused_step_kinds": (
+            list(latest_payload.get("reused_step_kinds", []))
+            if isinstance(latest_payload, dict)
+            else []
+        ),
+        "cache_hit_count": (
+            int(latest_payload.get("cache_hit_count", 0))
+            if isinstance(latest_payload, dict)
+            else 0
+        ),
+    }
+
+
 def build_cache_inspect_payload() -> dict[str, object]:
     return {
         "kind": "cache_inspect",
@@ -207,6 +254,7 @@ def build_cache_inspect_payload() -> dict[str, object]:
         "inputs": inspect_inputs_cache(),
         "export_and_scan": inspect_export_and_scan_cache(),
         "reusable_steps": inspect_reusable_step_index(),
+        "latest_run": inspect_latest_run(),
         "tmp": inspect_tmp_root(),
     }
 
@@ -310,7 +358,7 @@ def format_cache_payload(payload: dict[str, object]) -> str:
     kind = str(payload.get("kind"))
     lines = [f"kind={kind}", f"work_root={payload['work_root']}", f"cache_root={payload['cache_root']}"]
     if kind == "cache_inspect":
-        for section_name in ("inputs", "export_and_scan", "reusable_steps", "tmp"):
+        for section_name in ("inputs", "export_and_scan", "reusable_steps", "latest_run", "tmp"):
             section = payload.get(section_name, {})
             if not isinstance(section, dict):
                 continue

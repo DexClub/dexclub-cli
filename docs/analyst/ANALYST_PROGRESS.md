@@ -61,7 +61,8 @@
     - 单步结果当前聚合到 `.dexclub-cli/runs/v1/<run-id>/steps/<step-id>/`
     - step 目录当前会写入 `step-result.json`、`raw.stdout.log`、`raw.stderr.log`
     - runs 根当前会写入 `.dexclub-cli/runs/v1/latest.json`
-    - `run-summary.json` 当前已包含最小 `step_index`、`key_artifacts`
+    - `run-summary.json` 当前已包含最小 `step_index`、`key_artifacts`，并镜像 `reused_step_count` / `reused_step_kinds` / `cache_hit_count`
+    - `analyze.py cache inspect` 当前也会暴露 `latest_run`，汇总最近一次 run 的状态、任务类型与复用/缓存统计
     - 输入缓存目录会写入 `input-meta.json`
 - 当前验证脚本
   - [validate_v1_sample.sh](../../skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh)
@@ -164,6 +165,7 @@
 | A-13 | 公共执行捕获层最小抽取 | 已完成 | 本次会话完成。已新增 `process_exec.py`，并让 `runner.py` 与 `resolve_apk_dex.py` 复用同一套执行、raw log 与 JSON payload 提取逻辑 |
 | A-14 | `export_and_scan` 接入公共执行捕获层 | 已完成 | 本次会话完成。`export_and_scan.py` 已改为通过 `process_exec.py` 调 launcher 导出，`json` 模式下不再直通底层 `stdout` 噪音 |
 | A-15 | `step-result` 轻量 envelope 校验 | 已完成 | 本次会话完成。已补 `validate_step_result_envelope(...)`，并在 `runner.py` 写 `step-result.json` 前做最小字段、raw_process、diagnostics 与 artifact 形状校验 |
+| A-16 | reuse/cache 统计消费侧契约说明 | 已完成 | 本次会话完成。已在 README 与样例文档补充 `final_result.json` / `run-summary.json` / `latest.json` / `cache inspect.latest_run` 的复用与 cache-hit 统计字段定义与示例 |
 
 ## 最近一次状态流转
 
@@ -273,6 +275,9 @@
   - 当前真实实现已把单步结果收口到 `steps/<step-id>/step-result.json`，并为每步补 `raw.stdout.log`、`raw.stderr.log`
   - `final_result.json` 已回收到 run 根，不再写入 run 根下的 `results/` 目录
   - 当前真实实现已补 `run-summary.json`、`latest.json`、最小 `step_index` 与 `key_artifacts`
+  - 当前真实实现已把 `reused_step_count`、`reused_step_kinds`、`cache_hit_count` 同步暴露到 `final_result.json`、`run-summary.json`、`latest.json`
+  - 当前真实实现已让 `analyze.py cache inspect` 直接暴露 `latest_run`，复用 `latest.json` / `run-summary.json` 作为最近 run 概览
+  - 当前真实实现的 reuse/cache 统计消费侧契约已补进 README 与样例文档，调用方可直接按文档接 `final_result.json`、`run-summary.json`、`latest.json`、`cache inspect.latest_run`
   - 当前真实实现已补 `output_contract.py`，并对 `run-summary.json`、`latest.json` 落地前做最小校验
   - 当前真实实现已补 `process_exec.py`，并让 `runner.py`、`resolve_apk_dex.py`、`export_and_scan.py` 复用同一套执行捕获逻辑
   - 当前真实实现已补 `step-result.json` 的轻量 envelope 校验，并为 step 结果补了最小 `diagnostics`

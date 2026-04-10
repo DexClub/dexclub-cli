@@ -301,10 +301,40 @@ DEXCLUB_ANALYST_WORK_ROOT="$step_reuse_work_root" \
 DEXCLUB_ANALYST_CACHE_DIR="$step_reuse_cache_root" \
 python3 "$ANALYZE" run --task-type summarize_method_logic --input-json "$step_reuse_input" >"$step_reuse_second_output"
 echo "validated_output=$step_reuse_second_output"
+step_reuse_second_run_id="$(python3 - "$step_reuse_second_output" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(payload["run_id"])
+PY
+)"
 assert_expr "$step_reuse_second_output" "payload['step_results'][0]['reused_from']['run_id'] == '$step_reuse_first_run_id'" "second summarize run should reuse the prior resolve_apk_dex step"
 assert_expr "$step_reuse_second_output" "payload['step_results'][1]['reused_from']['run_id'] == '$step_reuse_first_run_id'" "second summarize run should reuse the prior export_and_scan step"
 assert_expr "$step_reuse_second_output" "payload['step_results'][1]['result']['export_path'] != '$step_reuse_first_export_path'" "reused export_and_scan should materialize a fresh run-local export artifact"
 assert_expr "$step_reuse_second_output" "Path(payload['step_results'][1]['result']['export_path']).is_file()" "reused export_and_scan should keep the rematerialized export artifact"
+assert_expr "$step_reuse_second_output" "payload['reused_step_count'] == 2" "second summarize run should expose the reused step count"
+assert_expr "$step_reuse_second_output" "payload['reused_step_kinds'] == ['resolve_apk_dex', 'export_and_scan']" "second summarize run should expose the reused step kinds in step order"
+assert_expr "$step_reuse_second_output" "payload['cache_hit_count'] == 0" "fully reused summarize steps should not be double-counted as helper cache hits"
+step_reuse_second_run_root="$(python3 - "$step_reuse_second_output" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(payload["artifact_root"])
+PY
+)"
+step_reuse_second_summary_path="$step_reuse_second_run_root/run-summary.json"
+step_reuse_latest_path="$step_reuse_work_root/runs/v1/latest.json"
+assert_expr "$step_reuse_second_summary_path" "payload['reused_step_count'] == 2" "run summary should expose the reused step count"
+assert_expr "$step_reuse_second_summary_path" "payload['reused_step_kinds'] == ['resolve_apk_dex', 'export_and_scan']" "run summary should expose the reused step kinds"
+assert_expr "$step_reuse_second_summary_path" "payload['cache_hit_count'] == 0" "run summary should keep helper cache-hit count separate from step reuse"
+assert_expr "$step_reuse_latest_path" "payload['run_id'] == '$step_reuse_second_run_id'" "latest index should point at the latest summarize reuse run"
+assert_expr "$step_reuse_latest_path" "payload['reused_step_count'] == 2" "latest index should expose the reused step count"
+assert_expr "$step_reuse_latest_path" "payload['reused_step_kinds'] == ['resolve_apk_dex', 'export_and_scan']" "latest index should expose the reused step kinds"
+assert_expr "$step_reuse_latest_path" "payload['cache_hit_count'] == 0" "latest index should keep helper cache-hit count separate from step reuse"
 
 run_find_reuse_work_root="$TMP_ROOT/run-find-reuse-work"
 run_find_reuse_cache_root="$TMP_ROOT/run-find-reuse-cache"
@@ -334,6 +364,9 @@ echo "validated_output=$run_find_reuse_second_output"
 assert_expr "$run_find_reuse_second_output" "payload['step_results'][0]['reused_from']['run_id'] == '$run_find_reuse_first_run_id'" "second trace_callees run should reuse the prior run_find step"
 assert_expr "$run_find_reuse_second_output" "payload['step_results'][0]['result']['relation_direction'] == 'callees'" "reused run_find step should preserve the normalized relation payload"
 assert_expr "$run_find_reuse_second_output" 'any(item["method_name"] == "setContent$default" for item in payload["step_results"][0]["result"]["items"])' "reused run_find step should preserve the original hit set"
+assert_expr "$run_find_reuse_second_output" "payload['reused_step_count'] == 1" "second trace_callees run should expose the reused step count"
+assert_expr "$run_find_reuse_second_output" "payload['reused_step_kinds'] == ['run_find']" "second trace_callees run should expose the reused step kind"
+assert_expr "$run_find_reuse_second_output" "payload['cache_hit_count'] == 0" "run_find reuse should not fabricate helper cache hits"
 
 release_tag_reuse_work_root="$TMP_ROOT/release-tag-reuse-work"
 release_tag_reuse_cache_root="$TMP_ROOT/release-tag-reuse-cache"
@@ -400,6 +433,56 @@ PY
 )"
 assert_expr "$release_tag_third_output" "'$release_tag_index_has_bogus' == 'false'" "invalid reusable-step-index entries should be pruned"
 
+cache_hit_run_work_root="$TMP_ROOT/cache-hit-run-work"
+cache_hit_run_cache_root="$TMP_ROOT/cache-hit-run-cache"
+cache_hit_run_input=$(cat <<JSON
+{"input":["$SAMPLE_APK"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate"}}
+JSON
+)
+cache_hit_run_first_output="$RESULT_DIR/cache_hit_run_first.json"
+DEXCLUB_ANALYST_WORK_ROOT="$cache_hit_run_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$cache_hit_run_cache_root" \
+DEXCLUB_ANALYST_RELEASE_TAG_OVERRIDE="cache-hit-a" \
+python3 "$ANALYZE" run --task-type summarize_method_logic --input-json "$cache_hit_run_input" >"$cache_hit_run_first_output"
+echo "validated_output=$cache_hit_run_first_output"
+assert_expr "$cache_hit_run_first_output" "payload['cache_hit_count'] == 0" "first summarize run should start with zero helper cache hits"
+cache_hit_run_second_output="$RESULT_DIR/cache_hit_run_second.json"
+DEXCLUB_ANALYST_WORK_ROOT="$cache_hit_run_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$cache_hit_run_cache_root" \
+DEXCLUB_ANALYST_RELEASE_TAG_OVERRIDE="cache-hit-b" \
+python3 "$ANALYZE" run --task-type summarize_method_logic --input-json "$cache_hit_run_input" >"$cache_hit_run_second_output"
+echo "validated_output=$cache_hit_run_second_output"
+assert_expr "$cache_hit_run_second_output" "payload['reused_step_count'] == 0" "different release tags should still prevent summarize step reuse while testing helper cache hits"
+assert_expr "$cache_hit_run_second_output" "payload['reused_step_kinds'] == []" "different release tags should keep the summarize reuse-kind summary empty"
+assert_expr "$cache_hit_run_second_output" "payload['cache_hit_count'] >= 1" "summarize runs without step reuse should still expose helper cache hits"
+cache_hit_run_second_run_id="$(python3 - "$cache_hit_run_second_output" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(payload["run_id"])
+PY
+)"
+cache_hit_run_second_run_root="$(python3 - "$cache_hit_run_second_output" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(payload["artifact_root"])
+PY
+)"
+cache_hit_run_second_summary_path="$cache_hit_run_second_run_root/run-summary.json"
+cache_hit_latest_path="$cache_hit_run_work_root/runs/v1/latest.json"
+assert_expr "$cache_hit_run_second_summary_path" "payload['reused_step_count'] == 0" "run summary should keep summarize helper-cache runs out of step reuse stats"
+assert_expr "$cache_hit_run_second_summary_path" "payload['reused_step_kinds'] == []" "run summary should keep summarize helper-cache runs out of reuse kinds"
+assert_expr "$cache_hit_run_second_summary_path" "payload['cache_hit_count'] >= 1" "run summary should expose helper cache hits"
+assert_expr "$cache_hit_latest_path" "payload['run_id'] == '$cache_hit_run_second_run_id'" "latest index should point at the latest helper-cache summarize run"
+assert_expr "$cache_hit_latest_path" "payload['reused_step_count'] == 0" "latest index should keep summarize helper-cache runs out of step reuse stats"
+assert_expr "$cache_hit_latest_path" "payload['reused_step_kinds'] == []" "latest index should keep summarize helper-cache runs out of reuse kinds"
+assert_expr "$cache_hit_latest_path" "payload['cache_hit_count'] >= 1" "latest index should expose helper cache hits"
+
 cache_manage_work_root="$TMP_ROOT/cache-manage-work"
 cache_manage_cache_root="$TMP_ROOT/cache-manage-cache"
 cache_manage_input=$(cat <<JSON
@@ -411,6 +494,15 @@ DEXCLUB_ANALYST_WORK_ROOT="$cache_manage_work_root" \
 DEXCLUB_ANALYST_CACHE_DIR="$cache_manage_cache_root" \
 python3 "$ANALYZE" run --task-type summarize_method_logic --input-json "$cache_manage_input" >"$cache_manage_run_output"
 echo "validated_output=$cache_manage_run_output"
+cache_manage_run_id="$(python3 - "$cache_manage_run_output" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(payload["run_id"])
+PY
+)"
 cache_inspect_output="$RESULT_DIR/cache_inspect.json"
 DEXCLUB_ANALYST_WORK_ROOT="$cache_manage_work_root" \
 DEXCLUB_ANALYST_CACHE_DIR="$cache_manage_cache_root" \
@@ -419,6 +511,11 @@ echo "validated_output=$cache_inspect_output"
 assert_expr "$cache_inspect_output" "payload['inputs']['apk_entry_count'] >= 1" "cache inspect should report apk input cache entries"
 assert_expr "$cache_inspect_output" "payload['export_and_scan']['entry_count'] >= 1" "cache inspect should report export-and-scan cache entries"
 assert_expr "$cache_inspect_output" "payload['reusable_steps']['valid_entry_count'] >= 2" "cache inspect should report reusable summarize steps"
+assert_expr "$cache_inspect_output" "payload['latest_run']['run_id'] == '$cache_manage_run_id'" "cache inspect should expose the latest run id"
+assert_expr "$cache_inspect_output" "payload['latest_run']['task_type'] == 'summarize_method_logic'" "cache inspect should expose the latest run task type"
+assert_expr "$cache_inspect_output" "payload['latest_run']['summary_exists'] is True" "cache inspect should expose the latest run summary linkage"
+assert_expr "$cache_inspect_output" "payload['latest_run']['reused_step_count'] == 0" "cache inspect should expose latest-run reuse counters"
+assert_expr "$cache_inspect_output" "payload['latest_run']['cache_hit_count'] == 0" "cache inspect should expose latest-run helper cache counters"
 
 mkdir -p "$cache_manage_cache_root/v1/inputs/dex/invalid-dex-entry"
 printf 'broken\n' >"$cache_manage_cache_root/v1/inputs/dex/invalid-dex-entry/orphan.txt"

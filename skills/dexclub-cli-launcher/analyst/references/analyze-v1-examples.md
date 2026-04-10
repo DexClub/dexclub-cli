@@ -20,6 +20,9 @@ Notes:
 - `export_and_scan.py` now keeps derived export/scan cache entries under `<workspace>/.dexclub-cli/cache/v1/export-and-scan/<dex-sha256>/<request-hash>/` and may report `cacheHit` / `cachePath` on direct helper runs.
 - The export/scan cache is keyed by dex content plus export/scope arguments, so APK-extracted dex and direct dex inputs can converge on the same cached result.
 - Reused run steps include `reused_from` metadata in `step_results[]`, while the current run still gets its own `step-result.json` and step-local export artifact path.
+- `analyze.py run` also exposes top-level `reused_step_count`, `reused_step_kinds`, and `cache_hit_count` so callers do not need to rescan `step_results[]` just to summarize reuse/cache behavior.
+- The same reuse/cache counters are also mirrored into `run-summary.json` and `latest.json` for runs-root inspection.
+- `analyze.py cache inspect` now also exposes `latest_run`, derived from `latest.json` plus `run-summary.json`, for lightweight recent-run inspection.
 - Invalid reusable-step-index entries are pruned automatically when later runs touch the index.
 - `analyze.py cache inspect|prune|clear` now exposes the managed cache roots and index maintenance path directly from the stable entry point.
 - `stdout` in `step_results[]` is preserved exactly as captured from helper scripts, including current DexKit info lines.
@@ -27,6 +30,62 @@ Notes:
 - `summarize_method_logic` accepts either one direct dex input or one APK input. When the input is an APK, the planner inserts a `resolve_apk_dex` step before export.
 - Descriptor-aware anchors may use a full descriptor or a signature-only suffix such as `"(Landroid/os/Bundle;)V"` when `class_name` and `method_name` are also present.
 - The Java exact-anchor example below is now valid against the published release path.
+
+## Reuse / Cache Counter Contract
+
+`analyze.py run` top-level counters:
+
+```json
+{
+  "reused_step_count": 2,
+  "reused_step_kinds": [
+    "resolve_apk_dex",
+    "export_and_scan"
+  ],
+  "cache_hit_count": 0
+}
+```
+
+Meaning:
+
+- `reused_step_count`: count of `step_results[]` items with `reused_from`
+- `reused_step_kinds`: deduplicated reused step kinds, ordered by first appearance in `step_results[]`
+- `cache_hit_count`: count of step results whose normalized `result.cache_hit` is `true`
+
+`run-summary.json` and `latest.json` mirror the same three fields:
+
+```json
+{
+  "run_id": "<run-id>",
+  "status": "ok",
+  "reused_step_count": 2,
+  "reused_step_kinds": [
+    "resolve_apk_dex",
+    "export_and_scan"
+  ],
+  "cache_hit_count": 0
+}
+```
+
+`analyze.py cache inspect --format json` exposes the recent-run projection under `latest_run`:
+
+```json
+{
+  "latest_run": {
+    "run_id": "<run-id>",
+    "task_type": "summarize_method_logic",
+    "status": "ok",
+    "summary_path": "<workspace>/.dexclub-cli/runs/v1/<run-id>/run-summary.json",
+    "summary_text": "Resolved one APK dex and summarized one exported method body.",
+    "reused_step_count": 2,
+    "reused_step_kinds": [
+      "resolve_apk_dex",
+      "export_and_scan"
+    ],
+    "cache_hit_count": 0
+  }
+}
+```
 
 ## `summarize_method_logic` with APK input
 

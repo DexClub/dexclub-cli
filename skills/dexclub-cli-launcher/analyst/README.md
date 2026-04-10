@@ -71,6 +71,8 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py cache prune --f
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py cache clear --scope inputs --scope export-and-scan --format json
 ```
 
+`cache inspect` now also includes a `latest_run` section derived from `runs/v1/latest.json` and `run-summary.json`.
+
 Descriptor-aware anchors are now supported for direct relation tracing and smali summarize:
 
 ```bash
@@ -126,8 +128,19 @@ Default local storage layout:
 - `export_and_scan.py` also keeps derived export/scan cache entries under `<workspace>/.dexclub-cli/cache/v1/export-and-scan/`
 - The export/scan cache keys are normalized by dex content plus export/scope arguments, so APK-extracted dex and direct dex inputs can reuse the same cached export/analysis result
 - When a run step is reused from a prior run, the new `step_results[]` item includes `reused_from` metadata and still materializes the current run's step artifacts
+- `analyze.py run` now also exposes top-level `reused_step_count`, `reused_step_kinds`, and `cache_hit_count` aggregated from `step_results[]`
+- `run-summary.json` and `latest.json` now mirror the same reuse/cache counters for lightweight run inspection
 - Invalid `reusable-step-index-v1.json` entries are pruned automatically before new runs continue
 - `analyze.py cache clear` manages `inputs`, `export-and-scan`, `reusable-steps`, and `tmp`; when no `--scope` is provided it clears all of them
 - Override the work root with `DEXCLUB_ANALYST_WORK_ROOT`
 - Override the cache root with `DEXCLUB_ANALYST_CACHE_DIR`
 - `export_and_scan.py` now creates its default direct-run output directory under the analyst work root instead of the anonymous system temp directory
+
+Reuse/cache counter contract:
+
+- `reused_step_count`: current run count of `step_results[]` items carrying `reused_from`
+- `reused_step_kinds`: deduplicated step kinds for reused steps, kept in first-seen step order
+- `cache_hit_count`: current run count of step results whose normalized `result.cache_hit` is `true`
+- `run-summary.json` mirrors the same three fields from `final_result.json`
+- `latest.json` mirrors the same three fields from the selected `run-summary.json`
+- `cache inspect.latest_run` reads `latest.json` plus `run-summary.json`, then exposes `run_id`, `task_type`, `status`, `summary_path`, `summary_text`, and the same three counters

@@ -109,6 +109,9 @@ def validate_run_summary(summary: object) -> dict[str, object]:
             latest_successful_step_id,
             field_name="run_summary.latest_successful_step_id",
         )
+    _require_int(payload.get("reused_step_count"), field_name="run_summary.reused_step_count")
+    _require_string_list(payload.get("reused_step_kinds"), field_name="run_summary.reused_step_kinds")
+    _require_int(payload.get("cache_hit_count"), field_name="run_summary.cache_hit_count")
     _require_string_list(payload.get("primary_inputs"), field_name="run_summary.primary_inputs")
     step_index = payload.get("step_index")
     if not isinstance(step_index, list):
@@ -131,6 +134,9 @@ def validate_latest_index(index: object) -> dict[str, object]:
     for field_name in ("schema_version", "run_id", "run_root", "summary_path", "updated_at"):
         _require_non_empty_string(payload.get(field_name), field_name=f"latest_index.{field_name}")
     _require_enum(payload.get("status"), field_name="latest_index.status", allowed=RUN_SUMMARY_STATUSES)
+    _require_int(payload.get("reused_step_count"), field_name="latest_index.reused_step_count")
+    _require_string_list(payload.get("reused_step_kinds"), field_name="latest_index.reused_step_kinds")
+    _require_int(payload.get("cache_hit_count"), field_name="latest_index.cache_hit_count")
     _require_enum(
         payload.get("selection_reason"),
         field_name="latest_index.selection_reason",
