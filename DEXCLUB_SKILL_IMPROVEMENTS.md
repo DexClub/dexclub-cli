@@ -29,16 +29,15 @@
 | 4. 修复多 dex APK 高成本类定位流程 | 已解决 | APK 提取 dex、class->dex 索引和缓存命中信息均已落地 |
 | 5. 提供稳定任务级入口 | 已解决 | `analyze.py run` 已承接方法逻辑、调用链、类定位等高频任务 |
 | 6. 增强错误消息 | 部分解决 | 已有 `PlannerError` 与 step `diagnostics` 骨架，但“原因 + 建议动作”的覆盖面仍不完整 |
-| 7. 明确“已验证事实 / 推断”结构边界 | 未解决 | 当前结果对象中尚未固定 `verifiedFacts / inferences / unknowns / nextChecks` 结构 |
+| 7. 明确“已验证事实 / 推断”结构边界 | 已解决 | `analyze.py run`、planner 错误输出与 `runs inspect --include-final-result` 已固定 `verifiedFacts / inferences / unknowns / nextChecks` 结构，并在可用时附带证据定位 |
 | 8. 增加结果复用与中间态管理 | 已解决 | APK 提取 dex、class->dex、export-and-scan、跨 run step reuse 均已支持复用并暴露来源 |
 | 9. 保证 JSON 输出纯净 | 部分解决 | 主线脚本已明显净化，但当前实现仍保留“从 stdout 中定位 JSON 起点”的兜底解析 |
 | 10. 把工作区 dex 集合提升为一等输入源 | 部分解决 | 已支持 dex 路径数组与 `dex_set`，但尚未补 `--input-dex-dir` / `--input-dex-list` 这类显式一等入口 |
 
 如果后续继续推进，建议优先按下面顺序收尾：
 
-1. 先完成条目 7，把“已验证事实 / 推断 / 未知项 / 下一步检查”固定到任务级输出。
-2. 再收紧条目 9，真正去掉 JSON 模式下对 stdout 起始位置猜测的兜底逻辑。
-3. 然后补条目 3、6、10 中尚未完成的契约统一、纠错提示和 dex 集合显式输入。
+1. 先收紧条目 9，真正去掉 JSON 模式下对 stdout 起始位置猜测的兜底逻辑。
+2. 再补条目 3、6、10 中尚未完成的契约统一、纠错提示和 dex 集合显式输入。
 
 ## 前置原则
 
@@ -301,6 +300,17 @@
 2. 错误输出中包含“原因 + 建议动作”，而不只是“原因”。
 
 ### 7. 明确“已验证事实 / 推断”在工作流输出中的结构边界
+
+#### 当前状态补充
+
+当前仓库实现已经补上统一任务级结构：
+
+- `verifiedFacts`
+- `inferences`
+- `unknowns`
+- `nextChecks`
+
+其中 `analyze.py run` 的最终结果、`plan` 的结构化错误输出，以及 `runs inspect --include-final-result` 回读到的持久化 `final_result.json` 都已带出这四组字段；当现有 evidence 可用时，还会附带 `source_path` / `line_numbers` 等轻量定位信息。
 
 #### 问题
 

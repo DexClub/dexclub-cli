@@ -198,6 +198,11 @@ assert_expr "$RESULT_DIR/summarize_method_logic.json" "payload['step_results'][0
 assert_expr "$RESULT_DIR/summarize_method_logic.json" 'any("setContent$default" in snippet["code"] for snippet in payload["step_results"][0]["result"]["structured_summary"]["focus_snippets"])' "focused snippets should keep key invoke context"
 assert_expr "$RESULT_DIR/summarize_method_logic.json" "payload['step_results'][0]['result']['large_method_analysis']['is_large_method'] is False" "small summarize sample should not be marked as a large method"
 assert_expr "$RESULT_DIR/summarize_method_logic.json" "Path(payload['step_results'][0]['result']['export_path']).is_file()" "summarize method logic should keep exported artifact"
+assert_expr "$RESULT_DIR/summarize_method_logic.json" "isinstance(payload['verifiedFacts'], list) and len(payload['verifiedFacts']) >= 2" "summarize method logic should expose verified facts"
+assert_expr "$RESULT_DIR/summarize_method_logic.json" "isinstance(payload['inferences'], list) and len(payload['inferences']) >= 1" "summarize method logic should expose at least one inference"
+assert_expr "$RESULT_DIR/summarize_method_logic.json" "isinstance(payload['unknowns'], list)" "summarize method logic should expose unknowns"
+assert_expr "$RESULT_DIR/summarize_method_logic.json" "isinstance(payload['nextChecks'], list) and any(item['reason'] == 'focus_snippets_available' for item in payload['nextChecks'])" "summarize method logic should expose focused follow-up checks"
+assert_expr "$RESULT_DIR/summarize_method_logic.json" "any(item.get('evidence') for item in payload['verifiedFacts'])" "verified facts should carry evidence locators when available"
 
 summarize_apk_input=$(cat <<JSON
 {"input":["$SAMPLE_APK"],"method_anchor":{"class_name":"com.shadcn.ui.compose.MainActivity","method_name":"onCreate"}}
@@ -547,6 +552,8 @@ assert_expr "$runs_inspect_with_final_output" "payload['run']['final_result_incl
 assert_expr "$runs_inspect_with_final_output" "payload['run']['final_result']['run_id'] == '$cache_manage_run_id'" "embedded final_result should match the requested run id"
 assert_expr "$runs_inspect_with_final_output" "payload['run']['final_result']['task_type'] == 'summarize_method_logic'" "embedded final_result should keep the run task type"
 assert_expr "$runs_inspect_with_final_output" "payload['run']['final_result']['cache_hit_count'] == 0" "embedded final_result should preserve top-level reuse/cache counters"
+assert_expr "$runs_inspect_with_final_output" "isinstance(payload['run']['final_result']['verifiedFacts'], list) and len(payload['run']['final_result']['verifiedFacts']) >= 1" "embedded final_result should keep verified facts"
+assert_expr "$runs_inspect_with_final_output" "isinstance(payload['run']['final_result']['nextChecks'], list)" "embedded final_result should keep next checks"
 runs_list_output="$RESULT_DIR/runs_list.json"
 DEXCLUB_ANALYST_WORK_ROOT="$cache_manage_work_root" \
 DEXCLUB_ANALYST_CACHE_DIR="$cache_manage_cache_root" \

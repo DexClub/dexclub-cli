@@ -136,6 +136,7 @@ Default local storage layout:
 - The export/scan cache keys are normalized by dex content plus export/scope arguments, so APK-extracted dex and direct dex inputs can reuse the same cached export/analysis result
 - When a run step is reused from a prior run, the new `step_results[]` item includes `reused_from` metadata and still materializes the current run's step artifacts
 - `analyze.py run` now also exposes top-level `reused_step_count`, `reused_step_kinds`, and `cache_hit_count` aggregated from `step_results[]`
+- `analyze.py run` now also exposes task-level reasoning buckets under `verifiedFacts`, `inferences`, `unknowns`, and `nextChecks`
 - `run-summary.json` and `latest.json` now mirror the same reuse/cache counters for lightweight run inspection
 - Invalid `reusable-step-index-v1.json` entries are pruned automatically before new runs continue
 - `analyze.py cache clear` manages `inputs`, `export-and-scan`, `reusable-steps`, and `tmp`; when no `--scope` is provided it clears all of them
@@ -151,3 +152,11 @@ Reuse/cache counter contract:
 - `run-summary.json` mirrors the same three fields from `final_result.json`
 - `latest.json` mirrors the same three fields from the selected `run-summary.json`
 - `cache inspect.latest_run` reads `latest.json` plus `run-summary.json`, then exposes `run_id`, `task_type`, `status`, `summary_path`, `summary_text`, and the same three counters
+
+Task-level reasoning contract:
+
+- `verifiedFacts`: statements directly supported by current run outputs or persisted planner/runtime state
+- `inferences`: bounded interpretations derived from those verified facts
+- `unknowns`: unresolved points that the current run still leaves open
+- `nextChecks`: concrete follow-up checks or reruns suggested by the current status, recommendations, and limits
+- When available, `verifiedFacts` and `inferences` attach compact evidence locators such as `source_path` and `line_numbers`

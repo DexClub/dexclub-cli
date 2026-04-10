@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from analysis_sections import build_analysis_sections
 from method_descriptor import build_full_method_descriptor, parse_method_descriptor
 from plan_schema import (
     PLANNER_VERSION,
@@ -38,6 +39,15 @@ def build_plan_error_payload(task_type: str, error: PlannerError) -> dict[str, o
     }
     if error.details:
         payload["details"] = error.details
+    payload.update(
+        build_analysis_sections(
+            task_type=task_type,
+            status=error.status,
+            summary_text=error.message,
+            recommendations=[],
+            limits=[],
+        )
+    )
     return payload
 
 

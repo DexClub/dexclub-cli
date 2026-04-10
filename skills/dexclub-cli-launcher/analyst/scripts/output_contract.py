@@ -14,6 +14,7 @@ STEP_STATUSES = {
 }
 LATEST_SELECTION_REASONS = {"latest_active", "latest_successful", "latest_partial"}
 SUMMARY_STYLES = {"ok", "warning", "error"}
+ANALYSIS_CONFIDENCE = {"low", "medium", "high"}
 
 
 def _require_mapping(value: object, *, field_name: str) -> dict[str, object]:
@@ -64,6 +65,58 @@ def validate_key_artifact_item(item: object) -> dict[str, object]:
     _require_non_empty_string(payload.get("label"), field_name="key_artifact.label")
     _require_non_empty_string(payload.get("reason"), field_name="key_artifact.reason")
     return payload
+
+
+def validate_analysis_evidence_item(item: object, *, field_name: str) -> dict[str, object]:
+    payload = _require_mapping(item, field_name=field_name)
+    for key in ("step_id", "kind", "value", "source_path"):
+        value = payload.get(key)
+        if value is not None:
+            _require_non_empty_string(value, field_name=f"{field_name}.{key}")
+    line_numbers = payload.get("line_numbers")
+    if line_numbers is not None:
+        if not isinstance(line_numbers, list):
+            raise ValueError(f"`{field_name}.line_numbers` must be an integer array.")
+        for index, value in enumerate(line_numbers):
+            _require_int(value, field_name=f"{field_name}.line_numbers[{index}]")
+    if not any(key in payload for key in ("step_id", "kind", "value", "source_path", "line_numbers")):
+        raise ValueError(f"`{field_name}` must include at least one evidence locator field.")
+    return payload
+
+
+def validate_analysis_section_item(item: object, *, field_name: str) -> dict[str, object]:
+    payload = _require_mapping(item, field_name=field_name)
+    _require_non_empty_string(payload.get("text"), field_name=f"{field_name}.text")
+    reason = payload.get("reason")
+    if reason is not None:
+        _require_non_empty_string(reason, field_name=f"{field_name}.reason")
+    confidence = payload.get("confidence")
+    if confidence is not None:
+        _require_enum(confidence, field_name=f"{field_name}.confidence", allowed=ANALYSIS_CONFIDENCE)
+    evidence = payload.get("evidence")
+    if evidence is not None:
+        if not isinstance(evidence, list):
+            raise ValueError(f"`{field_name}.evidence` must be a list.")
+        for index, evidence_item in enumerate(evidence):
+            validate_analysis_evidence_item(
+                evidence_item,
+                field_name=f"{field_name}.evidence[{index}]",
+            )
+    return payload
+
+
+def validate_analysis_sections(payload: object, *, field_name: str) -> dict[str, object]:
+    mapping = _require_mapping(payload, field_name=field_name)
+    for section_name in ("verifiedFacts", "inferences", "unknowns", "nextChecks"):
+        section = mapping.get(section_name)
+        if not isinstance(section, list):
+            raise ValueError(f"`{field_name}.{section_name}` must be a list.")
+        for index, item in enumerate(section):
+            validate_analysis_section_item(
+                item,
+                field_name=f"{field_name}.{section_name}[{index}]",
+            )
+    return mapping
 
 
 def validate_step_artifact_item(item: object) -> dict[str, object]:

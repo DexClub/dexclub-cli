@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from analysis_sections import build_analysis_sections
 from analyst_storage import (
     CachedInputRef,
     detect_cached_input,
@@ -23,7 +24,12 @@ from analyst_storage import (
     runs_root,
 )
 from process_exec import extract_json_payload, run_captured_process
-from output_contract import validate_latest_index, validate_run_summary, validate_step_result_envelope
+from output_contract import (
+    validate_analysis_sections,
+    validate_latest_index,
+    validate_run_summary,
+    validate_step_result_envelope,
+)
 from plan_schema import RUN_ARTIFACT_ROOT_PLACEHOLDER, SCHEMA_VERSION, TASK_REGISTRY
 
 RUN_STATUS_OK = {"ok", "empty", "ambiguous", "unsupported"}
@@ -86,7 +92,7 @@ def build_analysis_error_result(
     limits: list[str] | None = None,
     recommendations: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
-    return {
+    result = {
         "schema_version": SCHEMA_VERSION,
         "run_id": run_id,
         "status": status,
@@ -108,6 +114,19 @@ def build_analysis_error_result(
         "limits": limits or [],
         "evidence": [],
     }
+    result.update(
+        build_analysis_sections(
+            task_type=task_type,
+            status=status,
+            summary_text=message,
+            plan=plan or {},
+            step_results=[],
+            evidence=[],
+            recommendations=recommendations or [],
+            limits=limits or [],
+        )
+    )
+    return result
 
 
 def add_artifact(
@@ -1376,6 +1395,7 @@ def persist_run_outputs(
             step_results=step_results,
         )
     final_result_path = run_root / "final_result.json"
+    validate_analysis_sections(run_result, field_name="run_result")
     write_json(final_result_path, run_result)
     return run_result
 
@@ -1753,7 +1773,7 @@ def finalize_run_result(
                 summary_text = "No matching methods found."
             summary_style = "empty"
 
-    return {
+    result = {
         "schema_version": SCHEMA_VERSION,
         "run_id": run_id,
         "status": status,
@@ -1773,6 +1793,19 @@ def finalize_run_result(
         "limits": limits,
         "evidence": evidence,
     }
+    result.update(
+        build_analysis_sections(
+            task_type=task_type,
+            status=status,
+            summary_text=summary_text,
+            plan=plan,
+            step_results=step_results,
+            evidence=evidence,
+            recommendations=recommendations,
+            limits=limits,
+        )
+    )
+    return result
 
 
 def run_plan(plan: dict[str, object], *, artifact_root: str | None = None, run_id: str | None = None) -> dict[str, object]:

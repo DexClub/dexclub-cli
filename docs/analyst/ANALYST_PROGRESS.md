@@ -53,6 +53,10 @@
     - 固定阈值：`line_count >= 120`
     - 压缩输出：`large_method_analysis`
     - 当前按 `method_calls / strings / numbers / field_accesses / branch_hotspots` 分组，并补充行簇聚合
+  - 任务级输出的固定分析结构
+    - 输出：`verifiedFacts / inferences / unknowns / nextChecks`
+    - 当前 `analyze.py run`、planner 错误输出与 `runs inspect --include-final-result` 已统一带出
+    - 可用时附带 `source_path / line_numbers` 等轻量 evidence 定位
   - 当前本地已落地的 analyst 存储结构
     - 下面这些是“当前已实现状态”，不是新的目标目录方案
     - `analyze.py run` 默认写入 `.dexclub-cli/runs/v1/<run-id>/`
@@ -170,9 +174,17 @@
 | A-17 | run 浏览入口最小命令面 | 已完成 | 本次会话完成。已新增 `analyze.py runs latest` 与 `runs inspect --run-id`，直接复用 `latest.json` / `run-summary.json` / `final_result.json` 输出最近 run 或指定 run 的概览 |
 | A-18 | recent runs 列表入口 | 已完成 | 本次会话完成。已新增 `analyze.py runs list --limit <n>`，按 `run-summary.json.updated_at` 倒序列出最近 run，并暴露 `is_latest` 与 reuse/cache 统计 |
 | A-19 | run inspect 嵌入完整结果开关 | 已完成 | 本次会话完成。已新增 `analyze.py runs inspect --include-final-result`，在保留摘要投影的同时可选内嵌持久化 `final_result.json` |
+| A-20 | 任务级输出固定事实 / 推断结构 | 已完成 | 本次会话完成。已为 `analyze.py run`、planner 错误输出和 `final_result.json` 固定 `verifiedFacts / inferences / unknowns / nextChecks`，并补充轻量校验、样例断言与文档说明 |
 
 ## 最近一次状态流转
 
+- `A-20`
+  - `待开始 -> 进行中`
+  - `进行中 -> 已完成`
+  - 完成依据
+    - `runner.py` 与 `planner.py` 已统一补上 `verifiedFacts / inferences / unknowns / nextChecks`
+    - `output_contract.py` 已补对应轻量校验
+    - `validate_v1_sample.sh`、`README`、样例文档已同步新契约
 - `A-05`
   - `待开始 -> 进行中`
   - `进行中 -> 已完成`
@@ -285,6 +297,7 @@
   - 当前真实实现已补 `analyze.py runs latest` 与 `runs inspect --run-id`，可直接查看最近 run 或按 run id 回读落盘摘要
   - 当前真实实现已补 `analyze.py runs list --limit <n>`，可按 `updated_at` 倒序查看最近 run 摘要列表
   - 当前真实实现已补 `analyze.py runs inspect --include-final-result`，需要时可直接回读完整 `final_result.json`
+  - 当前真实实现已补任务级固定输出结构 `verifiedFacts / inferences / unknowns / nextChecks`
   - 当前真实实现已补 `output_contract.py`，并对 `run-summary.json`、`latest.json` 落地前做最小校验
   - 当前真实实现已补 `process_exec.py`，并让 `runner.py`、`resolve_apk_dex.py`、`export_and_scan.py` 复用同一套执行捕获逻辑
   - 当前真实实现已补 `step-result.json` 的轻量 envelope 校验，并为 step 结果补了最小 `diagnostics`
@@ -298,7 +311,6 @@
 
 - 维持当前实现不再扩命令面，只观察真实使用里的缓存体积、复用率和回归情况
 - 如果要继续收尾，先对照 [DEXCLUB_SKILL_IMPROVEMENTS.md](../../DEXCLUB_SKILL_IMPROVEMENTS.md) 中尚未完全解决的条目，再考虑推进：
-  - 条目 `7`：任务级输出固定 `verifiedFacts / inferences / unknowns / nextChecks`
   - 条目 `9`：真正去掉 JSON 模式下对 stdout 起始位置猜测的兜底逻辑
   - 条目 `3 / 6 / 10`：补参数契约统一、纠错提示与 dex 集合显式输入
 

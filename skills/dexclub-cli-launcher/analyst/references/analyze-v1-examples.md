@@ -21,6 +21,7 @@ Notes:
 - The export/scan cache is keyed by dex content plus export/scope arguments, so APK-extracted dex and direct dex inputs can converge on the same cached result.
 - Reused run steps include `reused_from` metadata in `step_results[]`, while the current run still gets its own `step-result.json` and step-local export artifact path.
 - `analyze.py run` also exposes top-level `reused_step_count`, `reused_step_kinds`, and `cache_hit_count` so callers do not need to rescan `step_results[]` just to summarize reuse/cache behavior.
+- `analyze.py run` now also fixes the task-level reasoning buckets under `verifiedFacts`, `inferences`, `unknowns`, and `nextChecks`.
 - The same reuse/cache counters are also mirrored into `run-summary.json` and `latest.json` for runs-root inspection.
 - `analyze.py cache inspect` now also exposes `latest_run`, derived from `latest.json` plus `run-summary.json`, for lightweight recent-run inspection.
 - `analyze.py runs latest|inspect|list` now exposes the persisted run projection directly, without going through cache inspection output.
@@ -145,6 +146,47 @@ Adding `--include-final-result` to `runs inspect` embeds the persisted run paylo
   ]
 }
 ```
+
+## Task-Level Reasoning Buckets
+
+Observed top-level reasoning excerpt:
+
+```json
+{
+  "verifiedFacts": [
+    {
+      "text": "Resolved one APK dex and summarized one exported method body. Included a smali block outline.",
+      "evidence": [
+        {
+          "kind": "method_call_hit",
+          "source_path": "<workspace>/.dexclub-cli/runs/v1/<run-id>/steps/export_and_scan/artifacts/MainActivity.smali",
+          "line_numbers": [34]
+        }
+      ]
+    }
+  ],
+  "inferences": [
+    {
+      "text": "The current summary is usable as a working baseline, but overload ambiguity still depends on the relaxed anchor context.",
+      "confidence": "medium"
+    }
+  ],
+  "unknowns": [],
+  "nextChecks": [
+    {
+      "text": "Review `structured_summary.focus_snippets` first before reading the full export.",
+      "reason": "focus_snippets_available"
+    }
+  ]
+}
+```
+
+Meaning:
+
+- `verifiedFacts`: direct observations backed by the current run payload and evidence locators
+- `inferences`: constrained interpretations built from those facts
+- `unknowns`: open points the current run still does not settle
+- `nextChecks`: recommended follow-up checks derived from status, limits, and planner/runtime recommendations
 
 ## `summarize_method_logic` with APK input
 
