@@ -57,6 +57,16 @@ def parse_args() -> argparse.Namespace:
         help="Cache scope to clear. Repeatable. Defaults to all managed scopes.",
     )
     cache_clear_parser.add_argument("--format", choices=("text", "json"), default="json", help="Output format.")
+
+    runs_parser = subparsers.add_parser("runs", help="Inspect persisted analyst runs.")
+    runs_subparsers = runs_parser.add_subparsers(dest="runs_command", required=True)
+
+    runs_latest_parser = runs_subparsers.add_parser("latest", help="Inspect the latest persisted run.")
+    runs_latest_parser.add_argument("--format", choices=("text", "json"), default="json", help="Output format.")
+
+    runs_inspect_parser = runs_subparsers.add_parser("inspect", help="Inspect one persisted run by run id.")
+    runs_inspect_parser.add_argument("--run-id", required=True, help="Persisted run id under runs/v1.")
+    runs_inspect_parser.add_argument("--format", choices=("text", "json"), default="json", help="Output format.")
     return parser.parse_args()
 
 
@@ -210,39 +220,137 @@ def inspect_tmp_root() -> dict[str, object]:
 
 
 def inspect_latest_run() -> dict[str, object]:
-    latest_path = work_root() / "runs" / "v1" / "latest.json"
+    latest_path = runs_root() / "latest.json"
     latest_payload = load_json_object(latest_path)
-    summary_path_raw = latest_payload.get("summary_path") if isinstance(latest_payload, dict) else None
-    summary_path = Path(summary_path_raw) if isinstance(summary_path_raw, str) and summary_path_raw else None
-    summary_payload = load_json_object(summary_path) if summary_path is not None else None
+    if latest_payload is None:
+        return {
+            "path": str(latest_path.resolve()),
+            "exists": False,
+            "summary_exists": False,
+            "run_id": None,
+            "run_root": None,
+            "summary_path": None,
+            "final_result_path": None,
+            "status": None,
+            "selection_reason": None,
+            "task_type": None,
+            "summary_text": None,
+            "reused_step_count": 0,
+            "reused_step_kinds": [],
+            "cache_hit_count": 0,
+        }
+    run_root_raw = latest_payload.get("run_root")
+    if not isinstance(run_root_raw, str) or not run_root_raw:
+        return {
+            "path": str(latest_path.resolve()),
+            "exists": True,
+            "summary_exists": False,
+            "final_result_exists": False,
+            "run_id": latest_payload.get("run_id"),
+            "run_root": None,
+            "summary_path": latest_payload.get("summary_path"),
+            "final_result_path": None,
+            "status": latest_payload.get("status"),
+            "selection_reason": latest_payload.get("selection_reason"),
+            "task_type": None,
+            "summary_text": None,
+            "reused_step_count": int(latest_payload.get("reused_step_count", 0)),
+            "reused_step_kinds": list(latest_payload.get("reused_step_kinds", [])),
+            "cache_hit_count": int(latest_payload.get("cache_hit_count", 0)),
+            "key_artifacts": [],
+        }
+    return build_run_projection(
+        run_root=Path(run_root_raw),
+        latest_payload=latest_payload,
+    )
+
+
+def runs_root() -> Path:
+    return work_root() / "runs" / "v1"
+
+
+def build_run_projection(
+    *,
+    run_root: Path,
+    latest_payload: dict[str, object] | None = None,
+) -> dict[str, object]:
+    summary_path = run_root / "run-summary.json"
+    final_result_path = run_root / "final_result.json"
+    summary_payload = load_json_object(summary_path)
+    final_result_payload = load_json_object(final_result_path)
     summary = summary_payload.get("summary") if isinstance(summary_payload, dict) else None
     summary_text = summary.get("text") if isinstance(summary, dict) else None
+    run_id = None
+    if isinstance(summary_payload, dict) and isinstance(summary_payload.get("run_id"), str):
+        run_id = summary_payload.get("run_id")
+    elif isinstance(final_result_payload, dict) and isinstance(final_result_payload.get("run_id"), str):
+        run_id = final_result_payload.get("run_id")
+    elif isinstance(latest_payload, dict) and isinstance(latest_payload.get("run_id"), str):
+        run_id = latest_payload.get("run_id")
+    status = None
+    if isinstance(summary_payload, dict) and isinstance(summary_payload.get("status"), str):
+        status = summary_payload.get("status")
+    elif isinstance(final_result_payload, dict) and isinstance(final_result_payload.get("status"), str):
+        status = final_result_payload.get("status")
+    task_type = None
+    if isinstance(summary_payload, dict) and isinstance(summary_payload.get("task_type"), str):
+        task_type = summary_payload.get("task_type")
+    elif isinstance(final_result_payload, dict) and isinstance(final_result_payload.get("task_type"), str):
+        task_type = final_result_payload.get("task_type")
+    reused_step_count = 0
+    reused_step_kinds: list[str] = []
+    cache_hit_count = 0
+    for payload in (summary_payload, final_result_payload, latest_payload):
+        if not isinstance(payload, dict):
+            continue
+        if "reused_step_count" in payload:
+            reused_step_count = int(payload.get("reused_step_count", 0))
+        if "reused_step_kinds" in payload:
+            reused_step_kinds = list(payload.get("reused_step_kinds", []))
+        if "cache_hit_count" in payload:
+            cache_hit_count = int(payload.get("cache_hit_count", 0))
+        if reused_step_count or reused_step_kinds or cache_hit_count:
+            break
     return {
-        "path": str(latest_path.resolve()),
-        "exists": latest_payload is not None,
+        "path": str((runs_root() / "latest.json").resolve()) if latest_payload is not None else str(summary_path.resolve()),
+        "exists": run_root.is_dir(),
         "summary_exists": summary_payload is not None,
-        "run_id": latest_payload.get("run_id") if isinstance(latest_payload, dict) else None,
-        "run_root": latest_payload.get("run_root") if isinstance(latest_payload, dict) else None,
-        "summary_path": summary_path_raw if isinstance(summary_path_raw, str) and summary_path_raw else None,
-        "status": latest_payload.get("status") if isinstance(latest_payload, dict) else None,
+        "final_result_exists": final_result_payload is not None,
+        "run_id": run_id,
+        "run_root": str(run_root.resolve()),
+        "summary_path": str(summary_path.resolve()),
+        "final_result_path": str(final_result_path.resolve()),
+        "status": status,
         "selection_reason": latest_payload.get("selection_reason") if isinstance(latest_payload, dict) else None,
-        "task_type": summary_payload.get("task_type") if isinstance(summary_payload, dict) else None,
+        "task_type": task_type,
         "summary_text": summary_text if isinstance(summary_text, str) else None,
-        "reused_step_count": (
-            int(latest_payload.get("reused_step_count", 0))
-            if isinstance(latest_payload, dict)
-            else 0
-        ),
-        "reused_step_kinds": (
-            list(latest_payload.get("reused_step_kinds", []))
-            if isinstance(latest_payload, dict)
-            else []
-        ),
-        "cache_hit_count": (
-            int(latest_payload.get("cache_hit_count", 0))
-            if isinstance(latest_payload, dict)
-            else 0
-        ),
+        "reused_step_count": reused_step_count,
+        "reused_step_kinds": reused_step_kinds,
+        "cache_hit_count": cache_hit_count,
+        "key_artifacts": summary_payload.get("key_artifacts", []) if isinstance(summary_payload, dict) else [],
+    }
+
+
+def inspect_run_by_id(run_id: str) -> dict[str, object]:
+    run_root = runs_root() / run_id
+    return build_run_projection(run_root=run_root)
+
+
+def build_runs_latest_payload() -> dict[str, object]:
+    return {
+        "kind": "runs_latest",
+        "work_root": str(work_root().resolve()),
+        "runs_root": str(runs_root().resolve()),
+        "run": inspect_latest_run(),
+    }
+
+
+def build_runs_inspect_payload(run_id: str) -> dict[str, object]:
+    return {
+        "kind": "runs_inspect",
+        "work_root": str(work_root().resolve()),
+        "runs_root": str(runs_root().resolve()),
+        "run": inspect_run_by_id(run_id),
     }
 
 
@@ -390,6 +498,17 @@ def format_cache_payload(payload: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
+def format_runs_payload(payload: dict[str, object]) -> str:
+    kind = str(payload.get("kind"))
+    lines = [f"kind={kind}", f"work_root={payload['work_root']}", f"runs_root={payload['runs_root']}"]
+    run = payload.get("run", {})
+    if isinstance(run, dict):
+        lines.append("[run]")
+        for key, value in run.items():
+            lines.append(f"run.{key}={value}")
+    return "\n".join(lines)
+
+
 def main() -> None:
     args = parse_args()
     if args.command == "cache":
@@ -404,6 +523,18 @@ def main() -> None:
         else:
             print(format_cache_payload(payload))
         return
+    if args.command == "runs":
+        if args.runs_command == "latest":
+            payload = build_runs_latest_payload()
+        else:
+            payload = build_runs_inspect_payload(args.run_id)
+        run = payload.get("run", {})
+        exit_code = 0 if isinstance(run, dict) and run.get("summary_exists") else 1
+        if args.format == "json":
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            print(format_runs_payload(payload))
+        raise SystemExit(exit_code)
 
     task_type = args.task_type
 

@@ -69,9 +69,12 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run \
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py cache inspect --format json
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py cache prune --format json
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py cache clear --scope inputs --scope export-and-scan --format json
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py runs latest --format json
+python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py runs inspect --run-id <run-id> --format json
 ```
 
 `cache inspect` now also includes a `latest_run` section derived from `runs/v1/latest.json` and `run-summary.json`.
+`runs latest` and `runs inspect` expose the same persisted run projection directly from `latest.json`, `run-summary.json`, and `final_result.json`.
 
 Descriptor-aware anchors are now supported for direct relation tracing and smali summarize:
 

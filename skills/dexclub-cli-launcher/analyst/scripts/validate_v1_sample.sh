@@ -516,6 +516,27 @@ assert_expr "$cache_inspect_output" "payload['latest_run']['task_type'] == 'summ
 assert_expr "$cache_inspect_output" "payload['latest_run']['summary_exists'] is True" "cache inspect should expose the latest run summary linkage"
 assert_expr "$cache_inspect_output" "payload['latest_run']['reused_step_count'] == 0" "cache inspect should expose latest-run reuse counters"
 assert_expr "$cache_inspect_output" "payload['latest_run']['cache_hit_count'] == 0" "cache inspect should expose latest-run helper cache counters"
+runs_latest_output="$RESULT_DIR/runs_latest.json"
+DEXCLUB_ANALYST_WORK_ROOT="$cache_manage_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$cache_manage_cache_root" \
+python3 "$ANALYZE" runs latest --format json >"$runs_latest_output"
+echo "validated_output=$runs_latest_output"
+assert_expr "$runs_latest_output" "payload['run']['run_id'] == '$cache_manage_run_id'" "runs latest should expose the latest run id"
+assert_expr "$runs_latest_output" "payload['run']['task_type'] == 'summarize_method_logic'" "runs latest should expose the latest run task type"
+assert_expr "$runs_latest_output" "payload['run']['summary_exists'] is True" "runs latest should resolve the summary payload"
+assert_expr "$runs_latest_output" "payload['run']['final_result_exists'] is True" "runs latest should resolve the final result payload"
+assert_expr "$runs_latest_output" "payload['run']['reused_step_count'] == 0" "runs latest should expose reuse counters"
+assert_expr "$runs_latest_output" "payload['run']['cache_hit_count'] == 0" "runs latest should expose helper cache counters"
+runs_inspect_output="$RESULT_DIR/runs_inspect.json"
+DEXCLUB_ANALYST_WORK_ROOT="$cache_manage_work_root" \
+DEXCLUB_ANALYST_CACHE_DIR="$cache_manage_cache_root" \
+python3 "$ANALYZE" runs inspect --run-id "$cache_manage_run_id" --format json >"$runs_inspect_output"
+echo "validated_output=$runs_inspect_output"
+assert_expr "$runs_inspect_output" "payload['run']['run_id'] == '$cache_manage_run_id'" "runs inspect should expose the requested run id"
+assert_expr "$runs_inspect_output" "payload['run']['summary_exists'] is True" "runs inspect should resolve the summary payload"
+assert_expr "$runs_inspect_output" "payload['run']['final_result_exists'] is True" "runs inspect should resolve the final result payload"
+assert_expr "$runs_inspect_output" "payload['run']['summary_path'].endswith('/$cache_manage_run_id/run-summary.json')" "runs inspect should expose the run summary path"
+assert_expr "$runs_inspect_output" "payload['run']['final_result_path'].endswith('/$cache_manage_run_id/final_result.json')" "runs inspect should expose the final result path"
 
 mkdir -p "$cache_manage_cache_root/v1/inputs/dex/invalid-dex-entry"
 printf 'broken\n' >"$cache_manage_cache_root/v1/inputs/dex/invalid-dex-entry/orphan.txt"

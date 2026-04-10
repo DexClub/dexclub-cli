@@ -23,6 +23,7 @@ Notes:
 - `analyze.py run` also exposes top-level `reused_step_count`, `reused_step_kinds`, and `cache_hit_count` so callers do not need to rescan `step_results[]` just to summarize reuse/cache behavior.
 - The same reuse/cache counters are also mirrored into `run-summary.json` and `latest.json` for runs-root inspection.
 - `analyze.py cache inspect` now also exposes `latest_run`, derived from `latest.json` plus `run-summary.json`, for lightweight recent-run inspection.
+- `analyze.py runs latest|inspect` now exposes the same persisted run projection directly, without going through cache inspection output.
 - Invalid reusable-step-index entries are pruned automatically when later runs touch the index.
 - `analyze.py cache inspect|prune|clear` now exposes the managed cache roots and index maintenance path directly from the stable entry point.
 - `stdout` in `step_results[]` is preserved exactly as captured from helper scripts, including current DexKit info lines.
@@ -77,6 +78,28 @@ Meaning:
     "status": "ok",
     "summary_path": "<workspace>/.dexclub-cli/runs/v1/<run-id>/run-summary.json",
     "summary_text": "Resolved one APK dex and summarized one exported method body.",
+    "reused_step_count": 2,
+    "reused_step_kinds": [
+      "resolve_apk_dex",
+      "export_and_scan"
+    ],
+    "cache_hit_count": 0
+  }
+}
+```
+
+`analyze.py runs latest --format json` and `analyze.py runs inspect --run-id <run-id> --format json` expose the same projection under `run`:
+
+```json
+{
+  "run": {
+    "run_id": "<run-id>",
+    "task_type": "summarize_method_logic",
+    "status": "ok",
+    "summary_path": "<workspace>/.dexclub-cli/runs/v1/<run-id>/run-summary.json",
+    "final_result_path": "<workspace>/.dexclub-cli/runs/v1/<run-id>/final_result.json",
+    "summary_exists": true,
+    "final_result_exists": true,
     "reused_step_count": 2,
     "reused_step_kinds": [
       "resolve_apk_dex",
