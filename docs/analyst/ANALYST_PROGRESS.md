@@ -60,6 +60,10 @@
   - JSON 模式下的纯净 stdout 契约
     - `run_find.py` 的 JSON 模式已改为通过正式 `output-file` 回读后重发纯净 JSON
     - `process_exec.py` 与样例验证脚本已移除“从 stdout 中定位 JSON 起点”的兜底解析
+  - helper 参数契约与纠错提示
+    - `run_find.py` 已统一接受 CLI 风格的 `kind --input ... --output-format ...` 写法，并兼容 legacy 的全局参数前置顺序
+    - `resolve_apk_dex.py` 与 `export_and_scan.py` 已统一接受 `--input` / `--output-format`，同时保留 `--input-apk` / `--input-dex` / `--format` 兼容别名
+    - `run_find.py`、`resolve_apk_dex.py`、`export_and_scan.py` 的参数错误与高频失败已补 `Cause` + `Recommended action`
   - 当前本地已落地的 analyst 存储结构
     - 下面这些是“当前已实现状态”，不是新的目标目录方案
     - `analyze.py run` 默认写入 `.dexclub-cli/runs/v1/<run-id>/`
@@ -77,7 +81,7 @@
 - 最近一次通过验证的命令
   - `bash ./skills/dexclub-cli-launcher/analyst/scripts/validate_v1_sample.sh /data/data/com.termux/files/home/AndroidProjects/shadcn/app/build/outputs/apk/debug/app-debug.apk`
   - `DEXCLUB_CLI_CACHE_DIR=<cache-dir> bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh --reset-remote-failures --update-cache --prepare-only`
-  - `DEXCLUB_CLI_CACHE_DIR=<cache-dir> python3 ./skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py --input-dex <dex-path> --class androidx.compose.foundation.ImageKt --method Image --method-descriptor 'Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V' --language java --mode summary --format json`
+  - `DEXCLUB_CLI_CACHE_DIR=<cache-dir> python3 ./skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py --input <dex-path> --class androidx.compose.foundation.ImageKt --method Image --method-descriptor 'Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V' --language java --mode summary --output-format json`
   - `DEXCLUB_CLI_CACHE_DIR=<cache-dir> python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py run --task-type summarize_method_logic --input-json '{"input":["<apk-path>"],"method_anchor":{"class_name":"androidx.compose.foundation.ImageKt","method_name":"Image","descriptor":"Landroidx/compose/foundation/ImageKt;->Image(Landroidx/compose/ui/graphics/ImageBitmap;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/Alignment;Landroidx/compose/ui/layout/ContentScale;FLandroidx/compose/ui/graphics/ColorFilter;Landroidx/compose/runtime/Composer;II)V"},"language":"java"}'`
 - 最近一次通过验证的结果目录
   - `/root/termux-home/AndroidProjects/dexclub-cli/.dexclub-cli/tmp/dexclub-analyst-v1.BRGRuU/results`
@@ -179,6 +183,8 @@
 | A-19 | run inspect 嵌入完整结果开关 | 已完成 | 本次会话完成。已新增 `analyze.py runs inspect --include-final-result`，在保留摘要投影的同时可选内嵌持久化 `final_result.json` |
 | A-20 | 任务级输出固定事实 / 推断结构 | 已完成 | 本次会话完成。已为 `analyze.py run`、planner 错误输出和 `final_result.json` 固定 `verifiedFacts / inferences / unknowns / nextChecks`，并补充轻量校验、样例断言与文档说明 |
 | A-21 | JSON 模式输出去掉 stdout 起点猜测兜底 | 已完成 | 本次会话完成。已让 `run_find.py` 在 JSON 模式下回读正式 `output-file` 并重发纯净 JSON，`process_exec.py` 与 `validate_v1_sample.sh` 也已改成严格 JSON 解析 |
+| A-22 | helper 参数契约统一与兼容层 | 已完成 | 本次会话完成。`run_find.py`、`resolve_apk_dex.py`、`export_and_scan.py` 已统一接受 CLI 风格的 `--input` / `--output-format`，并保留 legacy 别名与迁移提示 |
+| A-23 | helper 失败提示补“原因 + 建议动作” | 已完成 | 本次会话完成。helper 的参数错误、缺失输入和高频运行时失败已统一输出 `Cause` / `Recommended action`，并补最小样例验证 |
 
 ## 最近一次状态流转
 
@@ -189,6 +195,19 @@
     - `run_find.py` 的 JSON 模式不再透传底层 stdout
     - `process_exec.py` 已改为严格 `json.loads(stdout.strip())`
     - `validate_v1_sample.sh` 已完整回归通过，且样例校验不再依赖 JSON 起点猜测
+- `A-23`
+  - `待开始 -> 进行中`
+  - `进行中 -> 已完成`
+  - 完成依据
+    - `run_find.py`、`resolve_apk_dex.py`、`export_and_scan.py` 已统一把常见错误改成 `Cause` + `Recommended action`
+    - `validate_v1_sample.sh` 已补 helper 缺失输入与非法 `raw-query-json` 的最小断言
+- `A-22`
+  - `待开始 -> 进行中`
+  - `进行中 -> 已完成`
+  - 完成依据
+    - `run_find.py` 已兼容 CLI 风格与 legacy 风格两套参数位置
+    - `resolve_apk_dex.py`、`export_and_scan.py` 已统一接受 `--input` / `--output-format`，并保留旧别名
+    - `README`、能力文档、工作流样例与验证脚本已同步 canonical 写法
 - `A-20`
   - `待开始 -> 进行中`
   - `进行中 -> 已完成`
@@ -287,7 +306,7 @@
   - `进行中 -> 已完成`
   - 完成依据
     - [`export_and_scan.py`](../../skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py) 已改为通过 [`process_exec.py`](../../skills/dexclub-cli-launcher/analyst/scripts/process_exec.py) 捕获 launcher 导出过程
-    - `export_and_scan.py --format json` 下已确认不会把底层导出日志混入正式 `stdout`
+    - `export_and_scan.py --output-format json` 下已确认不会把底层导出日志混入正式 `stdout`
     - 已完成导出成功链路下的最小 raw log 落盘与纯净 JSON 输出验证
 - `A-15`
   - `待开始 -> 进行中`
@@ -323,7 +342,7 @@
 
 - 维持当前实现不再扩命令面，只观察真实使用里的缓存体积、复用率和回归情况
 - 如果要继续收尾，先对照 [DEXCLUB_SKILL_IMPROVEMENTS.md](../../DEXCLUB_SKILL_IMPROVEMENTS.md) 中尚未完全解决的条目，再考虑推进：
-  - 条目 `3 / 6 / 10`：补参数契约统一、纠错提示与 dex 集合显式输入
+  - 条目 `10`：补 dex 集合显式输入
 
 ## 历史归档
 

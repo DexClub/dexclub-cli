@@ -8,6 +8,7 @@ import zipfile
 from pathlib import Path
 
 from analyst_storage import ensure_apk_input_cache, filesystem_lock, inputs_cache_root, utc_now_iso, write_json
+from helper_cli import ActionableArgumentParser, format_actionable_error, require_existing_file
 from process_exec import run_captured_process
 
 INDEX_FILE_NAME = "class-dex-index-v1.json"
@@ -15,13 +16,31 @@ INDEX_SCHEMA_VERSION = "v1"
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
+    parser = ActionableArgumentParser(
         description="Extract classes*.dex from an APK and resolve the dex containing a target class.",
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog=(
+            "Preferred helper contract:\n"
+            "  resolve_apk_dex.py --input ./inputs/app.apk --class com.example.Target --output-format json\n"
+            "\n"
+            "Legacy aliases remain accepted:\n"
+            "  --input-apk for --input\n"
+            "  --format for --output-format\n"
+            "\n"
+            "For stable analyst workflows, prefer `analyze.py run` with an APK input."
+        ),
+        error_summary="invalid resolve_apk_dex.py arguments",
+        recommended_action=(
+            "Use `--input <apk> --class <fqcn> --output-format json`, "
+            "or switch to `analyze.py run` when the class is only one step in a larger analyst workflow."
+        ),
     )
-    parser.add_argument("--input-apk", required=True, help="Path to a single APK file.")
-    parser.add_argument("--class", dest="class_name", required=True, help="Target class name.")
+    parser.add_argument("--input", "--input-apk", dest="input_apk", required=True, help="Path to a single APK file.")
+    parser.add_argument("--class", "--class-name", dest="class_name", required=True, help="Target class name.")
     parser.add_argument(
+        "--output-format",
         "--format",
+        dest="output_format",
         choices=("text", "json"),
         default="json",
         help="Output format.",
@@ -258,11 +277,20 @@ def format_text(payload: dict[str, object]) -> str:
     lines = [
         f"apk_path={payload['apk_path']}",
         f"class_name={payload['class_name']}",
+        f"status={payload['status']}",
         f"candidate_count={len(payload['candidate_dex_paths'])}",
         f"cache_hit={payload.get('cache_hit', False)}",
         f"lookup_strategy={payload.get('lookup_strategy')}",
         f"scanned_dex_count={payload.get('scanned_dex_count', 0)}",
     ]
+    diagnostics = payload.get("diagnostics")
+    if isinstance(diagnostics, dict):
+        cause = diagnostics.get("cause")
+        next_action = diagnostics.get("next_action")
+        if cause:
+            lines.append(f"cause={cause}")
+        if next_action:
+            lines.append(f"next_action={next_action}")
     if payload.get("resolved_dex_path"):
         lines.append(f"resolved_dex_path={payload['resolved_dex_path']}")
     for path in payload["candidate_dex_paths"]:
@@ -272,13 +300,28 @@ def format_text(payload: dict[str, object]) -> str:
 
 def main() -> None:
     args = parse_args()
-    apk_path = Path(args.input_apk).expanduser().resolve()
-    if not apk_path.is_file():
-        raise SystemExit(f"Input APK not found: {apk_path.resolve()}")
+    apk_path = require_existing_file(
+        args.input_apk,
+        field_label="APK input",
+        recommended_action=(
+            "Pass one existing `.apk` file with `--input`. If you already have extracted dex files, "
+            "skip this helper and pass the dex path directly to `analyze.py run` or `export_and_scan.py`."
+        ),
+        allowed_suffixes=(".apk",),
+    )
 
     cache_ref = ensure_apk_input_cache(apk_path, ensure_extracted_dex=True)
     if cache_ref.extracted_dex_dir is None:
-        raise SystemExit("Failed to build extracted dex cache for the input APK.")
+        raise SystemExit(
+            format_actionable_error(
+                summary="resolve_apk_dex.py could not prepare the APK cache",
+                cause="Failed to build extracted dex cache for the input APK.",
+                recommended_action=(
+                    "Retry with a readable APK. If the APK is malformed, extract dex files manually "
+                    "and continue with a direct dex input."
+                ),
+            )
+        )
     cache_dir = cache_ref.cache_dir.resolve()
 
     if args.output_dir:
@@ -368,8 +411,29 @@ def main() -> None:
             )
 
     candidate_dex_paths = [str((output_dir / entry_name).resolve()) for entry_name in candidate_entry_names]
+    diagnostics: dict[str, object] = {}
+    status = "ok"
+    if len(candidate_dex_paths) == 0:
+        status = "empty"
+        diagnostics = {
+            "cause": f"Class `{args.class_name}` was not found in the extracted APK dex set.",
+            "next_action": (
+                "Verify the fully qualified class name. If you only know a method or string, "
+                "prefer `analyze.py run` so the planner can narrow the target first."
+            ),
+        }
+    elif len(candidate_dex_paths) > 1:
+        status = "ambiguous"
+        diagnostics = {
+            "cause": f"Class `{args.class_name}` matched multiple extracted dex files.",
+            "next_action": (
+                "Use one of the reported `candidate_dex_paths` as a direct dex input, "
+                "or switch to `analyze.py run` so the planner can keep the ambiguity visible."
+            ),
+        }
 
     payload = {
+        "status": status,
         "apk_path": str(apk_path),
         "class_name": args.class_name,
         "artifact_root": str(output_dir.resolve()),
@@ -383,9 +447,10 @@ def main() -> None:
         "candidate_dex_paths": candidate_dex_paths,
         "extracted_dex_paths": extracted_dex_paths,
         "resolved_dex_path": candidate_dex_paths[0] if len(candidate_dex_paths) == 1 else None,
+        "diagnostics": diagnostics,
     }
 
-    if args.format == "json":
+    if args.output_format == "json":
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return
     print(format_text(payload))

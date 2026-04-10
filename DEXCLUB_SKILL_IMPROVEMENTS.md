@@ -25,10 +25,10 @@
 | --- | --- | --- |
 | 1. 统一缓存与产物路径策略 | 已解决 | analyst 默认根已收口到工作区 `.dexclub-cli/`，并支持 `DEXCLUB_ANALYST_WORK_ROOT` / `DEXCLUB_ANALYST_CACHE_DIR` |
 | 2. 收敛 skill 对外入口 | 已解决 | `analyze.py` 已明确为稳定 analyst 入口，`run_find.py` / `resolve_apk_dex.py` / `export_and_scan.py` 被标为内部 helper |
-| 3. 统一参数契约 | 部分解决 | 任务级入口显著降低了误用率，但 helper 与真实 CLI 之间仍未完全统一，也未全面补兼容层与迁移提示 |
+| 3. 统一参数契约 | 已解决 | helper 已统一接受 CLI 风格的 `--input` / `--output-format` canonical 参数，`run_find.py` 兼容子命令前置与 legacy 参数位置，并在帮助文本中补了迁移提示 |
 | 4. 修复多 dex APK 高成本类定位流程 | 已解决 | APK 提取 dex、class->dex 索引和缓存命中信息均已落地 |
 | 5. 提供稳定任务级入口 | 已解决 | `analyze.py run` 已承接方法逻辑、调用链、类定位等高频任务 |
-| 6. 增强错误消息 | 部分解决 | 已有 `PlannerError` 与 step `diagnostics` 骨架，但“原因 + 建议动作”的覆盖面仍不完整 |
+| 6. 增强错误消息 | 已解决 | `run_find.py`、`resolve_apk_dex.py`、`export_and_scan.py` 的参数错误与高频运行时失败现在统一输出 `Cause` + `Recommended action`，常见误用不再只停留在原始 argparse / 底层 CLI 报错 |
 | 7. 明确“已验证事实 / 推断”结构边界 | 已解决 | `analyze.py run`、planner 错误输出与 `runs inspect --include-final-result` 已固定 `verifiedFacts / inferences / unknowns / nextChecks` 结构，并在可用时附带证据定位 |
 | 8. 增加结果复用与中间态管理 | 已解决 | APK 提取 dex、class->dex、export-and-scan、跨 run step reuse 均已支持复用并暴露来源 |
 | 9. 保证 JSON 输出纯净 | 已解决 | `run_find.py` 的 JSON 模式已改为读取正式 `output-file` 后重发纯净 JSON，`process_exec.py` 与样例验证也已去掉“从 stdout 中定位 JSON 起点”的兜底解析 |
@@ -36,7 +36,7 @@
 
 如果后续继续推进，建议优先按下面顺序收尾：
 
-1. 先补条目 3、6、10 中尚未完成的契约统一、纠错提示和 dex 集合显式输入。
+1. 先补条目 10 中尚未完成的 dex 集合显式输入。
 
 ## 前置原则
 

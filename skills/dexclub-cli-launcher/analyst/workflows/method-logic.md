@@ -54,8 +54,9 @@ For direct dex-to-summary composition:
 
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py \
-  --input-dex ./inputs/classes.dex \
+  --input ./inputs/classes.dex \
   --class com.example.TargetClass \
   --method targetMethod \
-  --mode summary
+  --mode summary \
+  --output-format json
 ```

@@ -47,11 +47,13 @@ If you already have a dex input and need direct export-plus-scan debugging, `exp
 
 ```bash
 python3 ./skills/dexclub-cli-launcher/analyst/scripts/export_and_scan.py \
-  --input-dex ./inputs/classes.dex \
+  --input ./inputs/classes.dex \
   --class com.example.TargetClass \
-  --mode summary
+  --mode summary \
+  --output-format json
 ```
 
 When `--output-dir` is omitted, the helper now allocates a directory under the analyst work root. Override that root with `DEXCLUB_ANALYST_WORK_ROOT` if needed.
+The helper now aligns with the real CLI on `--input` and `--output-format`; legacy `--input-dex` and `--format` remain accepted as compatibility aliases.
 
 Prefer `--language smali` when you need the most reliable export path or method-level bytecode details.

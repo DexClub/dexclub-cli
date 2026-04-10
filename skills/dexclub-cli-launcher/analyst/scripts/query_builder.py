@@ -310,14 +310,24 @@ def create_query_parser(*, add_help: bool = True) -> argparse.ArgumentParser:
         add_help=add_help,
     )
     subparsers = parser.add_subparsers(dest="kind", required=True)
+    configure_query_subparsers(subparsers)
+    return parser
 
-    class_parser = subparsers.add_parser("class", help="Build a find-class query.")
+
+def configure_query_subparsers(
+    subparsers,
+    *,
+    parent_parsers: list[argparse.ArgumentParser] | None = None,
+) -> dict[str, argparse.ArgumentParser]:
+    parents = list(parent_parsers or [])
+
+    class_parser = subparsers.add_parser("class", help="Build a find-class query.", parents=parents)
     add_shared_query_args(class_parser)
-    class_parser.add_argument("--class-name", help="Class name matcher.")
+    class_parser.add_argument("--class-name", "--class", dest="class_name", help="Class name matcher.")
     class_parser.add_argument("--using-string", action="append", default=[], help="Known string usage.")
     class_parser.add_argument("--output", help="Optional output file.")
 
-    method_parser = subparsers.add_parser("method", help="Build a find-method query.")
+    method_parser = subparsers.add_parser("method", help="Build a find-method query.", parents=parents)
     add_shared_query_args(method_parser)
     method_parser.add_argument("--method-name", help="Method name matcher.")
     method_parser.add_argument("--declared-class", help="Declaring class matcher.")
@@ -328,13 +338,17 @@ def create_query_parser(*, add_help: bool = True) -> argparse.ArgumentParser:
     method_parser.add_argument("--caller-method", action="append", default=[], help="Anchor caller in Class#method form.")
     method_parser.add_argument("--output", help="Optional output file.")
 
-    field_parser = subparsers.add_parser("field", help="Build a find-field query.")
+    field_parser = subparsers.add_parser("field", help="Build a find-field query.", parents=parents)
     add_shared_query_args(field_parser)
     field_parser.add_argument("--field-name", help="Field name matcher.")
     field_parser.add_argument("--declared-class", help="Declaring class matcher.")
     field_parser.add_argument("--field-type", help="Field type matcher.")
     field_parser.add_argument("--output", help="Optional output file.")
-    return parser
+    return {
+        "class": class_parser,
+        "method": method_parser,
+        "field": field_parser,
+    }
 
 
 def write_query_output(text: str, output_path: str | None) -> None:

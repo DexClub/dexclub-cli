@@ -3,28 +3,86 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
-import shutil
 from pathlib import Path
 
 from analyst_storage import allocate_helper_output_dir, ensure_apk_input_cache, ensure_dex_input_cache
-from query_builder import build_query, create_query_parser, dump_query
+from helper_cli import (
+    ActionableArgumentParser,
+    format_actionable_error,
+    require_existing_file,
+    summarize_process_failure,
+)
+from query_builder import build_query, configure_query_subparsers, dump_query
+
+QUERY_KINDS = {"class", "method", "field"}
+COMMON_OPTION_SPECS = {
+    "--input": 1,
+    "--limit": 1,
+    "--output-format": 1,
+    "--format": 1,
+    "--output-file": 1,
+    "--print-query": 0,
+    "--raw-query-json": 1,
+}
 
 
-def create_parser() -> argparse.ArgumentParser:
-    base_parser = create_query_parser(add_help=False)
-    parser = argparse.ArgumentParser(
-        description="Build a common query JSON shape and immediately execute dexclub-cli find-* through the launcher layer.",
-        parents=[base_parser],
-        add_help=True,
-    )
+class RunFindSubparser(ActionableArgumentParser):
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.setdefault("error_summary", "invalid run_find.py arguments")
+        kwargs.setdefault(
+            "recommended_action",
+            (
+                "Use `run_find.py <class|method|field> --input <apk-or-dex> ... --output-format json`, "
+                "or switch to `analyze.py run` for stable analyst workflows."
+            ),
+        )
+        super().__init__(*args, **kwargs)
+
+
+def add_helper_runner_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--input", action="append", required=True, help="APK or dex input. Repeat for multiple dex files.")
     parser.add_argument("--limit", type=int, help="Optional result limit.")
-    parser.add_argument("--output-format", choices=("text", "json"), default="json", help="dexclub-cli output format.")
+    parser.add_argument(
+        "--output-format",
+        "--format",
+        dest="output_format",
+        choices=("text", "json"),
+        default="json",
+        help="dexclub-cli output format.",
+    )
     parser.add_argument("--output-file", help="Optional dexclub-cli output file.")
     parser.add_argument("--print-query", action="store_true", help="Print the generated query JSON to stderr before execution.")
     parser.add_argument("--raw-query-json", help="Optional raw query JSON. When set, skip the built-in query builder.")
+
+
+def create_parser() -> argparse.ArgumentParser:
+    parser = ActionableArgumentParser(
+        description="Build a common query JSON shape and immediately execute dexclub-cli find-* through the launcher layer.",
+        add_help=True,
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog=(
+            "Preferred ordering matches the real dexclub-cli contract:\n"
+            "  run_find.py method --input ./inputs/classes.dex --limit 20 --using-string login --output-format json\n"
+            "\n"
+            "Legacy compatibility is still accepted:\n"
+            "  run_find.py --input ./inputs/classes.dex --limit 20 method --using-string login --output-format json\n"
+            "\n"
+            "For common analyst workflows, prefer the stable entry:\n"
+            "  analyze.py run --task-type <task> --input-json '<payload>'"
+        ),
+        error_summary="invalid run_find.py arguments",
+        recommended_action=(
+            "Use `run_find.py <class|method|field> --input <apk-or-dex> ... --output-format json`, "
+            "or switch to `analyze.py run` for stable analyst workflows."
+        ),
+    )
+    subparsers = parser.add_subparsers(dest="kind", required=True, parser_class=RunFindSubparser)
+    helper_parent = argparse.ArgumentParser(add_help=False)
+    add_helper_runner_args(helper_parent)
+    configure_query_subparsers(subparsers, parent_parsers=[helper_parent])
     return parser
 
 
@@ -40,15 +98,48 @@ def relay_stream(content: str, *, target) -> None:
         print(content, end="" if content.endswith("\n") else "\n", file=target)
 
 
+def normalize_legacy_argv(argv: list[str]) -> list[str]:
+    kind_index = next((index for index, token in enumerate(argv) if token in QUERY_KINDS), None)
+    if kind_index is None or kind_index == 0:
+        return argv
+    prefix = argv[:kind_index]
+    kind = argv[kind_index]
+    suffix = argv[kind_index + 1:]
+    reordered_prefix: list[str] = []
+    index = 0
+    while index < len(prefix):
+        token = prefix[index]
+        if token not in COMMON_OPTION_SPECS:
+            return argv
+        reordered_prefix.append(token)
+        value_count = COMMON_OPTION_SPECS[token]
+        for _ in range(value_count):
+            index += 1
+            if index >= len(prefix):
+                return argv
+            reordered_prefix.append(prefix[index])
+        index += 1
+    return [kind, *reordered_prefix, *suffix]
+
+
 def main() -> None:
     parser = create_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(normalize_legacy_argv(sys.argv[1:]))
 
     if args.raw_query_json:
         try:
             query = json.loads(args.raw_query_json)
         except json.JSONDecodeError as exc:
-            raise SystemExit(f"Invalid --raw-query-json: {exc.msg}") from exc
+            raise SystemExit(
+                format_actionable_error(
+                    summary="invalid run_find.py query input",
+                    cause=f"`--raw-query-json` is not valid JSON: {exc.msg}",
+                    recommended_action=(
+                        "Pass one valid JSON object string to `--raw-query-json`, "
+                        "or remove it and use the built-in `class|method|field` query flags."
+                    ),
+                )
+            ) from exc
     else:
         query = build_query(args.kind, args)
     query_json = dump_query(query)
@@ -59,12 +150,19 @@ def main() -> None:
     cli_args = [command_name]
     managed_output_dir: Path | None = None
     for input_value in args.input:
-        input_path = Path(input_value).expanduser().resolve()
+        input_path = require_existing_file(
+            input_value,
+            field_label="input path",
+            recommended_action=(
+                "Provide an existing `.apk` or `.dex` file. For APK-backed end-to-end tasks, "
+                "prefer `analyze.py run` so the planner can choose the helper sequence."
+            ),
+            allowed_suffixes=(".apk", ".dex"),
+        )
         if input_path.suffix.lower() == ".dex":
             ensure_dex_input_cache(input_path)
         else:
-            if input_path.suffix.lower() == ".apk":
-                ensure_apk_input_cache(input_path, ensure_extracted_dex=False)
+            ensure_apk_input_cache(input_path, ensure_extracted_dex=False)
         cli_args.extend(["--input", str(input_path)])
     cli_args.extend(["--query-json", query_json, "--output-format", args.output_format])
     if args.limit is not None:
@@ -86,20 +184,51 @@ def main() -> None:
     try:
         completed = subprocess.run(command, capture_output=True, text=True)
         if completed.returncode != 0:
-            relay_stream(completed.stdout, target=sys.stderr)
-            relay_stream(completed.stderr, target=sys.stderr)
-            raise SystemExit(completed.returncode)
+            raise SystemExit(
+                format_actionable_error(
+                    summary="run_find.py execution failed",
+                    cause=summarize_process_failure(
+                        completed,
+                        fallback=f"dexclub-cli exited with code {completed.returncode}.",
+                    ),
+                    recommended_action=(
+                        "Check whether the input file is valid for the selected query and narrow the matcher. "
+                        "For method-logic or call-graph tasks, prefer `analyze.py run`."
+                    ),
+                    notes=[
+                        f"Launcher exit code: {completed.returncode}",
+                        "See the launcher stderr/stdout above if you need the raw DexKit details.",
+                    ],
+                )
+            )
 
         relay_stream(completed.stderr, target=sys.stderr)
         if args.output_format == "json":
             if output_file_path is None or not output_file_path.is_file():
-                relay_stream(completed.stdout, target=sys.stderr)
-                raise SystemExit("dexclub-cli did not produce the requested JSON output file.")
+                raise SystemExit(
+                    format_actionable_error(
+                        summary="run_find.py JSON output is incomplete",
+                        cause="dexclub-cli finished without producing the requested JSON output file.",
+                        recommended_action=(
+                            "Retry with `--output-format json`. If the problem persists, run the launcher command "
+                            "directly to inspect raw output."
+                        ),
+                    )
+                )
             payload_text = output_file_path.read_text(encoding="utf-8")
             try:
                 json.loads(payload_text)
             except json.JSONDecodeError as exc:
-                raise SystemExit(f"Invalid JSON output from dexclub-cli: {exc.msg}") from exc
+                raise SystemExit(
+                    format_actionable_error(
+                        summary="run_find.py JSON output is invalid",
+                        cause=f"dexclub-cli wrote malformed JSON: {exc.msg}",
+                        recommended_action=(
+                            "Re-run with the same command and inspect the generated `--output-file`, "
+                            "or fall back to the launcher directly to isolate the failing query."
+                        ),
+                    )
+                ) from exc
             if completed.stdout.strip():
                 relay_stream(completed.stdout, target=sys.stderr)
             relay_stream(payload_text, target=sys.stdout)

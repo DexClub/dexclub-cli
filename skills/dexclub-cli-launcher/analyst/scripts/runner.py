@@ -191,6 +191,7 @@ def normalize_export_and_scan_payload(raw_payload: object) -> dict[str, object]:
         raise ValueError("Expected object payload from export_and_scan.")
     normalized: dict[str, object] = {}
     key_map = {
+        "status": "status",
         "exportPath": "export_path",
         "cacheHit": "cache_hit",
         "cacheKey": "cache_key",
@@ -247,6 +248,7 @@ def normalize_resolve_apk_dex_payload(raw_payload: object) -> dict[str, object]:
         raise ValueError("Expected object payload from resolve_apk_dex.")
     normalized: dict[str, object] = {}
     for key in (
+        "status",
         "apk_path",
         "class_name",
         "artifact_root",
@@ -260,6 +262,7 @@ def normalize_resolve_apk_dex_payload(raw_payload: object) -> dict[str, object]:
         "candidate_dex_paths",
         "extracted_dex_paths",
         "resolved_dex_path",
+        "diagnostics",
     ):
         if key in raw_payload:
             normalized[key] = raw_payload[key]
@@ -299,7 +302,7 @@ def build_export_and_scan_command(step_args: dict[str, object]) -> list[str]:
     command = [
         sys.executable,
         str(script_path),
-        "--input-dex",
+        "--input",
         str(step_args["input_dex"]),
         "--class",
         str(step_args["class_name"]),
@@ -307,7 +310,7 @@ def build_export_and_scan_command(step_args: dict[str, object]) -> list[str]:
         str(step_args["language"]),
         "--mode",
         str(step_args["mode"]),
-        "--format",
+        "--output-format",
         "json",
         "--output-dir",
         str(step_args["output_dir"]),
@@ -324,11 +327,11 @@ def build_resolve_apk_dex_command(step_args: dict[str, object]) -> list[str]:
     command = [
         sys.executable,
         str(script_path),
-        "--input-apk",
+        "--input",
         str(step_args["input_apk"]),
         "--class",
         str(step_args["class_name"]),
-        "--format",
+        "--output-format",
         "json",
     ]
     output_dir = step_args.get("output_dir")
@@ -502,7 +505,10 @@ def normalize_resolve_apk_dex_result(
     candidate_dex_paths = normalized_payload.get("candidate_dex_paths", [])
     if not isinstance(candidate_dex_paths, list):
         raise ValueError("`candidate_dex_paths` must be a list.")
-    if normalized_payload.get("resolved_dex_path"):
+    helper_status = normalized_payload.get("status")
+    if helper_status == "ambiguous":
+        status = "ambiguous"
+    elif normalized_payload.get("resolved_dex_path"):
         status = "ok"
     elif candidate_dex_paths:
         status = "ok"

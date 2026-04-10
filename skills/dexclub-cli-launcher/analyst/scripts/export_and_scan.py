@@ -20,6 +20,11 @@ from analyst_storage import (
     write_json,
 )
 from code_analysis import analyze_code
+from helper_cli import (
+    ActionableArgumentParser,
+    format_actionable_error,
+    require_existing_file,
+)
 from process_exec import run_captured_process
 from scan_exported_code import format_text, select_payload
 
@@ -27,11 +32,27 @@ CACHE_SCHEMA_VERSION = "v1"
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
+    parser = ActionableArgumentParser(
         description="Export a target class through the launcher layer, then scan the exported code.",
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog=(
+            "Preferred helper contract:\n"
+            "  export_and_scan.py --input ./inputs/classes.dex --class com.example.Target --mode summary --output-format json\n"
+            "\n"
+            "Legacy aliases remain accepted:\n"
+            "  --input-dex for --input\n"
+            "  --format for --output-format\n"
+            "\n"
+            "For stable analyst workflows, prefer `analyze.py run --task-type summarize_method_logic`."
+        ),
+        error_summary="invalid export_and_scan.py arguments",
+        recommended_action=(
+            "Use `--input <dex> --class <fqcn> --mode <summary|...> --output-format json`, "
+            "or switch to `analyze.py run` for the supported end-to-end summarize flow."
+        ),
     )
-    parser.add_argument("--input-dex", required=True, help="Path to a single dex file.")
-    parser.add_argument("--class", dest="class_name", required=True, help="Target class name.")
+    parser.add_argument("--input", "--input-dex", dest="input_dex", required=True, help="Path to a single dex file.")
+    parser.add_argument("--class", "--class-name", dest="class_name", required=True, help="Target class name.")
     parser.add_argument("--method", help="Optional target method name for scoped scanning.")
     parser.add_argument("--method-descriptor", help="Optional exact method descriptor for precise smali scoping.")
     parser.add_argument(
@@ -47,7 +68,9 @@ def parse_args() -> argparse.Namespace:
         help="Which slice of the analysis result to print.",
     )
     parser.add_argument(
+        "--output-format",
         "--format",
+        dest="output_format",
         choices=("text", "json"),
         default="text",
         help="Output format.",
@@ -128,6 +151,7 @@ def finalize_payload(
     payload["cacheHit"] = cache_hit
     payload["temporaryPaths"] = [str(output_dir.resolve())] if created_output_dir else []
     payload["exportPath"] = str(export_path.resolve())
+    payload["status"] = "ok"
     if method_descriptor:
         payload["methodDescriptor"] = method_descriptor
     return payload
@@ -135,9 +159,15 @@ def finalize_payload(
 
 def main() -> None:
     args = parse_args()
-    dex_path = Path(args.input_dex).expanduser().resolve()
-    if not dex_path.is_file():
-        raise SystemExit(f"Input dex not found: {dex_path.resolve()}")
+    dex_path = require_existing_file(
+        args.input_dex,
+        field_label="dex input",
+        recommended_action=(
+            "Pass one existing `.dex` file with `--input`. If your starting point is an APK, "
+            "run `analyze.py run` or `resolve_apk_dex.py` first."
+        ),
+        allowed_suffixes=(".dex",),
+    )
     dex_cache_ref = ensure_dex_input_cache(dex_path)
     export_input_dex = (dex_cache_ref.cached_path or dex_path).resolve()
 
@@ -203,13 +233,34 @@ def main() -> None:
                 )
                 if execution.status != "ok":
                     message = execution.diagnostics.get("cause") or execution.diagnostics.get("message") or "Export failed."
-                    raise SystemExit(str(message))
+                    raise SystemExit(
+                        format_actionable_error(
+                            summary="export_and_scan.py export step failed",
+                            cause=str(message),
+                            recommended_action=(
+                                "Verify that the requested class exists in the dex input. "
+                                "If you started from an APK, resolve the class to one dex first or use `analyze.py run`."
+                            ),
+                        )
+                    )
 
-                report = analyze_code(
-                    tmp_export_path,
-                    method_name=args.method,
-                    method_descriptor=args.method_descriptor,
-                )
+                try:
+                    report = analyze_code(
+                        tmp_export_path,
+                        method_name=args.method,
+                        method_descriptor=args.method_descriptor,
+                    )
+                except ValueError as exc:
+                    raise SystemExit(
+                        format_actionable_error(
+                            summary="export_and_scan.py could not scope the exported code",
+                            cause=str(exc),
+                            recommended_action=(
+                                "Check the method name or descriptor against the exported class. "
+                                "For overloaded methods, prefer passing `--method-descriptor` or using `analyze.py run`."
+                            ),
+                        )
+                    ) from exc
                 write_json(tmp_cache_dir / "analysis-report.json", report)
                 write_json(
                     tmp_cache_dir / "cache-meta.json",
@@ -233,7 +284,16 @@ def main() -> None:
                 shutil.rmtree(tmp_cache_dir, ignore_errors=True)
             cached_report = load_cached_report(cached_report_path)
             if cached_report is None or not cached_export_path.is_file():
-                raise SystemExit("Export cache write failed.")
+                raise SystemExit(
+                    format_actionable_error(
+                        summary="export_and_scan.py cache materialization failed",
+                        cause="The export cache directory was not written successfully.",
+                        recommended_action=(
+                            "Retry the command. If the problem persists, remove the affected export-and-scan cache entry "
+                            "and rerun with the same input."
+                        ),
+                    )
+                )
 
     export_path = materialize_export(
         cached_export_path=cached_export_path,
@@ -252,7 +312,7 @@ def main() -> None:
         method_descriptor=args.method_descriptor,
     )
 
-    if args.format == "json":
+    if args.output_format == "json":
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return
     print(format_text(payload, args.mode))

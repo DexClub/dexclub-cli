@@ -140,6 +140,8 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py cache clear --s
   - Cross-run step reuse is isolated by the selected CLI `release_tag`.
   - `analyze.py cache clear` manages `inputs`, `export-and-scan`, `reusable-steps`, and `tmp`; when no `--scope` is provided it clears all of them.
   - The run root now contains `run-meta.json`, `final_result.json`, `run-summary.json`, and per-step data under `steps/<step-id>/`.
+  - Internal helpers now align on `--input` and `--output-format`; legacy helper-specific flags remain accepted as compatibility aliases.
+  - Direct helper failures now include `Cause:` and `Recommended action:` lines for common misuse.
   - Override the work root with `DEXCLUB_ANALYST_WORK_ROOT` when the current workspace should not own `.dexclub-cli/`.
   - Override the cache root with `DEXCLUB_ANALYST_CACHE_DIR` when input caches should live outside the default work root.
   - Direct helper runs such as `export_and_scan.py` now allocate their default output directory under the analyst work root instead of the anonymous system temp directory.

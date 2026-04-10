@@ -141,6 +141,8 @@ Default local storage layout:
 - Invalid `reusable-step-index-v1.json` entries are pruned automatically before new runs continue
 - `analyze.py cache clear` manages `inputs`, `export-and-scan`, `reusable-steps`, and `tmp`; when no `--scope` is provided it clears all of them
 - Internal helper JSON mode is now strict: `run_find.py` re-emits one pure JSON document from the formal `output-file`, and the runner no longer guesses a JSON start offset from helper stdout
+- Internal helper argument contracts are now CLI-aligned on `--input` and `--output-format`; legacy helper-only flags such as `--input-apk`, `--input-dex`, and `--format` remain accepted as compatibility aliases
+- Direct helper failures now print `Cause:` plus `Recommended action:` so common misuse can be corrected without rereading the workflow docs
 - Override the work root with `DEXCLUB_ANALYST_WORK_ROOT`
 - Override the cache root with `DEXCLUB_ANALYST_CACHE_DIR`
 - `export_and_scan.py` now creates its default direct-run output directory under the analyst work root instead of the anonymous system temp directory

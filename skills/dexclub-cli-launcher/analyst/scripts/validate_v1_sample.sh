@@ -56,6 +56,16 @@ if not ok:
 PY
 }
 
+assert_file_contains() {
+  local file="$1"
+  local needle="$2"
+  local message="$3"
+  if ! grep -Fq "$needle" "$file"; then
+    echo "$(basename "$file"): $message" >&2
+    exit 1
+  fi
+}
+
 stdout_has_hits() {
   local file="$1"
   python3 - "$file" <<'PY'
@@ -200,9 +210,9 @@ cache_reuse_resolve_output="$RESULT_DIR/resolve_apk_dex_cache_reuse.json"
 DEXCLUB_ANALYST_WORK_ROOT="$cache_reuse_work_root" \
 DEXCLUB_ANALYST_CACHE_DIR="$cache_reuse_cache_root" \
 python3 "$RESOLVE_APK_DEX" \
-  --input-apk "$SAMPLE_APK" \
+  --input "$SAMPLE_APK" \
   --class "com.shadcn.ui.compose.MainActivity" \
-  --format json >"$cache_reuse_resolve_output"
+  --output-format json >"$cache_reuse_resolve_output"
 echo "validated_output=$cache_reuse_resolve_output"
 apk_main_activity_dex="$(python3 - "$cache_reuse_resolve_output" <<'PY'
 import json
@@ -217,12 +227,12 @@ apk_cache_reuse_output="$RESULT_DIR/export_and_scan_cache_from_apk.json"
 DEXCLUB_ANALYST_WORK_ROOT="$cache_reuse_work_root" \
 DEXCLUB_ANALYST_CACHE_DIR="$cache_reuse_cache_root" \
 python3 "$EXPORT_AND_SCAN" \
-  --input-dex "$apk_main_activity_dex" \
+  --input "$apk_main_activity_dex" \
   --class "com.shadcn.ui.compose.MainActivity" \
   --method "onCreate" \
   --language smali \
   --mode summary \
-  --format json >"$apk_cache_reuse_output"
+  --output-format json >"$apk_cache_reuse_output"
 echo "validated_output=$apk_cache_reuse_output"
 assert_expr "$apk_cache_reuse_output" "payload['cacheHit'] is False" "first apk-backed export_and_scan should populate the cache"
 
@@ -230,12 +240,12 @@ direct_cache_reuse_output="$RESULT_DIR/export_and_scan_cache_from_direct_dex.jso
 DEXCLUB_ANALYST_WORK_ROOT="$cache_reuse_work_root" \
 DEXCLUB_ANALYST_CACHE_DIR="$cache_reuse_cache_root" \
 python3 "$EXPORT_AND_SCAN" \
-  --input-dex "$main_activity_dex" \
+  --input "$main_activity_dex" \
   --class "com.shadcn.ui.compose.MainActivity" \
   --method "onCreate" \
   --language smali \
   --mode summary \
-  --format json >"$direct_cache_reuse_output"
+  --output-format json >"$direct_cache_reuse_output"
 echo "validated_output=$direct_cache_reuse_output"
 assert_expr "$direct_cache_reuse_output" "payload['cacheHit'] is True" "direct dex export_and_scan should reuse the apk-backed cache entry"
 apk_cache_path="$(python3 - "$apk_cache_reuse_output" <<'PY'
@@ -249,6 +259,22 @@ PY
 )"
 assert_expr "$direct_cache_reuse_output" "payload['cachePath'] == '$apk_cache_path'" "apk and direct dex export_and_scan should converge to the same cache path"
 assert_expr "$direct_cache_reuse_output" "Path(payload['exportPath']).is_file()" "cache-backed direct dex export_and_scan should still materialize the exported artifact"
+
+missing_apk_stderr="$RESULT_DIR/resolve_apk_dex_missing_input.stderr"
+if python3 "$RESOLVE_APK_DEX" --input "$RESULT_DIR/does-not-exist.apk" --class "com.example.Missing" --output-format json >"$RESULT_DIR/resolve_apk_dex_missing_input.stdout" 2>"$missing_apk_stderr"; then
+  echo "resolve_apk_dex missing-input case should fail" >&2
+  exit 1
+fi
+assert_file_contains "$missing_apk_stderr" "Cause:" "resolve_apk_dex missing-input error should explain the cause"
+assert_file_contains "$missing_apk_stderr" "Recommended action:" "resolve_apk_dex missing-input error should suggest the next action"
+
+invalid_run_find_stderr="$RESULT_DIR/run_find_invalid_raw_query.stderr"
+if python3 "$RUN_FIND" method --input "$main_activity_dex" --raw-query-json "{" --output-format json >"$RESULT_DIR/run_find_invalid_raw_query.stdout" 2>"$invalid_run_find_stderr"; then
+  echo "run_find invalid raw-query-json case should fail" >&2
+  exit 1
+fi
+assert_file_contains "$invalid_run_find_stderr" "Cause:" "run_find invalid-query error should explain the cause"
+assert_file_contains "$invalid_run_find_stderr" "Recommended action:" "run_find invalid-query error should suggest the next action"
 
 step_reuse_work_root="$TMP_ROOT/step-reuse-work"
 step_reuse_cache_root="$TMP_ROOT/step-reuse-cache"
@@ -692,13 +718,13 @@ assert_expr "$RESULT_DIR/exact_summarize_method_logic.json" "any(group['kind'] =
 
 exact_java_export_output="$RESULT_DIR/exact_java_export_and_scan.json"
 python3 "$EXPORT_AND_SCAN" \
-  --input-dex "$ambiguous_image_dex" \
+  --input "$ambiguous_image_dex" \
   --class "androidx.compose.foundation.ImageKt" \
   --method "Image" \
   --method-descriptor "$exact_descriptor" \
   --language java \
   --mode summary \
-  --format json >"$exact_java_export_output"
+  --output-format json >"$exact_java_export_output"
 echo "validated_output=$exact_java_export_output"
 assert_expr "$exact_java_export_output" "payload['kind'] == 'java'" "direct export_and_scan should produce java output on the published release"
 assert_expr "$exact_java_export_output" "payload['scope']['methodDescriptor'] == '$exact_descriptor'" "direct export_and_scan should keep the exact java-scoped descriptor"
