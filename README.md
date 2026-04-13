@@ -22,7 +22,7 @@
 - `dexkit` 负责提供 `io.github.dexclub.dexkit` 这一层 KMP API。
 - Android 侧通过上游 `DexKit` 的 `dexkit-android` 产物提供底层实现。
 - JVM 侧通过 included build 使用本地 `vendor/DexKit`，并在 `jvmProcessResources` 时拷贝 native 库。
-- JVM 侧 `DexKitBridge` 默认把 classpath native 复用到 `~/.dexclub/natives`；如需最小覆盖，可优先使用 JVM system property `dexclub.dexkit.native.cache.dir`，也可使用环境变量 `DEXCLUB_DEXKIT_NATIVE_CACHE_DIR`。Android 侧不使用这套目录逻辑。
+- JVM 侧 `DexKitBridge` 默认把 classpath native 复用到 `~/.dexclub/natives`；如需最小覆盖，可优先使用 JVM system property `dexclub.dexkit.native.cache.dir`，也可使用环境变量 `DEXCLUB_DEXKIT_NATIVE_CACHE_DIR`。如需显式指定优先加载的 native 目录，可使用 JVM system property `dexclub.dexkit.native.library.dir`，或环境变量 `DEXCLUB_DEXKIT_NATIVE_LIBRARY_DIR`。Android 侧不使用这套目录逻辑。
 - 根工程启用了 `mavenLocal()`，用于解析当前 Android 构建所需的 `dev.rikka.ndk.thirdparty:libcxx:1.3.0`。
 
 ## 技术工具链
@@ -30,6 +30,7 @@
 - `DexKit`
   - 用于类、方法、字段检索，以及 `find-class`、`find-method`、`find-field`
   - 仓库内通过 `dexkit/` 这一层 KMP API 封装上游能力
+  - 桌面端运行环境参考：https://luckypray.org/DexKit/zh-cn/guide/run-on-desktop.html
 - `dexlib2` / `baksmali`
   - 用于 JVM 侧 dex 读取、单类 dex 导出与 smali 生成
   - `inspect`、`export-dex`、`export-smali` 使用这组工具链

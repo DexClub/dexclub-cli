@@ -20,7 +20,6 @@ import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
-import java.security.MessageDigest
 
 actual class DexKitBridge {
     private var delegate: NativeDexKitBridge? = null
@@ -164,13 +163,18 @@ actual class DexKitBridge {
 
         @Suppress("UnsafeDynamicallyLoadedCode")
         private fun loadLibrary(name: String) {
-            // 1. java.library.path（开发期 JVM 参数 / OS 全局安装）
-            if (runCatching { System.loadLibrary(name) }.isSuccess) return
+            // 1. 显式配置目录（分发包 / 调试环境优先）
+            configuredNativeLibraryDirPath()?.let { configuredDir ->
+                if (loadFromDirectory(configuredDir, name)) return
+            }
 
             // 2. JAR 内 natives/ 资源（打包成 exe/msi/dmg/deb 时的主路径）
             if (loadFromClasspathResource(name)) return
 
-            // 3. 开发期 build 目录兜底（gradle run 未配置 java.library.path 时）
+            // 3. java.library.path（开发期 JVM 参数 / OS 全局安装）
+            if (runCatching { System.loadLibrary(name) }.isSuccess) return
+
+            // 4. 开发期 build 目录兜底（gradle run 未配置 java.library.path 时）
             val (libraryFile, searchedDirs) = findLibraryInDevBuild(name)
             if (libraryFile == null) {
                 val searchedText = searchedDirs.joinToString(separator = "; ") { it.absolutePath }
@@ -191,20 +195,27 @@ actual class DexKitBridge {
                 val stream = DexKitBridge::class.java.getResourceAsStream("/natives/$fileName")
                     ?: return@forEach
                 val bytes = stream.use { input -> input.readBytes() }
-                val hash = sha256Hex(bytes).take(12)
-                val targetName = appendHashToFileName(fileName, hash)
-                val target = File(cacheDir, targetName)
-                if (!target.exists()) {
+                val target = File(cacheDir, fileName)
+                val shouldWrite = !target.exists() || runCatching { !Files.readAllBytes(target.toPath()).contentEquals(bytes) }
+                    .getOrDefault(true)
+                if (shouldWrite) {
                     val temp = File.createTempFile("dexkit-", ".tmp", cacheDir)
                     try {
                         temp.outputStream().use { output -> output.write(bytes) }
                         try {
-                            Files.move(temp.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE)
+                            Files.move(
+                                temp.toPath(),
+                                target.toPath(),
+                                StandardCopyOption.ATOMIC_MOVE,
+                                StandardCopyOption.REPLACE_EXISTING,
+                            )
                         } catch (_: FileAlreadyExistsException) {
                         } catch (_: AtomicMoveNotSupportedException) {
                             if (!target.exists()) {
                                 Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
                             }
+                        } catch (ex: Exception) {
+                            if (!target.exists()) throw ex
                         }
                     } finally {
                         temp.delete()
@@ -217,17 +228,29 @@ actual class DexKitBridge {
             return false
         }
 
-        private fun appendHashToFileName(fileName: String, hash: String): String {
-            val dotIndex = fileName.lastIndexOf('.')
-            if (dotIndex <= 0 || dotIndex == fileName.lastIndex) return "$fileName-$hash"
-            val prefix = fileName.substring(0, dotIndex)
-            val suffix = fileName.substring(dotIndex)
-            return "$prefix-$hash$suffix"
+        @Suppress("UnsafeDynamicallyLoadedCode")
+        private fun loadFromDirectory(directory: File, name: String): Boolean {
+            if (!directory.exists() || !directory.isDirectory) return false
+            nativeLibFileNames(name).forEach { fileName ->
+                val target = File(directory, fileName)
+                if (!target.exists() || !target.isFile) return@forEach
+                if (runCatching { System.load(target.absolutePath) }.isSuccess) {
+                    return true
+                }
+            }
+            return false
         }
 
         private fun resolveNativeCacheDir(): File {
             val configuredPath = configuredNativeCacheDirPath()
             return configuredPath ?: File(System.getProperty("user.home"), ".dexclub/natives")
+        }
+
+        private fun configuredNativeLibraryDirPath(): File? {
+            val configured = System.getProperty(NATIVE_LIBRARY_DIR_PROPERTY)
+                ?: System.getenv(NATIVE_LIBRARY_DIR_ENV)
+            if (configured.isNullOrBlank()) return null
+            return resolveConfiguredDirectory(configured)
         }
 
         private fun configuredNativeCacheDirPath(): File? {
@@ -250,17 +273,14 @@ actual class DexKitBridge {
             return if (expanded.isAbsolute) expanded else File(homeDir, trimmed)
         }
 
-        private fun sha256Hex(data: ByteArray): String =
-            MessageDigest.getInstance("SHA-256")
-                .digest(data)
-                .joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xFF) }
-
         private fun nativeLibFileNames(name: String): List<String> = when {
             isWindows() -> listOf("$name.dll", "lib$name.dll")
             isMac() -> listOf("lib$name.dylib")
             else -> listOf("lib$name.so")
         }
 
+        private const val NATIVE_LIBRARY_DIR_PROPERTY = "dexclub.dexkit.native.library.dir"
+        private const val NATIVE_LIBRARY_DIR_ENV = "DEXCLUB_DEXKIT_NATIVE_LIBRARY_DIR"
         private const val NATIVE_CACHE_DIR_PROPERTY = "dexclub.dexkit.native.cache.dir"
         private const val NATIVE_CACHE_DIR_ENV = "DEXCLUB_DEXKIT_NATIVE_CACHE_DIR"
 

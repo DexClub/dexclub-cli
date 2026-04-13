@@ -5,6 +5,8 @@ on:
     branches:
       - master
   push:
+    branches:
+      - ci/windows-x64-test
     tags:
       - "v*"
   workflow_dispatch:
@@ -85,6 +87,7 @@ jobs:
     needs: prepare-libcxx
     name: ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
+    if: github.ref != 'refs/heads/ci/windows-x64-test' || matrix.target == 'windows-x64'
     strategy:
       fail-fast: false
       matrix:
@@ -93,26 +96,52 @@ jobs:
             runner: ubuntu-24.04
             os_name: linux
             arch: x64
+            msys2_msystem: ""
+            msys2_install: ""
+            msys2_bin_subdir: ""
           - target: linux-arm64
             runner: ubuntu-24.04-arm
             os_name: linux
             arch: arm64
+            msys2_msystem: ""
+            msys2_install: ""
+            msys2_bin_subdir: ""
           - target: windows-x64
             runner: windows-2022
             os_name: windows
             arch: x64
+            msys2_msystem: MINGW64
+            msys2_install: >-
+              mingw-w64-x86_64-gcc
+              mingw-w64-x86_64-cmake
+              mingw-w64-x86_64-ninja
+              mingw-w64-x86_64-zlib
+            msys2_bin_subdir: mingw64/bin
           - target: windows-arm64
             runner: windows-11-arm
             os_name: windows
             arch: arm64
+            msys2_msystem: CLANGARM64
+            msys2_install: >-
+              mingw-w64-clang-aarch64-clang
+              mingw-w64-clang-aarch64-cmake
+              mingw-w64-clang-aarch64-ninja
+              mingw-w64-clang-aarch64-zlib
+            msys2_bin_subdir: clangarm64/bin
           - target: macos-x64
             runner: macos-15-intel
             os_name: macos
             arch: x64
+            msys2_msystem: ""
+            msys2_install: ""
+            msys2_bin_subdir: ""
           - target: macos-arm64
             runner: macos-15
             os_name: macos
             arch: arm64
+            msys2_msystem: ""
+            msys2_install: ""
+            msys2_bin_subdir: ""
 
     steps:
       - name: Checkout
@@ -157,6 +186,16 @@ jobs:
             ndk;28.2.13676358
             cmake;3.31.6
 
+      - name: Setup MSYS2 toolchain
+        if: runner.os == 'Windows'
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msys2_msystem }}
+          update: true
+          path-type: minimal
+          install: ${{ matrix.msys2_install }}
+
       - name: Prepare Android local.properties
         shell: pwsh
         run: |
@@ -173,6 +212,17 @@ jobs:
         shell: pwsh
         run: |
           if ($env:RUNNER_OS -eq 'Windows') {
+            $msys2Location = "${{ steps.msys2.outputs.msys2-location }}"
+            if ([string]::IsNullOrWhiteSpace($msys2Location)) {
+              throw "MSYS2 location output is empty on Windows build."
+            }
+
+            $toolchainBin = Join-Path $msys2Location "${{ matrix.msys2_bin_subdir }}"
+            if (!(Test-Path $toolchainBin)) {
+              throw "Missing MSYS2 toolchain bin directory: $toolchainBin"
+            }
+
+            $env:PATH = "$toolchainBin;$env:PATH"
             & ".\gradlew.bat" --no-daemon :cli:shadowDistZip
           } else {
             & "./gradlew" --no-daemon :cli:shadowDistZip
