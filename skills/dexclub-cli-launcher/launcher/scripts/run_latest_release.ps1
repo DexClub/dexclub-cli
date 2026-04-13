@@ -202,13 +202,46 @@ function Invoke-GitHubRequest {
     return Invoke-WebRequest @params
 }
 
+function Get-RedirectLocationUri {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Uri
+    )
+
+    $headers = @{ "User-Agent" = "dexclub-cli-launcher" }
+    $params = @{
+        Uri = $Uri
+        Headers = $headers
+        UseBasicParsing = $true
+        MaximumRedirection = 0
+        Method = "Head"
+    }
+
+    try {
+        $response = Invoke-WebRequest @params
+        $location = $response.Headers.Location
+    }
+    catch {
+        if ($null -eq $_.Exception.Response) {
+            throw
+        }
+
+        $location = $_.Exception.Response.Headers.Location
+        if ($null -eq $location) {
+            throw
+        }
+    }
+
+    if ($location -is [System.Uri]) {
+        return $location
+    }
+
+    return [System.Uri]::new([System.Uri]$Uri, [string]$location)
+}
+
 function Get-LatestReleaseTagFromPage {
     $repo = Get-Repo
-    $response = Invoke-GitHubRequest -Uri "https://github.com/$repo/releases/latest"
-    $responseUri = $response.BaseResponse.ResponseUri
-    if ($null -eq $responseUri) {
-        throw "Missing redirected release page URL."
-    }
+    $responseUri = Get-RedirectLocationUri -Uri "https://github.com/$repo/releases/latest"
 
     $path = $responseUri.AbsolutePath
     if ($path -match '^/[^/]+/[^/]+/releases/tag/([^/?#]+)$') {
