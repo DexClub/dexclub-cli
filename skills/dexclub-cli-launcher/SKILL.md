@@ -58,6 +58,8 @@ The implementation is layered internally:
 ## Launcher rules
 
 - Do not refresh from GitHub unless the user explicitly asks, or no compatible local cache exists.
+- Prefer the local cache when a compatible release-style artifact is already present, even if it was staged locally for testing instead of downloaded from GitHub Release.
+- If the intended `launcher -> cli` runtime path fails, stop and report the concrete runtime failure first. Do not automatically fall back to full-project tools such as `jadx`, `apktool`, or other heavy local reverse-engineering tooling unless the user explicitly asks for that escalation.
 - If remote access has already been disabled after repeated failures, only reset it when the user explicitly asks to retry:
   - `bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh --reset-remote-failures --update-cache --prepare-only`
   - `.\skills\dexclub-cli-launcher\launcher\scripts\run_latest_release.bat --reset-remote-failures --update-cache --prepare-only`
@@ -126,12 +128,18 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py cache clear --s
 
 ## Behavior notes
 
-- The launcher scripts never depend on GitHub Actions artifacts.
+- The launcher defaults to GitHub Release-style cached assets, but it can also consume a locally staged artifact when the cache directory already contains the expected release-style layout.
 - Latest release discovery follows the GitHub release webpage redirect and does not depend on the GitHub API.
 - `--print-latest-tag` prints the currently selected local cached tag and does not trigger a remote check.
 - Remote failure state is isolated by repository and platform.
 - The scripts normalize the current machine to `linux|macos|windows` and `x64|arm64`, then look for `dexclub-cli-<os>-<arch>.zip`.
 - If the latest release does not publish a matching asset for the current platform, the launcher exits non-zero after printing the unsupported-platform message. Preserve that message exactly.
+- Current Windows distributions are expected to carry the required runtime sidecar DLLs under `lib/`, and the generated launcher script prepends that directory to `PATH` before starting Java.
+- JVM-side DexKit loading also supports explicit directory overrides when needed:
+  - JVM system property: `dexclub.dexkit.native.library.dir`
+  - environment variable: `DEXCLUB_DEXKIT_NATIVE_LIBRARY_DIR`
+  - JVM system property: `dexclub.dexkit.native.cache.dir`
+  - environment variable: `DEXCLUB_DEXKIT_NATIVE_CACHE_DIR`
 - The default analyst work root is `<workspace>/.dexclub-cli/`.
   - `analyze.py run` writes per-run artifacts under `<workspace>/.dexclub-cli/runs/v1/<run-id>/` unless `--artifact-root` overrides it.
   - Input caches live under `<workspace>/.dexclub-cli/cache/v1/inputs/`.

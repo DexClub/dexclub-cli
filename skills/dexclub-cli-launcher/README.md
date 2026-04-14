@@ -77,6 +77,7 @@ Design principles for future changes:
 - The scripts check the latest release only when:
   - no compatible local cache exists yet
   - the caller explicitly asks for `--update-cache`
+- If a compatible release-style artifact has already been staged into the cache directory locally, the launcher can consume it without contacting GitHub Release.
 - Latest release discovery follows the GitHub release webpage redirect and does not depend on the GitHub API.
 - `--print-latest-tag` prints the currently selected local cached tag and does not trigger a remote check.
 - If remote access fails during an initial fetch or an explicit update, the scripts warn at most twice.
@@ -126,9 +127,15 @@ Windows:
 
 ## Notes
 
-- The scripts only use GitHub Release assets.
-- They never depend on GitHub Actions artifacts.
+- The default remote flow uses GitHub Release assets.
+- The launcher can still consume a local artifact if it has already been arranged under the expected cache layout.
 - Use `--print-cache-path` when you need the current cache location.
+- Current Windows distributions are expected to include the required runtime sidecar DLLs under `lib/`, and the generated launcher script prepends that directory to `PATH` before starting Java.
+- JVM-side DexKit loading also supports explicit directory overrides:
+  - JVM system property: `dexclub.dexkit.native.library.dir`
+  - environment variable: `DEXCLUB_DEXKIT_NATIVE_LIBRARY_DIR`
+  - JVM system property: `dexclub.dexkit.native.cache.dir`
+  - environment variable: `DEXCLUB_DEXKIT_NATIVE_CACHE_DIR`
 - For string queries, prefer `Contains` with `ignoreCase: true` unless exact matching is explicitly required.
 - `analyst/references/query-json.md` and `analyst/references/query-json.schema.json` are generated from the current query model by `analyst/scripts/generate_query_reference.py`.
 - To regenerate them outside this repository layout, set `DEXCLUB_CLI_QUERY_SOURCE_DIR` to a dexkit source directory containing `query/` and `result/`, or set `DEXCLUB_CLI_REPO_ROOT` to a repository root that contains `dexkit/src/commonMain/kotlin/io/github/dexclub/dexkit/`.

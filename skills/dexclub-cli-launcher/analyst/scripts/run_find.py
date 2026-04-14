@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -88,9 +89,11 @@ def create_parser() -> argparse.ArgumentParser:
 
 def build_launcher_command(skill_root: Path, cli_args: list[str]) -> list[str]:
     launcher_scripts = skill_root / "launcher" / "scripts"
-    if launcher_scripts.joinpath("run_latest_release.sh").exists():
-        return ["bash", str((launcher_scripts / "run_latest_release.sh").resolve()), "--", *cli_args]
-    return ["cmd.exe", "/c", str((launcher_scripts / "run_latest_release.bat").resolve()), "--", *cli_args]
+    if os.name == "nt":
+        bat_path = launcher_scripts / "run_latest_release.bat"
+        return ["cmd.exe", "/c", str(bat_path.resolve()), "--", *cli_args]
+    sh_path = launcher_scripts / "run_latest_release.sh"
+    return ["bash", str(sh_path.resolve()), "--", *cli_args]
 
 
 def relay_stream(content: str, *, target) -> None:

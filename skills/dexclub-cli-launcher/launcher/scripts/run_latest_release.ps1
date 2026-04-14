@@ -300,6 +300,60 @@ function Get-AssetInfo {
     }
 }
 
+function Sync-BundledNativeLibraries {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ExtractDir
+    )
+
+    $jarPath = Get-ChildItem -LiteralPath $ExtractDir -Recurse -File -Filter "dexclub-cli-all.jar" |
+        Select-Object -First 1 -ExpandProperty FullName
+    if (-not $jarPath) {
+        return
+    }
+
+    if (-not ("System.IO.Compression.ZipFile" -as [type])) {
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+    }
+
+    $jarDir = Split-Path -Parent $jarPath
+    $nativeDir = Join-Path $jarDir "library"
+    New-Item -ItemType Directory -Force -Path $nativeDir | Out-Null
+
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($jarPath)
+    try {
+        foreach ($entry in $archive.Entries) {
+            if ([string]::IsNullOrEmpty($entry.Name)) {
+                continue
+            }
+            if (-not $entry.FullName.StartsWith("natives/", [System.StringComparison]::OrdinalIgnoreCase)) {
+                continue
+            }
+            if (-not $entry.Name.EndsWith(".dll", [System.StringComparison]::OrdinalIgnoreCase)) {
+                continue
+            }
+
+            $targetPath = Join-Path $nativeDir $entry.Name
+            $entryStream = $entry.Open()
+            try {
+                $fileStream = [System.IO.File]::Open($targetPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::Read)
+                try {
+                    $entryStream.CopyTo($fileStream)
+                }
+                finally {
+                    $fileStream.Dispose()
+                }
+            }
+            finally {
+                $entryStream.Dispose()
+            }
+        }
+    }
+    finally {
+        $archive.Dispose()
+    }
+}
+
 function Test-CachedAsset {
     param(
         [Parameter(Mandatory = $true)]
@@ -409,6 +463,7 @@ function Ensure-CachedAssetReady {
     }
 
     if ((Test-Path $assetInfo.DigestMarker) -and ((Get-Content -LiteralPath $assetInfo.DigestMarker -TotalCount 1) -eq $expectedSha)) {
+        Sync-BundledNativeLibraries -ExtractDir $assetInfo.ExtractDir
         return $assetInfo.ExtractDir
     }
 
@@ -424,6 +479,7 @@ function Ensure-CachedAssetReady {
     Expand-Archive -LiteralPath $assetInfo.ZipPath -DestinationPath $assetInfo.ExtractTmp -Force
     Set-Content -LiteralPath (Join-Path $assetInfo.ExtractTmp ".archive-sha256") -Value $expectedSha -NoNewline
     Move-Item -Force $assetInfo.ExtractTmp $assetInfo.ExtractDir
+    Sync-BundledNativeLibraries -ExtractDir $assetInfo.ExtractDir
     return $assetInfo.ExtractDir
 }
 
@@ -466,6 +522,7 @@ function Ensure-RemoteAssetReady {
     }
 
     if ((Test-Path $assetInfo.DigestMarker) -and ((Get-Content -LiteralPath $assetInfo.DigestMarker -TotalCount 1) -eq $expectedSha)) {
+        Sync-BundledNativeLibraries -ExtractDir $assetInfo.ExtractDir
         return $assetInfo.ExtractDir
     }
 
@@ -481,6 +538,7 @@ function Ensure-RemoteAssetReady {
     Expand-Archive -LiteralPath $assetInfo.ZipPath -DestinationPath $assetInfo.ExtractTmp -Force
     Set-Content -LiteralPath (Join-Path $assetInfo.ExtractTmp ".archive-sha256") -Value $expectedSha -NoNewline
     Move-Item -Force $assetInfo.ExtractTmp $assetInfo.ExtractDir
+    Sync-BundledNativeLibraries -ExtractDir $assetInfo.ExtractDir
     return $assetInfo.ExtractDir
 }
 
@@ -635,7 +693,8 @@ while ($index -lt $args.Count) {
             if ($index + 1 -lt $args.Count) {
                 $remainingArgs = $args[($index + 1)..($args.Count - 1)]
             }
-            break
+            $index = $args.Count
+            continue
         }
         default {
             throw "Unknown option: $($args[$index])"
@@ -658,6 +717,13 @@ $launcher = Get-Launcher -ExtractDir $extractDir
 if ($printLauncher) {
     Write-Output $launcher
     exit 0
+}
+
+$nativeLibraryDirs = Get-ChildItem -LiteralPath $extractDir -Recurse -Directory -Filter "library" |
+    Where-Object { $_.FullName -match '[\\/]lib[\\/]library$' } |
+    Select-Object -ExpandProperty FullName
+if ($nativeLibraryDirs) {
+    $env:PATH = (($nativeLibraryDirs -join ";") + ";" + $env:PATH)
 }
 
 & $launcher @remainingArgs
