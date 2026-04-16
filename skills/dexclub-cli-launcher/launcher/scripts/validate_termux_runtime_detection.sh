@@ -10,8 +10,9 @@ mkdir -p "$TMP_BASE_DIR"
 TMP_ROOT="${DEXCLUB_LAUNCHER_VALIDATE_TMP:-$(mktemp -d "$TMP_BASE_DIR/dexclub-launcher.XXXXXX")}"
 RESULT_DIR="$TMP_ROOT/results"
 FAKE_BIN="$TMP_ROOT/fake-bin"
+EMPTY_FS_ROOT="$TMP_ROOT/empty-fs"
 
-mkdir -p "$RESULT_DIR" "$FAKE_BIN"
+mkdir -p "$RESULT_DIR" "$FAKE_BIN" "$EMPTY_FS_ROOT"
 
 assert_eq() {
   local actual="$1"
@@ -122,6 +123,7 @@ assert_eq "$(latest_stdout "glibc_platform")" "linux-arm64" "glibc arm64 should 
 run_case "bionic_runtime_class" env \
   DEXCLUB_CLI_TEST_LDD_VERSION="" \
   DEXCLUB_CLI_TEST_GETPROP_SDK="34" \
+  DEXCLUB_CLI_TEST_FS_ROOT="$EMPTY_FS_ROOT" \
   "$LAUNCHER" --print-runtime-class
 assert_exit_code "$(latest_exit_code "bionic_runtime_class")" 0 "bionic runtime class should print successfully"
 assert_eq "$(latest_stdout "bionic_runtime_class")" "bionic" "bionic runtime class should be detected"
@@ -129,6 +131,7 @@ assert_eq "$(latest_stdout "bionic_runtime_class")" "bionic" "bionic runtime cla
 run_case "bionic_platform" env \
   DEXCLUB_CLI_TEST_LDD_VERSION="" \
   DEXCLUB_CLI_TEST_GETPROP_SDK="34" \
+  DEXCLUB_CLI_TEST_FS_ROOT="$EMPTY_FS_ROOT" \
   "$LAUNCHER" --print-platform
 assert_exit_code "$(latest_exit_code "bionic_platform")" 0 "bionic platform should print successfully"
 assert_eq "$(latest_stdout "bionic_platform")" "android-arm64" "bionic arm64 should map to android-arm64"
@@ -162,6 +165,7 @@ run_case "cache_bionic_tag" env \
   DEXCLUB_CLI_CACHE_DIR="$cache_root" \
   DEXCLUB_CLI_TEST_LDD_VERSION="" \
   DEXCLUB_CLI_TEST_GETPROP_SDK="34" \
+  DEXCLUB_CLI_TEST_FS_ROOT="$EMPTY_FS_ROOT" \
   "$LAUNCHER" --print-latest-tag
 assert_exit_code "$(latest_exit_code "cache_bionic_tag")" 1 "bionic must not reuse linux-arm64 cache"
 
@@ -170,6 +174,7 @@ run_case "missing_android_asset" env \
   DEXCLUB_CLI_CACHE_DIR="$TMP_ROOT/remote-cache" \
   DEXCLUB_CLI_TEST_LDD_VERSION="" \
   DEXCLUB_CLI_TEST_GETPROP_SDK="34" \
+  DEXCLUB_CLI_TEST_FS_ROOT="$EMPTY_FS_ROOT" \
   "$LAUNCHER" --update-cache --prepare-only
 assert_exit_code "$(latest_exit_code "missing_android_asset")" 22 "missing android-arm64 asset should stop with structured diagnostics"
 assert_file_contains "$RESULT_DIR/missing_android_asset.stderr" "detected runtime: bionic" "missing asset should report detected runtime"

@@ -28,7 +28,7 @@ repo_state_key() {
 }
 
 detect_uname_s() {
-  if [ -n "${DEXCLUB_CLI_TEST_UNAME_S:-}" ]; then
+  if [ "${DEXCLUB_CLI_TEST_UNAME_S+x}" = "x" ]; then
     printf '%s\n' "$DEXCLUB_CLI_TEST_UNAME_S"
     return 0
   fi
@@ -36,7 +36,7 @@ detect_uname_s() {
 }
 
 detect_uname_m() {
-  if [ -n "${DEXCLUB_CLI_TEST_UNAME_M:-}" ]; then
+  if [ "${DEXCLUB_CLI_TEST_UNAME_M+x}" = "x" ]; then
     printf '%s\n' "$DEXCLUB_CLI_TEST_UNAME_M"
     return 0
   fi
@@ -53,7 +53,7 @@ path_exists_for_detection() {
 }
 
 detect_ldd_version_output() {
-  if [ -n "${DEXCLUB_CLI_TEST_LDD_VERSION:-}" ]; then
+  if [ "${DEXCLUB_CLI_TEST_LDD_VERSION+x}" = "x" ]; then
     printf '%s\n' "$DEXCLUB_CLI_TEST_LDD_VERSION"
     return 0
   fi
@@ -64,7 +64,7 @@ detect_ldd_version_output() {
 }
 
 detect_getprop_sdk_output() {
-  if [ -n "${DEXCLUB_CLI_TEST_GETPROP_SDK:-}" ]; then
+  if [ "${DEXCLUB_CLI_TEST_GETPROP_SDK+x}" = "x" ]; then
     printf '%s\n' "$DEXCLUB_CLI_TEST_GETPROP_SDK"
     return 0
   fi
