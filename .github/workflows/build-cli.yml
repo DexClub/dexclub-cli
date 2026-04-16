@@ -5,8 +5,6 @@ on:
     branches:
       - master
   push:
-    branches:
-      - test/action-termux-runtime-detection
     tags:
       - "v*"
   workflow_dispatch:
@@ -92,12 +90,74 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - target: linux-x64
+            runner: ubuntu-24.04
+            os_name: linux
+            arch: x64
+            dist_task: :cli:shadowDistZip
+            dist_zip_name: cli-shadow.zip
+            msys2_msystem: ""
+            msys2_install: ""
+            msys2_bin_subdir: ""
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+            os_name: linux
+            arch: arm64
+            dist_task: :cli:shadowDistZip
+            dist_zip_name: cli-shadow.zip
+            msys2_msystem: ""
+            msys2_install: ""
+            msys2_bin_subdir: ""
           - target: android-arm64
             runner: ubuntu-24.04
             os_name: android
             arch: arm64
             dist_task: :cli:verifyAndroidArm64ShadowDist
             dist_zip_name: cli-shadow-android-arm64.zip
+            msys2_msystem: ""
+            msys2_install: ""
+            msys2_bin_subdir: ""
+          - target: windows-x64
+            runner: windows-2022
+            os_name: windows
+            arch: x64
+            dist_task: :cli:shadowDistZip
+            dist_zip_name: cli-shadow.zip
+            msys2_msystem: MINGW64
+            msys2_install: >-
+              mingw-w64-x86_64-gcc
+              mingw-w64-x86_64-cmake
+              mingw-w64-x86_64-ninja
+              mingw-w64-x86_64-zlib
+            msys2_bin_subdir: mingw64/bin
+          - target: windows-arm64
+            runner: windows-11-arm
+            os_name: windows
+            arch: arm64
+            dist_task: :cli:shadowDistZip
+            dist_zip_name: cli-shadow.zip
+            msys2_msystem: CLANGARM64
+            msys2_install: >-
+              mingw-w64-clang-aarch64-clang
+              mingw-w64-clang-aarch64-cmake
+              mingw-w64-clang-aarch64-ninja
+              mingw-w64-clang-aarch64-zlib
+            msys2_bin_subdir: clangarm64/bin
+          - target: macos-x64
+            runner: macos-15-intel
+            os_name: macos
+            arch: x64
+            dist_task: :cli:shadowDistZip
+            dist_zip_name: cli-shadow.zip
+            msys2_msystem: ""
+            msys2_install: ""
+            msys2_bin_subdir: ""
+          - target: macos-arm64
+            runner: macos-15
+            os_name: macos
+            arch: arm64
+            dist_task: :cli:shadowDistZip
+            dist_zip_name: cli-shadow.zip
             msys2_msystem: ""
             msys2_install: ""
             msys2_bin_subdir: ""
