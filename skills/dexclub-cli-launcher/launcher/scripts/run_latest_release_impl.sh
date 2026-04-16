@@ -601,18 +601,19 @@ resolve_asset_dir() {
       record_remote_failure "$platform" "Unable to refresh the cached release from GitHub Release."
       return $?
     fi
-    if ! extract_dir="$(ensure_remote_asset_ready "$platform" "$tag")"; then
+    if extract_dir="$(ensure_remote_asset_ready "$platform" "$tag")"; then
+      reset_remote_failures "$platform"
+      write_selected_tag "$platform" "$tag"
+      printf '%s\n' "$extract_dir"
+      return 0
+    else
       code=$?
-      if [ "$code" -eq 20 ]; then
+      if [ "$code" -eq 20 ] || [ "$code" -eq 21 ] || [ "$code" -eq 22 ]; then
         return "$code"
       fi
       record_remote_failure "$platform" "Unable to refresh the cached release from GitHub Release."
       return $?
     fi
-    reset_remote_failures "$platform"
-    write_selected_tag "$platform" "$tag"
-    printf '%s\n' "$extract_dir"
-    return 0
   fi
 
   if tag="$(find_cached_tag "$platform" 2>/dev/null)"; then
@@ -627,17 +628,19 @@ resolve_asset_dir() {
     record_remote_failure "$platform" "Unable to fetch the initial cached release from GitHub Release."
     return $?
   fi
-  if ! extract_dir="$(ensure_remote_asset_ready "$platform" "$tag")"; then
+  if extract_dir="$(ensure_remote_asset_ready "$platform" "$tag")"; then
+    reset_remote_failures "$platform"
+    write_selected_tag "$platform" "$tag"
+    printf '%s\n' "$extract_dir"
+    return 0
+  else
     code=$?
-    if [ "$code" -eq 20 ]; then
+    if [ "$code" -eq 20 ] || [ "$code" -eq 21 ] || [ "$code" -eq 22 ]; then
       return "$code"
     fi
     record_remote_failure "$platform" "Unable to fetch the initial cached release from GitHub Release."
     return $?
   fi
-  reset_remote_failures "$platform"
-  write_selected_tag "$platform" "$tag"
-  printf '%s\n' "$extract_dir"
 }
 
 print_usage() {
