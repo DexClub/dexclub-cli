@@ -46,6 +46,7 @@ jobs:
             build-tools;36.0.0
             platforms;android-36
             ndk;28.2.13676358
+            cmake;3.18.1
             cmake;3.31.6
 
       - name: Prepare libcxx local.properties
@@ -204,6 +205,7 @@ jobs:
             build-tools;36.0.0
             platforms;android-36
             ndk;28.2.13676358
+            cmake;3.18.1
             cmake;3.31.6
 
       - name: Setup MSYS2 toolchain
