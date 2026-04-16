@@ -5,6 +5,8 @@ on:
     branches:
       - master
   push:
+    branches:
+      - test/action-termux-runtime-detection
     tags:
       - "v*"
   workflow_dispatch:
@@ -93,6 +95,8 @@ jobs:
             runner: ubuntu-24.04
             os_name: linux
             arch: x64
+            dist_task: :cli:shadowDistZip
+            dist_zip_name: cli-shadow.zip
             msys2_msystem: ""
             msys2_install: ""
             msys2_bin_subdir: ""
@@ -100,6 +104,17 @@ jobs:
             runner: ubuntu-24.04-arm
             os_name: linux
             arch: arm64
+            dist_task: :cli:shadowDistZip
+            dist_zip_name: cli-shadow.zip
+            msys2_msystem: ""
+            msys2_install: ""
+            msys2_bin_subdir: ""
+          - target: android-arm64
+            runner: ubuntu-24.04
+            os_name: android
+            arch: arm64
+            dist_task: :cli:verifyAndroidArm64ShadowDist
+            dist_zip_name: cli-shadow-android-arm64.zip
             msys2_msystem: ""
             msys2_install: ""
             msys2_bin_subdir: ""
@@ -107,6 +122,8 @@ jobs:
             runner: windows-2022
             os_name: windows
             arch: x64
+            dist_task: :cli:shadowDistZip
+            dist_zip_name: cli-shadow.zip
             msys2_msystem: MINGW64
             msys2_install: >-
               mingw-w64-x86_64-gcc
@@ -118,6 +135,8 @@ jobs:
             runner: windows-11-arm
             os_name: windows
             arch: arm64
+            dist_task: :cli:shadowDistZip
+            dist_zip_name: cli-shadow.zip
             msys2_msystem: CLANGARM64
             msys2_install: >-
               mingw-w64-clang-aarch64-clang
@@ -129,6 +148,8 @@ jobs:
             runner: macos-15-intel
             os_name: macos
             arch: x64
+            dist_task: :cli:shadowDistZip
+            dist_zip_name: cli-shadow.zip
             msys2_msystem: ""
             msys2_install: ""
             msys2_bin_subdir: ""
@@ -136,6 +157,8 @@ jobs:
             runner: macos-15
             os_name: macos
             arch: arm64
+            dist_task: :cli:shadowDistZip
+            dist_zip_name: cli-shadow.zip
             msys2_msystem: ""
             msys2_install: ""
             msys2_bin_subdir: ""
@@ -220,16 +243,23 @@ jobs:
             }
 
             $env:PATH = "$toolchainBin;$env:PATH"
-            & ".\gradlew.bat" --no-daemon :cli:shadowDistZip
+            & ".\gradlew.bat" --no-daemon ${{ matrix.dist_task }}
           } else {
-            & "./gradlew" --no-daemon :cli:shadowDistZip
+            & "./gradlew" --no-daemon ${{ matrix.dist_task }}
           }
+
+      - name: Validate launcher runtime detection
+        if: matrix.target == 'android-arm64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ./skills/dexclub-cli-launcher/launcher/scripts/validate_termux_runtime_detection.sh
 
       - name: Package artifact
         shell: pwsh
         run: |
           $distDir = Join-Path $PWD "cli/build/distributions"
-          $sourceZip = Join-Path $distDir "cli-shadow.zip"
+          $sourceZip = Join-Path $distDir "${{ matrix.dist_zip_name }}"
           if (!(Test-Path $sourceZip)) {
             throw "Missing distribution archive: $sourceZip"
           }

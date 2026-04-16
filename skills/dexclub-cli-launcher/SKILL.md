@@ -37,7 +37,10 @@ The implementation is layered internally:
      - `.\skills\dexclub-cli-launcher\launcher\scripts\run_latest_release.bat --print-cache-path`
    - Resolve the normalized platform id:
      - `bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh --print-platform`
-     - `.\skills\dexclub-cli-launcher\launcher\scripts\run_latest_release.bat --print-platform`
+      - `.\skills\dexclub-cli-launcher\launcher\scripts\run_latest_release.bat --print-platform`
+   - Inspect the Unix runtime ABI class when debugging ARM64 selection:
+     - `bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh --print-runtime-class`
+     - `.\skills\dexclub-cli-launcher\launcher\scripts\run_latest_release.bat --print-runtime-class`
 2. Reuse local cache by default.
    - Only touch GitHub Release when:
      - no compatible local cache exists yet
@@ -65,9 +68,11 @@ The implementation is layered internally:
   - `.\skills\dexclub-cli-launcher\launcher\scripts\run_latest_release.bat --reset-remote-failures --update-cache --prepare-only`
 - If you only need to prepare or inspect the cached artifact, use:
   - `bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh --prepare-only`
+  - `bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh --print-runtime-class`
   - `bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh --print-launcher`
   - `bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh --print-latest-tag`
   - `.\skills\dexclub-cli-launcher\launcher\scripts\run_latest_release.bat --prepare-only`
+  - `.\skills\dexclub-cli-launcher\launcher\scripts\run_latest_release.bat --print-runtime-class`
   - `.\skills\dexclub-cli-launcher\launcher\scripts\run_latest_release.bat --print-launcher`
   - `.\skills\dexclub-cli-launcher\launcher\scripts\run_latest_release.bat --print-latest-tag`
 
@@ -132,7 +137,12 @@ python3 ./skills/dexclub-cli-launcher/analyst/scripts/analyze.py cache clear --s
 - Latest release discovery follows the GitHub release webpage redirect and does not depend on the GitHub API.
 - `--print-latest-tag` prints the currently selected local cached tag and does not trigger a remote check.
 - Remote failure state is isolated by repository and platform.
-- The scripts normalize the current machine to `linux|macos|windows` and `x64|arm64`, then look for `dexclub-cli-<os>-<arch>.zip`.
+- On ARM64 Unix the scripts classify the runtime ABI first, then choose the final artifact class:
+  - `glibc + arm64 -> linux-arm64`
+  - `bionic + arm64 -> android-arm64`
+  - `musl` / `unknown` stop without fallback
+- `--print-platform` returns the final artifact class, not the raw host tuple, and `--print-runtime-class` exposes the ABI classification used on Unix.
+- `android-arm64` is the Termux / Android `bionic` JVM CLI artifact, not an Android app.
 - If the latest release does not publish a matching asset for the current platform, the launcher exits non-zero after printing the unsupported-platform message. Preserve that message exactly.
 - Current Windows distributions are expected to carry the required runtime sidecar DLLs under `lib/`, and the generated launcher script prepends that directory to `PATH` before starting Java.
 - JVM-side DexKit loading also supports explicit directory overrides when needed:

@@ -300,6 +300,10 @@ function Get-AssetInfo {
     }
 }
 
+function Get-RuntimeClass {
+    return "windows"
+}
+
 function Sync-BundledNativeLibraries {
     param(
         [Parameter(Mandatory = $true)]
@@ -616,6 +620,7 @@ function Write-Usage {
 Usage:
   run_latest_release.bat [--print-cache-path]
   run_latest_release.bat [--print-platform]
+  run_latest_release.bat [--print-runtime-class]
   run_latest_release.bat [--print-latest-tag]
   run_latest_release.bat [--prepare-only]
   run_latest_release.bat [--print-launcher]
@@ -654,6 +659,10 @@ while ($index -lt $args.Count) {
         }
         "--print-platform" {
             Write-Output $platform
+            exit 0
+        }
+        "--print-runtime-class" {
+            Write-Output (Get-RuntimeClass)
             exit 0
         }
         "--print-latest-tag" {

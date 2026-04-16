@@ -27,6 +27,7 @@ The runtime path only depends on the pre-generated files under `analyst/referenc
 It provides:
 
 - automatic OS and architecture detection
+- runtime-aware ARM64 Unix artifact selection
 - GitHub Release based download and cache refresh
 - fixed local cache reuse
 - extracted launcher discovery and execution
@@ -90,6 +91,7 @@ Unix-like:
 
 ```bash
 bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh --prepare-only
+bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh --print-runtime-class
 bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh --update-cache --prepare-only
 bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh --reset-remote-failures --update-cache --prepare-only
 bash ./skills/dexclub-cli-launcher/launcher/scripts/run_latest_release.sh -- --help
@@ -130,6 +132,12 @@ Windows:
 - The default remote flow uses GitHub Release assets.
 - The launcher can still consume a local artifact if it has already been arranged under the expected cache layout.
 - Use `--print-cache-path` when you need the current cache location.
+- On ARM64 Unix, `--print-platform` now returns the final artifact class instead of the raw host tuple.
+  - `glibc + arm64 -> linux-arm64`
+  - `bionic + arm64 -> android-arm64`
+  - `musl` / `unknown` stop without fallback
+- Use `--print-runtime-class` when you need the launcher's ABI classification on Unix.
+- `android-arm64` means the Termux / Android `bionic` JVM CLI artifact, not an Android app.
 - Current Windows distributions are expected to include the required runtime sidecar DLLs under `lib/`, and the generated launcher script prepends that directory to `PATH` before starting Java.
 - JVM-side DexKit loading also supports explicit directory overrides:
   - JVM system property: `dexclub.dexkit.native.library.dir`

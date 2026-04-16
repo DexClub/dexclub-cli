@@ -20,14 +20,63 @@ resolve_cache_root() {
 
 CACHE_ROOT="$(resolve_cache_root)"
 STATE_DIR="${CACHE_ROOT}/.state"
+CURRENT_ARCH_NAME=""
+CURRENT_RUNTIME_CLASS=""
 
 repo_state_key() {
   printf '%s\n' "$REPO" | sed 's/[^A-Za-z0-9._-]/_/g'
 }
 
+detect_uname_s() {
+  if [ -n "${DEXCLUB_CLI_TEST_UNAME_S:-}" ]; then
+    printf '%s\n' "$DEXCLUB_CLI_TEST_UNAME_S"
+    return 0
+  fi
+  uname -s 2>/dev/null || printf 'unknown'
+}
+
+detect_uname_m() {
+  if [ -n "${DEXCLUB_CLI_TEST_UNAME_M:-}" ]; then
+    printf '%s\n' "$DEXCLUB_CLI_TEST_UNAME_M"
+    return 0
+  fi
+  uname -m 2>/dev/null || printf 'unknown'
+}
+
+path_exists_for_detection() {
+  local target_path="$1"
+  if [ -n "${DEXCLUB_CLI_TEST_FS_ROOT:-}" ]; then
+    [ -e "${DEXCLUB_CLI_TEST_FS_ROOT%/}${target_path}" ]
+    return $?
+  fi
+  [ -e "$target_path" ]
+}
+
+detect_ldd_version_output() {
+  if [ -n "${DEXCLUB_CLI_TEST_LDD_VERSION:-}" ]; then
+    printf '%s\n' "$DEXCLUB_CLI_TEST_LDD_VERSION"
+    return 0
+  fi
+  if ! command -v ldd >/dev/null 2>&1; then
+    return 0
+  fi
+  ldd --version 2>&1 || true
+}
+
+detect_getprop_sdk_output() {
+  if [ -n "${DEXCLUB_CLI_TEST_GETPROP_SDK:-}" ]; then
+    printf '%s\n' "$DEXCLUB_CLI_TEST_GETPROP_SDK"
+    return 0
+  fi
+  if ! command -v getprop >/dev/null 2>&1; then
+    return 0
+  fi
+  getprop ro.build.version.sdk 2>/dev/null || true
+}
+
 detect_os() {
   local uname_s
-  uname_s="$(uname -s 2>/dev/null || printf 'unknown')"
+  uname_s="$(detect_uname_s)"
   case "$uname_s" in
     Linux) printf 'linux\n' ;;
     Darwin) printf 'macos\n' ;;
@@ -41,7 +90,7 @@ detect_os() {
 
 detect_arch() {
   local uname_m
-  uname_m="$(uname -m 2>/dev/null || printf 'unknown')"
+  uname_m="$(detect_uname_m)"
   case "$uname_m" in
     x86_64|amd64) printf 'x64\n' ;;
     aarch64|arm64) printf 'arm64\n' ;;
@@ -50,6 +99,141 @@ detect_arch() {
       exit 20
       ;;
   esac
+}
+
+detect_runtime_class() {
+  local os_name="$1"
+  local arch_name="$2"
+  local ldd_output getprop_sdk
+
+  if [ "$os_name" != "linux" ] || [ "$arch_name" != "arm64" ]; then
+    printf 'not-applicable\n'
+    return 0
+  fi
+
+  ldd_output="$(detect_ldd_version_output | tr '[:upper:]' '[:lower:]')"
+  case "$ldd_output" in
+    *musl*)
+      printf 'musl\n'
+      return 0
+      ;;
+    *glibc*|*"gnu libc"*)
+      printf 'glibc\n'
+      return 0
+      ;;
+  esac
+
+  if path_exists_for_detection "/lib/ld-linux-aarch64.so.1" ||
+    path_exists_for_detection "/lib64/ld-linux-aarch64.so.1" ||
+    path_exists_for_detection "/usr/lib/aarch64-linux-gnu/libc.so.6"; then
+    printf 'glibc\n'
+    return 0
+  fi
+
+  getprop_sdk="$(detect_getprop_sdk_output)"
+  if path_exists_for_detection "/system/bin/linker64" ||
+    path_exists_for_detection "/apex/com.android.runtime/bin/linker64" ||
+    path_exists_for_detection "/apex/com.android.runtime/lib64/bionic/libc.so" ||
+    [ -n "$getprop_sdk" ]; then
+    printf 'bionic\n'
+    return 0
+  fi
+
+  printf 'unknown\n'
+}
+
+resolve_artifact_class() {
+  local os_name="$1"
+  local arch_name="$2"
+  local runtime_class="$3"
+
+  if [ "$os_name" != "linux" ] || [ "$arch_name" != "arm64" ]; then
+    printf '%s-%s\n' "$os_name" "$arch_name"
+    return 0
+  fi
+
+  case "$runtime_class" in
+    glibc) printf 'linux-arm64\n' ;;
+    bionic) printf 'android-arm64\n' ;;
+    musl)
+      report_runtime_stop "$runtime_class" "$arch_name" "explicit compatible target required" ""
+      ;;
+    unknown)
+      report_runtime_stop "$runtime_class" "$arch_name" "explicit compatible target required" ""
+      ;;
+    *)
+      report_runtime_stop "$runtime_class" "$arch_name" "explicit compatible target required" ""
+      ;;
+  esac
+}
+
+join_artifact_classes() {
+  awk '
+    NF {
+      if (count > 0) {
+        printf ", "
+      }
+      printf "%s", $0
+      count++
+    }
+    END {
+      if (count > 0) {
+        printf "\n"
+      }
+    }
+  '
+}
+
+list_available_artifact_classes_from_html() {
+  sed -n 's/.*dexclub-cli-\([A-Za-z0-9][A-Za-z0-9-]*\)\.zip.*/\1/p' | LC_ALL=C sort -u | join_artifact_classes
+}
+
+print_runtime_diagnostics() {
+  local runtime_class="$1"
+  local arch_name="$2"
+  local expected_artifact_class="$3"
+  local available_artifact_classes="${4:-}"
+  local result_line="$5"
+
+  printf 'detected runtime: %s\n' "$runtime_class" >&2
+  printf 'detected architecture: %s\n' "$arch_name" >&2
+  printf 'expected artifact class: %s\n' "$expected_artifact_class" >&2
+  if [ -n "$available_artifact_classes" ]; then
+    printf 'available artifact class: %s\n' "$available_artifact_classes" >&2
+  else
+    printf 'missing artifact class: %s\n' "$expected_artifact_class" >&2
+  fi
+  printf 'result: %s\n' "$result_line" >&2
+}
+
+report_runtime_stop() {
+  local runtime_class="$1"
+  local arch_name="$2"
+  local expected_artifact_class="$3"
+  local available_artifact_classes="${4:-}"
+  print_runtime_diagnostics \
+    "$runtime_class" \
+    "$arch_name" \
+    "$expected_artifact_class" \
+    "$available_artifact_classes" \
+    "incompatible runtime target, stop without fallback"
+  exit 21
+}
+
+report_missing_expected_artifact() {
+  local expected_artifact_class="$1"
+  local available_artifact_classes="${2:-}"
+  print_runtime_diagnostics \
+    "$CURRENT_RUNTIME_CLASS" \
+    "$CURRENT_ARCH_NAME" \
+    "$expected_artifact_class" \
+    "$available_artifact_classes" \
+    "expected artifact missing, stop without fallback"
+  exit 22
+}
+
+resolve_current_platform() {
+  resolve_artifact_class "$1" "$2" "$3"
 }
 
 compute_sha256() {
@@ -329,7 +513,7 @@ ensure_cached_asset_ready() {
 ensure_remote_asset_ready() {
   local platform="$1"
   local tag="$2"
-  local asset_base release_dir zip_path sha_path extract_dir extract_tmp digest_marker expanded_assets_url expanded_assets expected_sha actual_sha
+  local asset_base release_dir zip_path sha_path extract_dir extract_tmp digest_marker expanded_assets_url expanded_assets expected_sha actual_sha available_artifact_classes
   mapfile -t _paths < <(asset_paths "$platform" "$tag")
   asset_base="${_paths[0]}"
   release_dir="${_paths[1]}"
@@ -346,8 +530,8 @@ ensure_remote_asset_ready() {
     return 1
   fi
   if ! printf '%s' "$expanded_assets" | grep -Fq "${asset_base}.zip"; then
-    unsupported_platform
-    exit 20
+    available_artifact_classes="$(printf '%s' "$expanded_assets" | list_available_artifact_classes_from_html || true)"
+    report_missing_expected_artifact "$platform" "$available_artifact_classes"
   fi
 
   if [ ! -f "$zip_path" ]; then
@@ -461,6 +645,7 @@ print_usage() {
 Usage:
   run_latest_release.sh [--print-cache-path]
   run_latest_release.sh [--print-platform]
+  run_latest_release.sh [--print-runtime-class]
   run_latest_release.sh [--print-latest-tag]
   run_latest_release.sh [--prepare-only]
   run_latest_release.sh [--print-launcher]
@@ -475,7 +660,7 @@ EOF
 }
 
 main() {
-  local os_name arch_name platform extract_dir launcher
+  local os_name arch_name runtime_class platform extract_dir launcher
   local update_cache=0
   local prepare_only=0
   local print_launcher_flag=0
@@ -483,7 +668,10 @@ main() {
 
   os_name="$(detect_os)"
   arch_name="$(detect_arch)"
-  platform="${os_name}-${arch_name}"
+  runtime_class="$(detect_runtime_class "$os_name" "$arch_name")"
+
+  CURRENT_ARCH_NAME="$arch_name"
+  CURRENT_RUNTIME_CLASS="$runtime_class"
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -496,10 +684,16 @@ main() {
         exit 0
         ;;
       --print-platform)
+        platform="$(resolve_current_platform "$os_name" "$arch_name" "$runtime_class")"
         printf '%s\n' "$platform"
         exit 0
         ;;
+      --print-runtime-class)
+        printf '%s\n' "$runtime_class"
+        exit 0
+        ;;
       --print-latest-tag)
+        platform="$(resolve_current_platform "$os_name" "$arch_name" "$runtime_class")"
         print_local_selected_tag "$platform"
         exit $?
         ;;
@@ -530,6 +724,8 @@ main() {
         ;;
     esac
   done
+
+  platform="$(resolve_current_platform "$os_name" "$arch_name" "$runtime_class")"
 
   if [ "$reset_remote_failures_flag" = "1" ]; then
     reset_remote_failures "$platform"

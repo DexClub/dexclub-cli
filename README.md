@@ -169,23 +169,36 @@ java -jar cli/build/libs/dexclub-cli-all.jar export-java \
 
 ```bash
 ./gradlew :cli:installShadowDist :cli:shadowDistZip
+./gradlew :cli:installAndroidArm64ShadowDist :cli:androidArm64ShadowDistZip
+./gradlew :cli:verifyAndroidArm64ShadowDist
 ```
 
 ## 分发产物
 
-当前分发目录结构：
+zip 解压后的默认桌面目录结构：
 
 ```text
-cli-shadow/
-├── bin/
-│   ├── cli
-│   └── cli.bat
-└── lib/
-    ├── dexclub-cli-all.jar
-    ├── libgcc_s_seh-1.dll        # Windows
-    ├── libwinpthread-1.dll       # Windows
-    ├── libstdc++-6.dll           # Windows
-    └── zlib1.dll                 # Windows
+bin/
+├── cli
+└── cli.bat
+lib/
+├── dexclub-cli-all.jar
+├── libgcc_s_seh-1.dll            # Windows
+├── libwinpthread-1.dll           # Windows
+├── libstdc++-6.dll               # Windows
+└── zlib1.dll                     # Windows
+```
+
+`android-arm64` 分发会额外携带显式 native 目录：
+
+```text
+bin/
+├── cli
+└── cli.bat
+lib/
+├── dexclub-cli-all.jar
+└── library/
+    └── libdexkit.so              # android-arm64 / bionic
 ```
 
 说明：
@@ -193,6 +206,11 @@ cli-shadow/
 - `bin/cli` 用于 Linux / macOS
 - `bin/cli.bat` 用于 Windows
 - Windows 分发包会带上桌面 DexKit 运行所需 sidecar，并在启动脚本中把 `%APP_HOME%\lib` 前置到 `PATH`
+- `android-arm64` 是给 native Termux / Android `bionic` 运行时使用的 JVM CLI 分发，不是 Android app，也不是 `androidMain` 运行线
+- ARM64 Unix 现在按 runtime ABI 区分：
+  - `glibc + arm64 -> linux-arm64`
+  - `bionic + arm64 -> android-arm64`
+  - `musl` / `unknown` -> 停止并报告，不回退
 - 使用者仍需自行准备 Java 21 运行环境
 
 ## 仓库结构
@@ -225,6 +243,7 @@ cli-shadow/
 
 - `linux-x64`
 - `linux-arm64`
+- `android-arm64`
 - `windows-x64`
 - `windows-arm64`
 - `macos-x64`
