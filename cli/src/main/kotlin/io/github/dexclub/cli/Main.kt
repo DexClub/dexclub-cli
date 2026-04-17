@@ -21,9 +21,10 @@ import io.github.dexclub.core.workspace.WorkspaceManager
 import io.github.dexclub.core.workspace.WorkspaceResourceListing
 import io.github.dexclub.core.workspace.WorkspaceStatus
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.PrintStream
 import kotlin.system.exitProcess
@@ -54,6 +55,18 @@ private class CliUsageException(
     val usageText: String,
 ) : IllegalArgumentException(messageText)
 
+private data class CliStreams(
+    val output: PrintStream,
+    val error: PrintStream,
+)
+
+private data class CliInspectOutput(
+    val inputType: String,
+    val archiveInfo: DexArchiveInfo,
+)
+
+private val cliStreams = ThreadLocal<CliStreams>()
+
 fun main(args: Array<String>) {
     exitProcess(runCli(args))
 }
@@ -63,38 +76,43 @@ internal fun runCli(
     output: PrintStream = System.out,
     error: PrintStream = System.err,
 ): Int {
+    cliStreams.set(CliStreams(output = output, error = error))
     return try {
-        when {
-            args.isEmpty() -> {
-                printUsage(output)
-                0
-            }
+        try {
+            when {
+                args.isEmpty() -> {
+                    printUsage(output)
+                    0
+                }
 
-            args.first() in HELP_COMMANDS -> {
-                handleHelpCommand(args.drop(1), output)
-                0
-            }
+                args.first() in HELP_COMMANDS -> {
+                    handleHelpCommand(args.drop(1), output)
+                    0
+                }
 
-            args.first() in VERSION_COMMANDS -> {
-                printVersion(output)
-                0
-            }
+                args.first() in VERSION_COMMANDS -> {
+                    printVersion(output)
+                    0
+                }
 
-            args.first() == WORKSPACE_ROOT_COMMAND -> {
-                runWorkspaceEntry(args.drop(1))
-                0
-            }
+                args.first() == WORKSPACE_ROOT_COMMAND -> {
+                    runWorkspaceEntry(args.drop(1))
+                    0
+                }
 
-            else -> {
-                runCommand(args.first(), args.drop(1))
-                0
+                else -> {
+                    runCommand(args.first(), args.drop(1))
+                    0
+                }
             }
+        } catch (failure: CliUsageException) {
+            error.println("执行失败: ${failure.message ?: failure::class.simpleName.orEmpty()}")
+            error.println()
+            error.println(failure.usageText)
+            1
         }
-    } catch (failure: CliUsageException) {
-        error.println("执行失败: ${failure.message ?: failure::class.simpleName.orEmpty()}")
-        error.println()
-        error.println(failure.usageText)
-        1
+    } finally {
+        cliStreams.remove()
     }
 }
 
@@ -167,13 +185,24 @@ private fun runWorkspaceCommand(
 
 private fun runInspect(options: Map<String, List<String>>) {
     val inputs = requireInspectOrSearchInputs(options)
-    DexEngine(inputs).useEngine { dexEngine ->
-        writeInspectOutput(
-            inputKind = inferInspectOutputKind(inputs, dexEngine.inspect()),
-            inputs = inputs,
-            archiveInfo = dexEngine.inspect(),
-        )
+    val archiveInfo = withSuppressedThirdPartyOutput {
+        DexEngine(inputs).useEngine { dexEngine -> dexEngine.inspect() }
     }
+    val inputKind = inferInspectOutputKind(inputs, archiveInfo)
+    val outputFormat = requireOutputFormat(options, default = OutputFormat.Text)
+    val outputText = when (outputFormat) {
+        OutputFormat.Text -> formatInspectOutput(
+            inputKind = inputKind,
+            inputs = inputs,
+            archiveInfo = archiveInfo,
+        )
+
+        OutputFormat.Json -> buildInspectJsonOutput(
+            inputKind = inputKind,
+            archiveInfo = archiveInfo,
+        ).toString()
+    }
+    writeOutput(outputText, findOptionalOption(options, "output-file"))
 }
 
 private fun runExportDex(options: Map<String, List<String>>) = runBlocking {
@@ -268,17 +297,17 @@ private fun runWorkspaceStatus(options: Map<String, List<String>>) {
 private fun runWorkspaceInspect(options: Map<String, List<String>>) {
     val manager = requireWorkspaceManager(options)
     val status = manager.status()
-    val archiveInfo = manager.inspect()
+    val archiveInfo = withSuppressedThirdPartyOutput { manager.inspect() }
     val outputText = when (requireOutputFormat(options, default = OutputFormat.Text)) {
         OutputFormat.Text -> formatWorkspaceInspect(
             inputKind = status.metadata.input.type,
             archiveInfo = archiveInfo,
         )
 
-        OutputFormat.Json -> buildJsonObject {
-            put("workspaceInputType", status.metadata.input.type.name.lowercase())
-            put("archiveInfo", Json.parseToJsonElement(archiveInfo.toCoreJsonString()))
-        }.toString()
+        OutputFormat.Json -> buildInspectJsonOutput(
+            inputKind = status.metadata.input.type,
+            archiveInfo = archiveInfo,
+        ).toString()
     }
     writeOutput(outputText, findOptionalOption(options, "output-file"))
 }
@@ -315,8 +344,10 @@ private fun runWorkspaceExportDex(options: Map<String, List<String>>) = runBlock
     val className = requireOption(options, "class")
     val output = requireOption(options, "output")
     ensureParentDirectory(output)
-    val result = manager.exportDex(className = className, outputPath = output)
-    println("output=${result.outputPath}")
+    val result = withSuppressedThirdPartyOutput {
+        manager.exportDex(className = className, outputPath = output)
+    }
+    cliOutput().println("output=${result.outputPath}")
 }
 
 private fun runWorkspaceExportSmali(options: Map<String, List<String>>) = runBlocking {
@@ -325,12 +356,14 @@ private fun runWorkspaceExportSmali(options: Map<String, List<String>>) = runBlo
     val output = requireOption(options, "output")
     val autoUnicodeDecode = findOptionalOption(options, "auto-unicode-decode")?.toBooleanStrictOrNull() ?: true
     ensureParentDirectory(output)
-    val result = manager.exportSmali(
-        className = className,
-        outputPath = output,
-        autoUnicodeDecode = autoUnicodeDecode,
-    )
-    println("output=${result.outputPath}")
+    val result = withSuppressedThirdPartyOutput {
+        manager.exportSmali(
+            className = className,
+            outputPath = output,
+            autoUnicodeDecode = autoUnicodeDecode,
+        )
+    }
+    cliOutput().println("output=${result.outputPath}")
 }
 
 private fun runWorkspaceExportJava(options: Map<String, List<String>>) = runBlocking {
@@ -338,12 +371,16 @@ private fun runWorkspaceExportJava(options: Map<String, List<String>>) = runBloc
     val className = requireOption(options, "class")
     val output = requireOption(options, "output")
     ensureParentDirectory(output)
-    val result = manager.exportJava(className = className, outputPath = output)
-    println("output=${result.outputPath}")
+    val result = withSuppressedThirdPartyOutput {
+        manager.exportJava(className = className, outputPath = output)
+    }
+    cliOutput().println("output=${result.outputPath}")
 }
 
 private fun runWorkspaceManifest(options: Map<String, List<String>>) {
-    val manifest = requireWorkspaceManager(options).manifest()
+    val manifest = withSuppressedThirdPartyOutput {
+        requireWorkspaceManager(options).manifest()
+    }
     val outputText = when (requireOutputFormat(options, default = OutputFormat.Text)) {
         OutputFormat.Text -> manifest.manifest
         OutputFormat.Json -> manifest.toCoreJsonString()
@@ -352,7 +389,9 @@ private fun runWorkspaceManifest(options: Map<String, List<String>>) {
 }
 
 private fun runWorkspaceRes(options: Map<String, List<String>>) {
-    val listing = requireWorkspaceManager(options).resources()
+    val listing = withSuppressedThirdPartyOutput {
+        requireWorkspaceManager(options).resources()
+    }
     val outputText = when (requireOutputFormat(options, default = OutputFormat.Text)) {
         OutputFormat.Text -> formatWorkspaceResources(listing)
         OutputFormat.Json -> listing.toCoreJsonString()
@@ -460,18 +499,20 @@ private inline fun <reified T> runAdvancedSearch(
     val outputFormat = requireOutputFormat(options, default = OutputFormat.Json)
     val limit = requireOptionalPositiveLimit(options)
 
-    DexEngine(inputs).useEngine { dexEngine ->
-        val results = executor(dexEngine, inputs)
-        val limitedResults = limit?.let(results::take) ?: results
-        val outputText = when (outputFormat) {
-            OutputFormat.Json -> limitedResults.toCoreJsonString()
-            OutputFormat.Text -> formatAdvancedSearchResults(limitedResults, inputs.size)
+    val results = withSuppressedThirdPartyOutput {
+        DexEngine(inputs).useEngine { dexEngine ->
+            executor(dexEngine, inputs)
         }
-        writeOutput(
-            text = outputText,
-            outputPath = findOptionalOption(options, "output-file"),
-        )
     }
+    val limitedResults = limit?.let(results::take) ?: results
+    val outputText = when (outputFormat) {
+        OutputFormat.Json -> limitedResults.toCoreJsonString()
+        OutputFormat.Text -> formatAdvancedSearchResults(limitedResults, inputs.size)
+    }
+    writeOutput(
+        text = outputText,
+        outputPath = findOptionalOption(options, "output-file"),
+    )
 }
 
 private inline fun <reified T> runWorkspaceAdvancedSearch(
@@ -482,7 +523,7 @@ private inline fun <reified T> runWorkspaceAdvancedSearch(
     val inputCount = manager.status().metadata.input.binding.resolvedEntries.size
     val outputFormat = requireOutputFormat(options, default = OutputFormat.Json)
     val limit = requireOptionalPositiveLimit(options)
-    val results = executor(manager)
+    val results = withSuppressedThirdPartyOutput { executor(manager) }
     val limitedResults = limit?.let(results::take) ?: results
     val outputText = when (outputFormat) {
         OutputFormat.Json -> limitedResults.toCoreJsonString()
@@ -535,6 +576,49 @@ private fun requireOutputFormat(
 private fun requireOptionalPositiveLimit(options: Map<String, List<String>>): Int? {
     val value = findOptionalOption(options, "limit") ?: return null
     return value.toIntOrNull()?.takeIf { it > 0 } ?: error("参数 --limit 必须是正整数")
+}
+
+private fun cliOutput(): PrintStream = cliStreams.get()?.output ?: System.out
+
+private fun cliError(): PrintStream = cliStreams.get()?.error ?: System.err
+
+private inline fun <T> withSuppressedThirdPartyOutput(block: () -> T): T {
+    val originalOut = System.out
+    val originalErr = System.err
+    val capturedStdout = ByteArrayOutputStream()
+    val capturedStderr = ByteArrayOutputStream()
+    val temporaryOut = PrintStream(capturedStdout, true, Charsets.UTF_8)
+    val temporaryErr = PrintStream(capturedStderr, true, Charsets.UTF_8)
+    System.setOut(temporaryOut)
+    System.setErr(temporaryErr)
+    return try {
+        block()
+    } catch (throwable: Throwable) {
+        replayCapturedLogs(capturedStdout, capturedStderr)
+        throw throwable
+    } finally {
+        temporaryOut.flush()
+        temporaryErr.flush()
+        temporaryOut.close()
+        temporaryErr.close()
+        System.setOut(originalOut)
+        System.setErr(originalErr)
+    }
+}
+
+private fun replayCapturedLogs(
+    capturedStdout: ByteArrayOutputStream,
+    capturedStderr: ByteArrayOutputStream,
+) {
+    val stderr = cliError()
+    val stdoutText = capturedStdout.toString(Charsets.UTF_8).trimEnd()
+    val stderrText = capturedStderr.toString(Charsets.UTF_8).trimEnd()
+    if (stdoutText.isNotEmpty()) {
+        stderr.println(stdoutText)
+    }
+    if (stderrText.isNotEmpty()) {
+        stderr.println(stderrText)
+    }
 }
 
 private fun parseWorkspaceInputKind(value: String?): WorkspaceInputKind? {
@@ -643,33 +727,60 @@ private fun inferInspectOutputKind(
     }
 }
 
-private fun writeInspectOutput(
+private fun buildInspectJsonOutput(
+    inputKind: WorkspaceInputKind,
+    archiveInfo: DexArchiveInfo,
+): kotlinx.serialization.json.JsonObject {
+    return buildJsonObject {
+        put("inputType", inputKind.name.lowercase())
+        put("archiveInfo", buildJsonObject {
+            put("kind", archiveInfo.kind.name.lowercase())
+            put("inputs", buildJsonArray {
+                archiveInfo.inputs.forEach { input ->
+                    add(buildJsonObject {
+                        put("path", input.path)
+                    })
+                }
+            })
+            put("dexCount", archiveInfo.dexCount)
+            archiveInfo.classCount?.let { put("classCount", it) }
+        })
+    }
+}
+
+private fun formatInspectOutput(
     inputKind: WorkspaceInputKind,
     inputs: List<String>,
     archiveInfo: DexArchiveInfo,
-) {
-    when (inputKind) {
+) : String {
+    return when (inputKind) {
         WorkspaceInputKind.Apk -> {
-            println("type=apk")
-            println("input=${inputs.single()}")
-            println("dexCount=${archiveInfo.dexCount}")
+            buildString {
+                appendLine("type=apk")
+                appendLine("input=${inputs.single()}")
+                appendLine("dexCount=${archiveInfo.dexCount}")
+            }.trimEnd()
         }
 
         WorkspaceInputKind.Dex -> {
-            println("type=dex")
-            println("input=${inputs.single()}")
-            println("dexCount=${archiveInfo.dexCount}")
-            println("classCount=${archiveInfo.classCount ?: 0}")
+            buildString {
+                appendLine("type=dex")
+                appendLine("input=${inputs.single()}")
+                appendLine("dexCount=${archiveInfo.dexCount}")
+                appendLine("classCount=${archiveInfo.classCount ?: 0}")
+            }.trimEnd()
         }
 
         WorkspaceInputKind.Dexs -> {
-            println("type=dexs")
-            println("inputCount=${inputs.size}")
-            inputs.forEach { input ->
-                println("input=$input")
-            }
-            println("dexCount=${archiveInfo.dexCount}")
-            println("classCount=${archiveInfo.classCount ?: 0}")
+            buildString {
+                appendLine("type=dexs")
+                appendLine("inputCount=${inputs.size}")
+                inputs.forEach { input ->
+                    appendLine("input=$input")
+                }
+                appendLine("dexCount=${archiveInfo.dexCount}")
+                appendLine("classCount=${archiveInfo.classCount ?: 0}")
+            }.trimEnd()
         }
     }
 }
@@ -732,14 +843,14 @@ private fun writeOutput(
     outputPath: String?,
 ) {
     if (outputPath == null) {
-        println(text)
+        cliOutput().println(text)
         return
     }
 
     ensureParentDirectory(outputPath)
     val outputFile = File(outputPath).absoluteFile
     outputFile.writeText(text, Charsets.UTF_8)
-    println("output=${outputFile.absolutePath}")
+    cliOutput().println("output=${outputFile.absolutePath}")
 }
 
 private fun handleHelpCommand(
@@ -907,10 +1018,12 @@ private suspend fun runSingleDexExport(
     val output = requireOption(options, "output")
     ensureParentDirectory(output)
 
-    val outputPath = DexEngine(listOf(input)).useEngine { dexEngine ->
-        exporter(dexEngine, input, className, output)
+    val outputPath = withSuppressedThirdPartyOutput {
+        DexEngine(listOf(input)).useEngine { dexEngine ->
+            exporter(dexEngine, input, className, output)
+        }
     }
-    println("output=$outputPath")
+    cliOutput().println("output=$outputPath")
 }
 
 private fun findCommand(token: String): CommandSpec? = COMMANDS.firstOrNull { it.name == token }
@@ -945,9 +1058,10 @@ private val COMMANDS = listOf(
     CommandSpec(
         name = "inspect",
         summary = "检查 apk 或 dex 输入，输出基本统计信息",
-        argumentsUsage = "--input <apk|dex> [--input <dex> ...]",
+        argumentsUsage = "--input <apk|dex> [--input <dex> ...] [--output-format text|json] [--output-file <文件>]",
         details = listOf(
             "--input 可以重复传入；单输入支持 apk 或 dex，多输入仅支持多个 dex。",
+            "--output-format 默认为 text。",
         ),
         handler = ::runInspect,
     ),

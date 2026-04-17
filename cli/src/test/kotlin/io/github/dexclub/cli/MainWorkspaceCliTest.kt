@@ -1,5 +1,8 @@
 package io.github.dexclub.cli
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.PrintStream
@@ -11,6 +14,146 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class MainWorkspaceCliTest {
+    @Test
+    fun `workspace inspect json should be parseable and clean for apk input`() {
+        val fixture = WorkspaceFixture.generated()
+        val workspaceDir = Files.createTempDirectory("dexclub-workspace-cli-inspect-json").toFile()
+        assertEquals(
+            0,
+            invokeCli(
+                "workspace",
+                "init",
+                "--workspace",
+                workspaceDir.absolutePath,
+                "--input",
+                fixture.apkFile.absolutePath,
+            ).exitCode,
+        )
+
+        val inspect = invokeCli(
+            "workspace",
+            "inspect",
+            "--workspace",
+            workspaceDir.absolutePath,
+            "--output-format",
+            "json",
+        )
+        assertEquals(0, inspect.exitCode, inspect.stderr)
+        val parsed = Json.parseToJsonElement(inspect.stdout.trim())
+        assertEquals("apk", parsed.jsonObject.getValue("inputType").jsonPrimitive.content)
+        assertTrue(!inspect.stdout.contains("I/DexKit"), inspect.stdout)
+        assertTrue(!inspect.stdout.contains("DEBUG jadx"), inspect.stdout)
+    }
+
+    @Test
+    fun `workspace manifest json should be parseable and clean`() {
+        val fixture = WorkspaceFixture.generated()
+        val workspaceDir = Files.createTempDirectory("dexclub-workspace-cli-manifest-json").toFile()
+        assertEquals(
+            0,
+            invokeCli(
+                "workspace",
+                "init",
+                "--workspace",
+                workspaceDir.absolutePath,
+                "--input",
+                fixture.apkFile.absolutePath,
+            ).exitCode,
+        )
+
+        val manifest = invokeCli(
+            "workspace",
+            "manifest",
+            "--workspace",
+            workspaceDir.absolutePath,
+            "--output-format",
+            "json",
+        )
+        assertEquals(0, manifest.exitCode, manifest.stderr)
+        val parsed = Json.parseToJsonElement(manifest.stdout.trim())
+        assertTrue(parsed.jsonObject.getValue("manifest").jsonPrimitive.content.contains("<manifest"))
+        assertTrue(!manifest.stdout.contains("DEBUG jadx"), manifest.stdout)
+    }
+
+    @Test
+    fun `top level inspect json should be parseable and clean for apk input`() {
+        val fixture = WorkspaceFixture.generated()
+        val inspect = invokeCli(
+            "inspect",
+            "--input",
+            fixture.apkFile.absolutePath,
+            "--output-format",
+            "json",
+        )
+        assertEquals(0, inspect.exitCode, inspect.stderr)
+        val parsed = Json.parseToJsonElement(inspect.stdout.trim())
+        assertEquals("apk", parsed.jsonObject.getValue("inputType").jsonPrimitive.content)
+        assertTrue(!inspect.stdout.contains("I/DexKit"), inspect.stdout)
+    }
+
+    @Test
+    fun `workspace find class with output file should keep stdout clean`() {
+        val fixture = WorkspaceFixture.generated()
+        val workspaceDir = Files.createTempDirectory("dexclub-workspace-cli-find-output").toFile()
+        assertEquals(
+            0,
+            invokeCli(
+                "workspace",
+                "init",
+                "--workspace",
+                workspaceDir.absolutePath,
+                "--input",
+                fixture.apkFile.absolutePath,
+            ).exitCode,
+        )
+        val outputFile = File(workspaceDir, "find-class.json")
+        val find = invokeCli(
+            "workspace",
+            "find-class",
+            "--workspace",
+            workspaceDir.absolutePath,
+            "--query-json",
+            """{"matcher":{"className":{"value":"SampleSearchTarget","matchType":"Contains","ignoreCase":true}}}""",
+            "--output-file",
+            outputFile.absolutePath,
+        )
+        assertEquals(0, find.exitCode, find.stderr)
+        assertEquals("output=${outputFile.absolutePath}", find.stdout.trim())
+        Json.parseToJsonElement(outputFile.readText(Charsets.UTF_8))
+    }
+
+    @Test
+    fun `workspace export java should keep stdout clean`() {
+        val fixture = WorkspaceFixture.generated()
+        val workspaceDir = Files.createTempDirectory("dexclub-workspace-cli-export-java-clean").toFile()
+        assertEquals(
+            0,
+            invokeCli(
+                "workspace",
+                "init",
+                "--workspace",
+                workspaceDir.absolutePath,
+                "--input",
+                fixture.apkFile.absolutePath,
+            ).exitCode,
+        )
+        val outputFile = File(workspaceDir, "SampleSearchTarget.java")
+        val export = invokeCli(
+            "workspace",
+            "export-java",
+            "--workspace",
+            workspaceDir.absolutePath,
+            "--class",
+            WorkspaceFixture.SAMPLE_CLASS_NAME,
+            "--output",
+            outputFile.absolutePath,
+        )
+        assertEquals(0, export.exitCode, export.stderr)
+        assertEquals("output=${outputFile.absolutePath}", export.stdout.trim())
+        assertTrue(outputFile.isFile)
+        assertTrue(!export.stdout.contains("DEBUG jadx"), export.stdout)
+    }
+
     @Test
     fun `workspace init should canonicalize dexs directory and explicit list the same way`() {
         val fixture = WorkspaceFixture.generated()

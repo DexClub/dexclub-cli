@@ -4,13 +4,13 @@ import io.github.dexclub.core.model.DexArchiveInfo
 import io.github.dexclub.core.model.DexInputKind
 import io.github.dexclub.core.model.DexInputRef
 import java.io.File
+import java.util.zip.ZipFile
 
 internal class DexArchiveInspector(
     private val inputPaths: List<String>,
     private val inputFiles: List<File>,
     private val dexCountProvider: () -> Int,
     private val classCountProvider: () -> Int,
-    private val readDexNumProvider: () -> Int?,
 ) {
     fun inspect(): DexArchiveInfo {
         val kind = inferInputKind()
@@ -18,7 +18,7 @@ internal class DexArchiveInspector(
             kind = kind,
             inputs = inputPaths.map(::DexInputRef),
             dexCount = when (kind) {
-                DexInputKind.Apk -> readDexNumProvider() ?: 0
+                DexInputKind.Apk -> countApkDexEntries(inputFiles.single())
                 DexInputKind.Dex -> dexCountProvider()
                 DexInputKind.Unknown -> 0
             },
@@ -44,6 +44,14 @@ internal class DexArchiveInspector(
             inputFile.extension.equals("apk", ignoreCase = true) -> DexInputKind.Apk
             DexInputInspector.isDex(inputFile) -> DexInputKind.Dex
             else -> DexInputKind.Unknown
+        }
+    }
+
+    private fun countApkDexEntries(apkFile: File): Int {
+        return ZipFile(apkFile).use { zip ->
+            zip.entries().asSequence()
+                .filterNot { it.isDirectory }
+                .count { entry -> entry.name.endsWith(".dex", ignoreCase = true) }
         }
     }
 }

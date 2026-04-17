@@ -63,7 +63,6 @@ actual class DexEngine actual constructor(
             inputFiles = dexFiles,
             dexCountProvider = ::dexCount,
             classCountProvider = ::classCount,
-            readDexNumProvider = dexKitRuntime::readDexNum,
         )
     }
     private val dexKitSearchBackend by lazy(LazyThreadSafetyMode.NONE) {

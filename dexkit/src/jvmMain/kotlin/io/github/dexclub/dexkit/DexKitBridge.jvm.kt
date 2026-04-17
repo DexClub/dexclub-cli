@@ -20,6 +20,7 @@ import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.zip.ZipFile
 
 actual class DexKitBridge {
     private var delegate: NativeDexKitBridge? = null
@@ -33,7 +34,7 @@ actual class DexKitBridge {
             require(dexFile.isFile) { "dex 路径必须是文件: ${dexFile.absolutePath}" }
         }
         delegate = if (files.size == 1 && files.first().extension.equals("apk", ignoreCase = true)) {
-            NativeDexKitBridge.create(files.first().absolutePath)
+            NativeDexKitBridge.create(readDexBytesFromApk(files.first()))
         } else {
             NativeDexKitBridge.create(files.map { it.readBytes() }.toTypedArray())
         }
@@ -145,6 +146,20 @@ actual class DexKitBridge {
 
     private fun ensureDelegate(): NativeDexKitBridge =
         checkNotNull(delegate) { "DexKitBridge 未初始化，请传入有效的 dex/apk 数据" }
+
+    private fun readDexBytesFromApk(apkFile: File): Array<ByteArray> {
+        val dexEntries = ZipFile(apkFile).use { zip ->
+            zip.entries().asSequence()
+                .filterNot { it.isDirectory }
+                .filter { it.name.endsWith(".dex", ignoreCase = true) }
+                .map { entry ->
+                    zip.getInputStream(entry).use { input -> input.readBytes() }
+                }
+                .toList()
+        }
+        require(dexEntries.isNotEmpty()) { "apk 中未找到任何 dex: ${apkFile.absolutePath}" }
+        return dexEntries.toTypedArray()
+    }
 
     private companion object {
         private val lock = Any()

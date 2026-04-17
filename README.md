@@ -82,10 +82,19 @@ java -jar cli/build/libs/dexclub-cli-all.jar inspect \
   --input /path/to/classes2.dex
 ```
 
+输出 JSON：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar inspect \
+  --input /path/to/app.apk \
+  --output-format json
+```
+
 规则：
 
 - 单输入支持 `apk` 或 `dex`
 - 多输入仅支持多个 `dex`
+- `--output-format` 支持 `text` 与 `json`
 
 ### find-class / find-method / find-field
 
@@ -205,6 +214,14 @@ java -jar cli/build/libs/dexclub-cli-all.jar workspace status \
 ```bash
 java -jar cli/build/libs/dexclub-cli-all.jar workspace inspect \
   --workspace /tmp/app-ws
+```
+
+查看 workspace 分析摘要的 JSON：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar workspace inspect \
+  --workspace /tmp/app-ws \
+  --output-format json
 ```
 
 查看当前 workspace 能力矩阵：
