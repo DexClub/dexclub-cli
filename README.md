@@ -16,6 +16,7 @@
 - 检查 apk / dex 输入
 - 按 JSON 条件查找类、方法、字段
 - 导出单类 dex、smali、Java
+- 以 `workspace` 模式管理 `apk|dex|dexs` 的工程化静态分析状态
 
 ## 快速开始
 
@@ -59,6 +60,8 @@ java -jar cli/build/libs/dexclub-cli-all.jar <command> [args]
 ```bash
 java -jar cli/build/libs/dexclub-cli-all.jar --help
 java -jar cli/build/libs/dexclub-cli-all.jar help find-method
+java -jar cli/build/libs/dexclub-cli-all.jar help workspace
+java -jar cli/build/libs/dexclub-cli-all.jar help workspace inspect
 java -jar cli/build/libs/dexclub-cli-all.jar --version
 ```
 
@@ -143,6 +146,111 @@ java -jar cli/build/libs/dexclub-cli-all.jar export-java \
 
 - 这组导出命令当前仅支持单个 `dex` 输入
 - 必须显式传入 `--class` 与 `--output`
+
+### workspace
+
+`workspace` 是显式的工程化静态分析模式，状态固定写入：
+
+```text
+<workspace>/.dexclub-cli/
+```
+
+支持三类输入：
+
+- `apk`
+- `dex`
+- `dexs`
+
+其中：
+
+- `apk` workspace 支持 `manifest` / `res`
+- `dex` / `dexs` workspace 不支持 `manifest` / `res`，会显式失败
+- 顶层无状态命令不会读写 `.dexclub-cli/`
+
+初始化 APK workspace：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar workspace init \
+  --workspace /tmp/app-ws \
+  --input /path/to/app.apk
+```
+
+初始化单 dex workspace：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar workspace init \
+  --workspace /tmp/dex-ws \
+  --input /path/to/classes.dex
+```
+
+初始化 dexs workspace：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar workspace init \
+  --workspace /tmp/dexs-ws \
+  --input /path/to/classes.dex \
+  --input /path/to/classes2.dex \
+  --type dexs
+```
+
+查看 workspace 身份与状态：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar workspace status \
+  --workspace /tmp/app-ws
+```
+
+查看当前 workspace 绑定输入的分析摘要：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar workspace inspect \
+  --workspace /tmp/app-ws
+```
+
+查看当前 workspace 能力矩阵：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar workspace capabilities \
+  --workspace /tmp/app-ws
+```
+
+在 workspace 上查找方法：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar workspace find-method \
+  --workspace /tmp/app-ws \
+  --query-json '{"matcher":{"usingStrings":[{"value":"dexclub-needle-string","matchType":"Equals"}]}}'
+```
+
+在 workspace 上导出 smali：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar workspace export-smali \
+  --workspace /tmp/dexs-ws \
+  --class fixture.samples.SampleSearchTarget \
+  --output /tmp/SampleSearchTarget.smali
+```
+
+读取 APK workspace 的 manifest：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar workspace manifest \
+  --workspace /tmp/app-ws
+```
+
+列出 APK workspace 的资源入口：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar workspace res \
+  --workspace /tmp/app-ws
+```
+
+当前约束：
+
+- `workspace status` 只展示 workspace 身份与状态摘要
+- `workspace inspect` 展示绑定输入的分析摘要
+- `workspace export-*` 在 `dexs` 上会先解析唯一 `source dex`；若命中多个 dex，则显式失败
+- `workspace cache/*` 与 `workspace runs/*` 当前未进入主 CLI 产品面
 
 ## 构建
 

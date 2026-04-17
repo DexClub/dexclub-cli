@@ -1,20 +1,29 @@
 package io.github.dexclub.cli
 
 import io.github.dexclub.core.DexEngine
-import io.github.dexclub.core.parseCoreJson
-import io.github.dexclub.core.request.DexClassQueryRequest
 import io.github.dexclub.core.config.SmaliRenderConfig
-import io.github.dexclub.core.model.DexInputKind
+import io.github.dexclub.core.model.DexArchiveInfo
 import io.github.dexclub.core.model.DexClassHit
 import io.github.dexclub.core.model.DexFieldHit
+import io.github.dexclub.core.model.DexInputKind
 import io.github.dexclub.core.model.DexMethodHit
+import io.github.dexclub.core.parseCoreJson
+import io.github.dexclub.core.request.DexClassQueryRequest
 import io.github.dexclub.core.request.DexExportRequest
 import io.github.dexclub.core.request.DexFieldQueryRequest
-import io.github.dexclub.core.request.JavaExportRequest
 import io.github.dexclub.core.request.DexMethodQueryRequest
+import io.github.dexclub.core.request.JavaExportRequest
 import io.github.dexclub.core.request.SmaliExportRequest
 import io.github.dexclub.core.toCoreJsonString
+import io.github.dexclub.core.workspace.WorkspaceCapabilities
+import io.github.dexclub.core.workspace.WorkspaceInputKind
+import io.github.dexclub.core.workspace.WorkspaceManager
+import io.github.dexclub.core.workspace.WorkspaceResourceListing
+import io.github.dexclub.core.workspace.WorkspaceStatus
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.io.File
 import java.io.PrintStream
 import kotlin.system.exitProcess
@@ -27,29 +36,65 @@ private data class CommandSpec(
     val handler: (Map<String, List<String>>) -> Unit,
 )
 
+private data class WorkspaceCommandSpec(
+    val name: String,
+    val summary: String,
+    val argumentsUsage: String,
+    val details: List<String> = emptyList(),
+    val handler: (Map<String, List<String>>) -> Unit,
+)
+
 private enum class OutputFormat {
     Text,
     Json,
 }
 
+private class CliUsageException(
+    messageText: String,
+    val usageText: String,
+) : IllegalArgumentException(messageText)
+
 fun main(args: Array<String>) {
-    if (args.isEmpty()) {
-        printUsage()
-        return
-    }
+    exitProcess(runCli(args))
+}
 
-    when (val firstArg = args.first()) {
-        in HELP_COMMANDS -> {
-            handleHelpCommand(args.drop(1))
-            return
+internal fun runCli(
+    args: Array<String>,
+    output: PrintStream = System.out,
+    error: PrintStream = System.err,
+): Int {
+    return try {
+        when {
+            args.isEmpty() -> {
+                printUsage(output)
+                0
+            }
+
+            args.first() in HELP_COMMANDS -> {
+                handleHelpCommand(args.drop(1), output)
+                0
+            }
+
+            args.first() in VERSION_COMMANDS -> {
+                printVersion(output)
+                0
+            }
+
+            args.first() == WORKSPACE_ROOT_COMMAND -> {
+                runWorkspaceEntry(args.drop(1))
+                0
+            }
+
+            else -> {
+                runCommand(args.first(), args.drop(1))
+                0
+            }
         }
-
-        in VERSION_COMMANDS -> {
-            printVersion()
-            return
-        }
-
-        else -> runCommand(firstArg, args.drop(1))
+    } catch (failure: CliUsageException) {
+        error.println("执行失败: ${failure.message ?: failure::class.simpleName.orEmpty()}")
+        error.println()
+        error.println(failure.usageText)
+        1
     }
 }
 
@@ -73,36 +118,61 @@ private fun runCommand(
     }
 }
 
+private fun runWorkspaceEntry(rawArgs: List<String>) {
+    if (rawArgs.isEmpty()) {
+        printWorkspaceUsage()
+        return
+    }
+    when (val token = rawArgs.first()) {
+        in HELP_COMMANDS -> {
+            printWorkspaceUsage()
+            return
+        }
+
+        "help" -> {
+            val maybeSubcommand = rawArgs.drop(1).firstOrNull()
+            if (maybeSubcommand == null) {
+                printWorkspaceUsage()
+                return
+            }
+            val command = findWorkspaceCommand(maybeSubcommand)
+                ?: failWithRootUsage("不支持的 workspace 子命令: $maybeSubcommand")
+            printWorkspaceCommandUsage(command)
+            return
+        }
+
+        else -> runWorkspaceCommand(token, rawArgs.drop(1))
+    }
+}
+
+private fun runWorkspaceCommand(
+    subcommandName: String,
+    rawArgs: List<String>,
+) {
+    val command = findWorkspaceCommand(subcommandName)
+        ?: failWithRootUsage("不支持的 workspace 子命令: $subcommandName")
+    if (shouldPrintCommandHelp(rawArgs)) {
+        printWorkspaceCommandUsage(command)
+        return
+    }
+    runCatching {
+        command.handler(parseOptions(rawArgs))
+    }.onFailure { throwable ->
+        failWithWorkspaceCommandUsage(
+            command = command,
+            message = throwable.message ?: throwable::class.simpleName.orEmpty(),
+        )
+    }
+}
+
 private fun runInspect(options: Map<String, List<String>>) {
     val inputs = requireInspectOrSearchInputs(options)
     DexEngine(inputs).useEngine { dexEngine ->
-        val archiveInfo = dexEngine.inspect()
-        when (archiveInfo.kind) {
-            DexInputKind.Apk -> {
-                println("type=apk")
-                println("input=${inputs.single()}")
-                println("dexCount=${archiveInfo.dexCount}")
-            }
-
-            DexInputKind.Dex -> {
-                if (inputs.size == 1) {
-                    println("type=dex")
-                    println("input=${inputs.single()}")
-                } else {
-                    println("type=dex-set")
-                    println("inputCount=${inputs.size}")
-                    inputs.forEach { input ->
-                        println("input=$input")
-                    }
-                }
-                println("dexCount=${archiveInfo.dexCount}")
-                println("classCount=${archiveInfo.classCount ?: 0}")
-            }
-
-            DexInputKind.Unknown -> {
-                error("输入类型无法识别")
-            }
-        }
+        writeInspectOutput(
+            inputKind = inferInspectOutputKind(inputs, dexEngine.inspect()),
+            inputs = inputs,
+            archiveInfo = dexEngine.inspect(),
+        )
     }
 }
 
@@ -145,21 +215,149 @@ private fun runExportJava(options: Map<String, List<String>>) = runBlocking {
 }
 
 private fun runFindClass(options: Map<String, List<String>>) {
-    runAdvancedSearch(options) { dexEngine ->
+    runAdvancedSearch(
+        options = options,
+        inputProvider = ::requireInspectOrSearchInputs,
+    ) { dexEngine, _ ->
         dexEngine.findClassHits(requireQueryText(options).parseCoreJson<DexClassQueryRequest>())
     }
 }
 
 private fun runFindMethod(options: Map<String, List<String>>) {
-    runAdvancedSearch(options) { dexEngine ->
+    runAdvancedSearch(
+        options = options,
+        inputProvider = ::requireInspectOrSearchInputs,
+    ) { dexEngine, _ ->
         dexEngine.findMethodHits(requireQueryText(options).parseCoreJson<DexMethodQueryRequest>())
     }
 }
 
 private fun runFindField(options: Map<String, List<String>>) {
-    runAdvancedSearch(options) { dexEngine ->
+    runAdvancedSearch(
+        options = options,
+        inputProvider = ::requireInspectOrSearchInputs,
+    ) { dexEngine, _ ->
         dexEngine.findFieldHits(requireQueryText(options).parseCoreJson<DexFieldQueryRequest>())
     }
+}
+
+private fun runWorkspaceInit(options: Map<String, List<String>>) {
+    val workspaceManager = requireWorkspaceManager(options)
+    workspaceManager.init(
+        rawInputs = requireWorkspaceInitInputs(options),
+        requestedType = parseWorkspaceInputKind(findOptionalOption(options, "type")),
+    )
+    val status = workspaceManager.status()
+    val outputFormat = requireOutputFormat(options, default = OutputFormat.Text)
+    val outputText = when (outputFormat) {
+        OutputFormat.Text -> formatWorkspaceStatus(status)
+        OutputFormat.Json -> status.toCoreJsonString()
+    }
+    writeOutput(outputText, findOptionalOption(options, "output-file"))
+}
+
+private fun runWorkspaceStatus(options: Map<String, List<String>>) {
+    val status = requireWorkspaceManager(options).status()
+    val outputText = when (requireOutputFormat(options, default = OutputFormat.Text)) {
+        OutputFormat.Text -> formatWorkspaceStatus(status)
+        OutputFormat.Json -> status.toCoreJsonString()
+    }
+    writeOutput(outputText, findOptionalOption(options, "output-file"))
+}
+
+private fun runWorkspaceInspect(options: Map<String, List<String>>) {
+    val manager = requireWorkspaceManager(options)
+    val status = manager.status()
+    val archiveInfo = manager.inspect()
+    val outputText = when (requireOutputFormat(options, default = OutputFormat.Text)) {
+        OutputFormat.Text -> formatWorkspaceInspect(
+            inputKind = status.metadata.input.type,
+            archiveInfo = archiveInfo,
+        )
+
+        OutputFormat.Json -> buildJsonObject {
+            put("workspaceInputType", status.metadata.input.type.name.lowercase())
+            put("archiveInfo", Json.parseToJsonElement(archiveInfo.toCoreJsonString()))
+        }.toString()
+    }
+    writeOutput(outputText, findOptionalOption(options, "output-file"))
+}
+
+private fun runWorkspaceCapabilities(options: Map<String, List<String>>) {
+    val capabilities = requireWorkspaceManager(options).capabilities()
+    val outputText = when (requireOutputFormat(options, default = OutputFormat.Text)) {
+        OutputFormat.Text -> formatWorkspaceCapabilities(capabilities)
+        OutputFormat.Json -> capabilities.toCoreJsonString()
+    }
+    writeOutput(outputText, findOptionalOption(options, "output-file"))
+}
+
+private fun runWorkspaceFindClass(options: Map<String, List<String>>) {
+    runWorkspaceAdvancedSearch(options) {
+        requireWorkspaceManager(options).findClassHits(requireQueryText(options).parseCoreJson<DexClassQueryRequest>())
+    }
+}
+
+private fun runWorkspaceFindMethod(options: Map<String, List<String>>) {
+    runWorkspaceAdvancedSearch(options) {
+        requireWorkspaceManager(options).findMethodHits(requireQueryText(options).parseCoreJson<DexMethodQueryRequest>())
+    }
+}
+
+private fun runWorkspaceFindField(options: Map<String, List<String>>) {
+    runWorkspaceAdvancedSearch(options) {
+        requireWorkspaceManager(options).findFieldHits(requireQueryText(options).parseCoreJson<DexFieldQueryRequest>())
+    }
+}
+
+private fun runWorkspaceExportDex(options: Map<String, List<String>>) = runBlocking {
+    val manager = requireWorkspaceManager(options)
+    val className = requireOption(options, "class")
+    val output = requireOption(options, "output")
+    ensureParentDirectory(output)
+    val result = manager.exportDex(className = className, outputPath = output)
+    println("output=${result.outputPath}")
+}
+
+private fun runWorkspaceExportSmali(options: Map<String, List<String>>) = runBlocking {
+    val manager = requireWorkspaceManager(options)
+    val className = requireOption(options, "class")
+    val output = requireOption(options, "output")
+    val autoUnicodeDecode = findOptionalOption(options, "auto-unicode-decode")?.toBooleanStrictOrNull() ?: true
+    ensureParentDirectory(output)
+    val result = manager.exportSmali(
+        className = className,
+        outputPath = output,
+        autoUnicodeDecode = autoUnicodeDecode,
+    )
+    println("output=${result.outputPath}")
+}
+
+private fun runWorkspaceExportJava(options: Map<String, List<String>>) = runBlocking {
+    val manager = requireWorkspaceManager(options)
+    val className = requireOption(options, "class")
+    val output = requireOption(options, "output")
+    ensureParentDirectory(output)
+    val result = manager.exportJava(className = className, outputPath = output)
+    println("output=${result.outputPath}")
+}
+
+private fun runWorkspaceManifest(options: Map<String, List<String>>) {
+    val manifest = requireWorkspaceManager(options).manifest()
+    val outputText = when (requireOutputFormat(options, default = OutputFormat.Text)) {
+        OutputFormat.Text -> manifest.manifest
+        OutputFormat.Json -> manifest.toCoreJsonString()
+    }
+    writeOutput(outputText, findOptionalOption(options, "output-file"))
+}
+
+private fun runWorkspaceRes(options: Map<String, List<String>>) {
+    val listing = requireWorkspaceManager(options).resources()
+    val outputText = when (requireOutputFormat(options, default = OutputFormat.Text)) {
+        OutputFormat.Text -> formatWorkspaceResources(listing)
+        OutputFormat.Json -> listing.toCoreJsonString()
+    }
+    writeOutput(outputText, findOptionalOption(options, "output-file"))
 }
 
 private fun parseOptions(args: List<String>): Map<String, List<String>> {
@@ -245,16 +443,25 @@ private fun requireInspectOrSearchInputs(options: Map<String, List<String>>): Li
     return normalizedInputs
 }
 
+private fun requireWorkspaceInitInputs(options: Map<String, List<String>>): List<String> {
+    val inputs = options["input"].orEmpty()
+        .map(String::trim)
+        .filter(String::isNotEmpty)
+    require(inputs.isNotEmpty()) { "缺少参数 --input" }
+    return inputs
+}
+
 private inline fun <reified T> runAdvancedSearch(
     options: Map<String, List<String>>,
-    executor: (DexEngine) -> List<T>,
+    inputProvider: (Map<String, List<String>>) -> List<String>,
+    executor: (DexEngine, List<String>) -> List<T>,
 ) {
-    val inputs = requireInspectOrSearchInputs(options)
+    val inputs = inputProvider(options)
     val outputFormat = requireOutputFormat(options, default = OutputFormat.Json)
     val limit = requireOptionalPositiveLimit(options)
 
     DexEngine(inputs).useEngine { dexEngine ->
-        val results = executor(dexEngine)
+        val results = executor(dexEngine, inputs)
         val limitedResults = limit?.let(results::take) ?: results
         val outputText = when (outputFormat) {
             OutputFormat.Json -> limitedResults.toCoreJsonString()
@@ -265,6 +472,26 @@ private inline fun <reified T> runAdvancedSearch(
             outputPath = findOptionalOption(options, "output-file"),
         )
     }
+}
+
+private inline fun <reified T> runWorkspaceAdvancedSearch(
+    options: Map<String, List<String>>,
+    executor: (WorkspaceManager) -> List<T>,
+) {
+    val manager = requireWorkspaceManager(options)
+    val inputCount = manager.status().metadata.input.binding.resolvedEntries.size
+    val outputFormat = requireOutputFormat(options, default = OutputFormat.Json)
+    val limit = requireOptionalPositiveLimit(options)
+    val results = executor(manager)
+    val limitedResults = limit?.let(results::take) ?: results
+    val outputText = when (outputFormat) {
+        OutputFormat.Json -> limitedResults.toCoreJsonString()
+        OutputFormat.Text -> formatAdvancedSearchResults(limitedResults, inputCount)
+    }
+    writeOutput(
+        text = outputText,
+        outputPath = findOptionalOption(options, "output-file"),
+    )
 }
 
 private inline fun <T> DexEngine.useEngine(block: (DexEngine) -> T): T {
@@ -280,6 +507,13 @@ private fun requireExistingFile(path: String): File {
     require(file.exists()) { "输入文件不存在: ${file.absolutePath}" }
     require(file.isFile) { "输入路径必须是文件: ${file.absolutePath}" }
     return file
+}
+
+private fun requireWorkspaceManager(options: Map<String, List<String>>): WorkspaceManager {
+    return WorkspaceManager(
+        workspaceDir = File(requireOption(options, "workspace")).absoluteFile,
+        toolVersion = currentVersion(),
+    )
 }
 
 private fun ensureParentDirectory(path: String) {
@@ -303,6 +537,17 @@ private fun requireOptionalPositiveLimit(options: Map<String, List<String>>): In
     return value.toIntOrNull()?.takeIf { it > 0 } ?: error("参数 --limit 必须是正整数")
 }
 
+private fun parseWorkspaceInputKind(value: String?): WorkspaceInputKind? {
+    if (value == null) return null
+    return when (value.lowercase()) {
+        "apk" -> WorkspaceInputKind.Apk
+        "dex" -> WorkspaceInputKind.Dex
+        "dexs" -> WorkspaceInputKind.Dexs
+        "auto" -> null
+        else -> error("不支持的 workspace 输入类型: $value")
+    }
+}
+
 private fun formatAdvancedSearchResults(
     results: List<*>,
     inputCount: Int,
@@ -313,14 +558,17 @@ private fun formatAdvancedSearchResults(
             @Suppress("UNCHECKED_CAST")
             formatClassRows(results as List<DexClassHit>, inputCount)
         }
+
         results.first() is DexMethodHit -> {
             @Suppress("UNCHECKED_CAST")
             formatMethodRows(results as List<DexMethodHit>, inputCount)
         }
+
         results.first() is DexFieldHit -> {
             @Suppress("UNCHECKED_CAST")
             formatFieldRows(results as List<DexFieldHit>, inputCount)
         }
+
         else -> error("不支持的结果类型")
     }
 
@@ -384,6 +632,101 @@ private fun formatHitRow(
     }
 }
 
+private fun inferInspectOutputKind(
+    inputs: List<String>,
+    archiveInfo: DexArchiveInfo,
+): WorkspaceInputKind {
+    return when {
+        inputs.size > 1 -> WorkspaceInputKind.Dexs
+        archiveInfo.kind == DexInputKind.Apk -> WorkspaceInputKind.Apk
+        else -> WorkspaceInputKind.Dex
+    }
+}
+
+private fun writeInspectOutput(
+    inputKind: WorkspaceInputKind,
+    inputs: List<String>,
+    archiveInfo: DexArchiveInfo,
+) {
+    when (inputKind) {
+        WorkspaceInputKind.Apk -> {
+            println("type=apk")
+            println("input=${inputs.single()}")
+            println("dexCount=${archiveInfo.dexCount}")
+        }
+
+        WorkspaceInputKind.Dex -> {
+            println("type=dex")
+            println("input=${inputs.single()}")
+            println("dexCount=${archiveInfo.dexCount}")
+            println("classCount=${archiveInfo.classCount ?: 0}")
+        }
+
+        WorkspaceInputKind.Dexs -> {
+            println("type=dexs")
+            println("inputCount=${inputs.size}")
+            inputs.forEach { input ->
+                println("input=$input")
+            }
+            println("dexCount=${archiveInfo.dexCount}")
+            println("classCount=${archiveInfo.classCount ?: 0}")
+        }
+    }
+}
+
+private fun formatWorkspaceStatus(status: WorkspaceStatus): String {
+    return buildString {
+        appendLine("workspaceId=${status.metadata.workspaceId}")
+        appendLine("inputType=${status.metadata.input.type.name.lowercase()}")
+        appendLine("bindingKind=${status.metadata.input.binding.kind}")
+        appendLine("entryCount=${status.metadata.input.binding.resolvedEntries.size}")
+        appendLine("fingerprint=${status.metadata.input.fingerprint}")
+        appendLine("schemaVersion=${status.metadata.schemaVersion}")
+        appendLine("layoutVersion=${status.metadata.layoutVersion}")
+        appendLine("toolVersion=${status.metadata.toolVersion}")
+        appendLine("cachePresent=${status.cachePresent}")
+        appendLine("runsPresent=${status.runsPresent}")
+    }.trimEnd()
+}
+
+private fun formatWorkspaceInspect(
+    inputKind: WorkspaceInputKind,
+    archiveInfo: DexArchiveInfo,
+): String {
+    return buildString {
+        appendLine("type=${inputKind.name.lowercase()}")
+        appendLine("dexCount=${archiveInfo.dexCount}")
+        archiveInfo.classCount?.let { appendLine("classCount=$it") }
+        archiveInfo.inputs.forEach { input ->
+            appendLine("input=${input.path}")
+        }
+    }.trimEnd()
+}
+
+private fun formatWorkspaceCapabilities(capabilities: WorkspaceCapabilities): String {
+    return buildString {
+        appendLine("inspect=${capabilities.inspect}")
+        appendLine("findClass=${capabilities.findClass}")
+        appendLine("findMethod=${capabilities.findMethod}")
+        appendLine("findField=${capabilities.findField}")
+        appendLine("exportDex=${capabilities.exportDex}")
+        appendLine("exportSmali=${capabilities.exportSmali}")
+        appendLine("exportJava=${capabilities.exportJava}")
+        appendLine("manifest=${capabilities.manifest}")
+        appendLine("res=${capabilities.res}")
+    }.trimEnd()
+}
+
+private fun formatWorkspaceResources(listing: WorkspaceResourceListing): String {
+    return buildString {
+        appendLine("resourcesArscPresent=${listing.resourcesArscPresent}")
+        appendLine("entryCount=${listing.entries.size}")
+        listing.entries.forEach { entry ->
+            appendLine("entry=${entry.path}")
+        }
+    }.trimEnd()
+}
+
 private fun writeOutput(
     text: String,
     outputPath: String?,
@@ -399,15 +742,30 @@ private fun writeOutput(
     println("output=${outputFile.absolutePath}")
 }
 
-private fun handleHelpCommand(args: List<String>) {
+private fun handleHelpCommand(
+    args: List<String>,
+    output: PrintStream = System.out,
+) {
     if (args.isEmpty()) {
-        printUsage()
+        printUsage(output)
+        return
+    }
+
+    if (args.first() == WORKSPACE_ROOT_COMMAND) {
+        val subcommand = args.drop(1).firstOrNull()
+        if (subcommand == null) {
+            printWorkspaceUsage(output)
+            return
+        }
+        val command = findWorkspaceCommand(subcommand)
+            ?: failWithRootUsage("不支持的 workspace 子命令: $subcommand")
+        printWorkspaceCommandUsage(command, output)
         return
     }
 
     val commandName = args.first()
     val command = findCommand(commandName) ?: failWithRootUsage("不支持的命令: $commandName")
-    printCommandUsage(command)
+    printCommandUsage(command, output)
 }
 
 private fun shouldPrintCommandHelp(args: List<String>): Boolean {
@@ -420,6 +778,10 @@ private fun printUsage(output: PrintStream = System.out) {
     output.println(rootUsageText())
 }
 
+private fun printWorkspaceUsage(output: PrintStream = System.out) {
+    output.println(workspaceUsageText())
+}
+
 private fun printCommandUsage(
     command: CommandSpec,
     output: PrintStream = System.out,
@@ -427,32 +789,42 @@ private fun printCommandUsage(
     output.println(commandUsageText(command))
 }
 
+private fun printWorkspaceCommandUsage(
+    command: WorkspaceCommandSpec,
+    output: PrintStream = System.out,
+) {
+    output.println(workspaceCommandUsageText(command))
+}
+
 private fun failWithRootUsage(message: String): Nothing {
-    System.err.println("执行失败: $message")
-    System.err.println()
-    printUsage(System.err)
-    exitProcess(1)
+    throw CliUsageException(message, rootUsageText())
 }
 
 private fun failWithCommandUsage(
     command: CommandSpec,
     message: String,
 ): Nothing {
-    System.err.println("执行失败: $message")
-    System.err.println()
-    printCommandUsage(command, System.err)
-    exitProcess(1)
+    throw CliUsageException(message, commandUsageText(command))
 }
 
-private fun printVersion() {
-    println("$CLI_NAME ${currentVersion()}")
+private fun failWithWorkspaceCommandUsage(
+    command: WorkspaceCommandSpec,
+    message: String,
+): Nothing {
+    throw CliUsageException(message, workspaceCommandUsageText(command))
+}
+
+private fun printVersion(output: PrintStream = System.out) {
+    output.println("$CLI_NAME ${currentVersion()}")
 }
 
 private fun rootUsageText(): String {
     return buildString {
         appendLine("用法:")
         appendLine("  $CLI_NAME <命令> [参数]")
+        appendLine("  $CLI_NAME workspace <子命令> [参数]")
         appendLine("  $CLI_NAME help <命令>")
+        appendLine("  $CLI_NAME help workspace <子命令>")
         appendLine("  $CLI_NAME --help")
         appendLine("  $CLI_NAME --version")
         appendLine()
@@ -460,11 +832,31 @@ private fun rootUsageText(): String {
         COMMANDS.forEach { command ->
             appendLine("  ${command.name.padEnd(18)} ${command.summary}")
         }
+        appendLine("  ${WORKSPACE_ROOT_COMMAND.padEnd(18)} 工程化工作区命令")
         appendLine()
         appendLine("全局说明:")
         appendLine("  运行要求：Java 21")
         appendLine("  inspect/find 在多输入模式下仅支持多个 dex 文件，不支持混合传入 apk")
         appendLine("  导出命令当前仍只支持单个 dex 输入")
+        appendLine("  workspace 模式为显式有状态模式，顶层命令保持无状态")
+    }.trimEnd()
+}
+
+private fun workspaceUsageText(): String {
+    return buildString {
+        appendLine("命令:")
+        appendLine("  $WORKSPACE_ROOT_COMMAND")
+        appendLine("说明:")
+        appendLine("  工程化工作区命令。工作区状态固定写入 <workspace>/.dexclub-cli/。")
+        appendLine()
+        appendLine("用法:")
+        appendLine("  $CLI_NAME workspace <子命令> [参数]")
+        appendLine("  $CLI_NAME help workspace <子命令>")
+        appendLine()
+        appendLine("子命令:")
+        WORKSPACE_COMMANDS.forEach { command ->
+            appendLine("  ${command.name.padEnd(18)} ${command.summary}")
+        }
     }.trimEnd()
 }
 
@@ -477,6 +869,25 @@ private fun commandUsageText(command: CommandSpec): String {
         appendLine()
         appendLine("用法:")
         appendLine("  $CLI_NAME ${command.name} ${command.argumentsUsage}".trimEnd())
+        if (command.details.isNotEmpty()) {
+            appendLine()
+            appendLine("补充:")
+            command.details.forEach { detail ->
+                appendLine("  $detail")
+            }
+        }
+    }.trimEnd()
+}
+
+private fun workspaceCommandUsageText(command: WorkspaceCommandSpec): String {
+    return buildString {
+        appendLine("命令:")
+        appendLine("  $WORKSPACE_ROOT_COMMAND ${command.name}")
+        appendLine("说明:")
+        appendLine("  ${command.summary}")
+        appendLine()
+        appendLine("用法:")
+        appendLine("  $CLI_NAME $WORKSPACE_ROOT_COMMAND ${command.name} ${command.argumentsUsage}".trimEnd())
         if (command.details.isNotEmpty()) {
             appendLine()
             appendLine("补充:")
@@ -503,6 +914,9 @@ private suspend fun runSingleDexExport(
 }
 
 private fun findCommand(token: String): CommandSpec? = COMMANDS.firstOrNull { it.name == token }
+
+private fun findWorkspaceCommand(token: String): WorkspaceCommandSpec? =
+    WORKSPACE_COMMANDS.firstOrNull { it.name == token }
 
 private fun currentVersion(): String {
     val implementationVersion = object {}.javaClass.`package`?.implementationVersion
@@ -600,4 +1014,96 @@ private val COMMANDS = listOf(
     ),
 )
 
+private val WORKSPACE_COMMANDS = listOf(
+    WorkspaceCommandSpec(
+        name = "init",
+        summary = "初始化 workspace 并写入最小工作区元数据",
+        argumentsUsage = "--workspace <目录> --input <apk|dex|目录> [--input <dex> ...] [--type apk|dex|dexs|auto] [--output-format text|json] [--output-file <文件>]",
+        details = listOf(
+            "--workspace 指向项目目录，状态写入 <workspace>/.dexclub-cli/。",
+            "--type 未指定时自动推断：单 apk -> apk，单 dex -> dex，目录或多个 dex -> dexs。",
+        ),
+        handler = ::runWorkspaceInit,
+    ),
+    WorkspaceCommandSpec(
+        name = "status",
+        summary = "查看 workspace 身份与状态摘要",
+        argumentsUsage = "--workspace <目录> [--output-format text|json] [--output-file <文件>]",
+        details = listOf(
+            "status 只展示工作区身份、版本、输入绑定与状态摘要，不做输入深度分析。",
+        ),
+        handler = ::runWorkspaceStatus,
+    ),
+    WorkspaceCommandSpec(
+        name = "inspect",
+        summary = "查看当前 workspace 绑定输入的分析摘要",
+        argumentsUsage = "--workspace <目录> [--output-format text|json] [--output-file <文件>]",
+        details = listOf(
+            "inspect 语义对齐顶层 inspect，但输入来源固定为当前 workspace。",
+        ),
+        handler = ::runWorkspaceInspect,
+    ),
+    WorkspaceCommandSpec(
+        name = "capabilities",
+        summary = "查看当前 workspace 输入类型支持的能力矩阵",
+        argumentsUsage = "--workspace <目录> [--output-format text|json] [--output-file <文件>]",
+        handler = ::runWorkspaceCapabilities,
+    ),
+    WorkspaceCommandSpec(
+        name = "find-class",
+        summary = "在 workspace 绑定输入上按 JSON 查询条件查找类",
+        argumentsUsage = "--workspace <目录> (--query-file <文件> | --query-json <JSON>) [--output-format text|json] [--output-file <文件>] [--limit <数量>]",
+        handler = ::runWorkspaceFindClass,
+    ),
+    WorkspaceCommandSpec(
+        name = "find-method",
+        summary = "在 workspace 绑定输入上按 JSON 查询条件查找方法",
+        argumentsUsage = "--workspace <目录> (--query-file <文件> | --query-json <JSON>) [--output-format text|json] [--output-file <文件>] [--limit <数量>]",
+        handler = ::runWorkspaceFindMethod,
+    ),
+    WorkspaceCommandSpec(
+        name = "find-field",
+        summary = "在 workspace 绑定输入上按 JSON 查询条件查找字段",
+        argumentsUsage = "--workspace <目录> (--query-file <文件> | --query-json <JSON>) [--output-format text|json] [--output-file <文件>] [--limit <数量>]",
+        handler = ::runWorkspaceFindField,
+    ),
+    WorkspaceCommandSpec(
+        name = "export-dex",
+        summary = "从 workspace 绑定输入导出目标类为单类 dex",
+        argumentsUsage = "--workspace <目录> --class <类名> --output <输出 dex>",
+        handler = ::runWorkspaceExportDex,
+    ),
+    WorkspaceCommandSpec(
+        name = "export-smali",
+        summary = "从 workspace 绑定输入导出目标类的 smali",
+        argumentsUsage = "--workspace <目录> --class <类名> --output <输出 smali> [--auto-unicode-decode true|false]",
+        handler = ::runWorkspaceExportSmali,
+    ),
+    WorkspaceCommandSpec(
+        name = "export-java",
+        summary = "从 workspace 绑定输入导出目标类的 Java",
+        argumentsUsage = "--workspace <目录> --class <类名> --output <输出 java>",
+        handler = ::runWorkspaceExportJava,
+    ),
+    WorkspaceCommandSpec(
+        name = "manifest",
+        summary = "读取 apk workspace 的 AndroidManifest.xml",
+        argumentsUsage = "--workspace <目录> [--output-format text|json] [--output-file <文件>]",
+        details = listOf(
+            "仅支持 apk workspace；dex 与 dexs 会显式失败。",
+        ),
+        handler = ::runWorkspaceManifest,
+    ),
+    WorkspaceCommandSpec(
+        name = "res",
+        summary = "列出 apk workspace 的资源文件入口",
+        argumentsUsage = "--workspace <目录> [--output-format text|json] [--output-file <文件>]",
+        details = listOf(
+            "仅支持 apk workspace；dex 与 dexs 会显式失败。",
+        ),
+        handler = ::runWorkspaceRes,
+    ),
+)
+
 private const val CLI_NAME = "dexclub-cli"
+private const val WORKSPACE_ROOT_COMMAND = "workspace"

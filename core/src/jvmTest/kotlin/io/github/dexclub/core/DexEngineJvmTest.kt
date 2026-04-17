@@ -281,12 +281,25 @@ class DexEngineJvmTest {
             }
 
             private fun resolveD8Command(): String {
-                val candidates = listOf(
-                    "/root/Android/build-tools/36.0.0/d8",
-                    "/root/Android/build-tools/35.0.0/d8",
-                    "/root/Android/cmdline-tools/latest/bin/d8",
-                    "d8",
-                )
+                val envRoots = listOfNotNull(
+                    System.getenv("ANDROID_SDK_ROOT"),
+                    System.getenv("ANDROID_HOME"),
+                ).map(::File)
+                val candidates = buildList {
+                    envRoots.forEach { root ->
+                        root.resolve("build-tools").listFiles()
+                            ?.sortedByDescending(File::getName)
+                            ?.forEach { buildToolsDir ->
+                                add(buildToolsDir.resolve("d8").path)
+                                add(buildToolsDir.resolve("d8.bat").path)
+                            }
+                    }
+                    add("/root/Android/build-tools/36.0.0/d8")
+                    add("/root/Android/build-tools/35.0.0/d8")
+                    add("/root/Android/cmdline-tools/latest/bin/d8")
+                    add("d8")
+                    add("d8.bat")
+                }
                 return candidates.firstOrNull { candidate ->
                     runCatching {
                         val process = ProcessBuilder(candidate, "--version")
