@@ -1,26 +1,44 @@
 # dexclub-cli
 
-`dexclub-cli` 是一个面向 dex / apk 检索、解析与导出的 Kotlin 多模块项目。
-
-它包含三层核心能力：
+`dexclub-cli` 是一个面向 `dex / apk / Android 资源` 的 Kotlin 多模块项目，当前仓库包含：
 
 - `cli`
-  - 命令行入口
+  命令行入口，负责参数解析、命令分发、结果渲染与退出码
 - `core`
-  - 稳定的业务能力边界
+  稳定能力边界，负责 workspace、dex 查询/导出、resource 解析
 - `dexkit`
-  - 面向 KMP 的 DexKit 薄封装
+  面向 KMP 的 DexKit 包装层
 
-当前主要能力：
+## 当前能力
 
-- 检查 apk / dex 输入
+- 初始化并管理 `.dexclub` 工作区
+- 输出工作区状态、摘要与可重建缓存清理结果
 - 按 JSON 条件查找类、方法、字段
-- 导出单类 dex、smali、Java
-- 以 `workspace` 模式管理 `apk|dex|dexs` 的工程化静态分析状态
+- 按字符串批量条件查找类和方法
+- 导出单类 dex、smali、Java，以及单方法 smali
+- 解析 `AndroidManifest.xml`
+- 读取 `resources.arsc`
+- 解码二进制 XML
+- 列出、解析、搜索资源条目
 
-## 快速开始
+## 仓库结构
 
-### 环境要求
+- `cli/`
+  当前命令行模块
+- `core/`
+  当前能力库模块
+- `dexkit/`
+  KMP DexKit 包装层
+- `dexkit/vendor/DexKit/`
+  vendored 上游 DexKit
+- `dexkit/vendor/libcxx-prefab/`
+  Android 构建链依赖的本地 `libcxx` prefab 仓库
+- `.docs/v3/`
+  当前命令面、对象模型、执行流与存储结构设计文档
+
+## 环境要求
+
+开发和本地构建当前默认要求：
 
 - JDK 21
 - Android SDK
@@ -28,11 +46,14 @@
 - `cmake`
 - `ninja`
 
-桌面端 DexKit 运行前提请直接参考上游文档：
+说明：
 
-- <https://luckypray.org/DexKit/zh-cn/guide/run-on-desktop.html>
+- Android SDK / NDK 主要服务于仓库构建链、DexKit native 构建和测试样本生成
+- `core` 的资源命令运行时不要求额外安装 Android SDK
+- 桌面端 DexKit 运行前提可参考上游文档：
+  <https://luckypray.org/DexKit/zh-cn/guide/run-on-desktop.html>
 
-### 初始化仓库
+## 初始化仓库
 
 首次拉取后先初始化 submodule：
 
@@ -47,229 +68,7 @@ cd dexkit/vendor/libcxx-prefab
 ./gradlew :cxx:publishToMavenLocal
 ```
 
-## CLI 使用
-
-fat jar 入口：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar <command> [args]
-```
-
-常用帮助命令：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar --help
-java -jar cli/build/libs/dexclub-cli-all.jar help find-method
-java -jar cli/build/libs/dexclub-cli-all.jar help workspace
-java -jar cli/build/libs/dexclub-cli-all.jar help workspace inspect
-java -jar cli/build/libs/dexclub-cli-all.jar --version
-```
-
-### inspect
-
-检查单个 apk：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar inspect \
-  --input /path/to/app.apk
-```
-
-检查多个 dex：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar inspect \
-  --input /path/to/classes.dex \
-  --input /path/to/classes2.dex
-```
-
-输出 JSON：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar inspect \
-  --input /path/to/app.apk \
-  --output-format json
-```
-
-规则：
-
-- 单输入支持 `apk` 或 `dex`
-- 多输入仅支持多个 `dex`
-- `--output-format` 支持 `text` 与 `json`
-
-### find-class / find-method / find-field
-
-按 JSON 查询类：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar find-class \
-  --input /path/to/classes.dex \
-  --query-json '{"matcher":{"className":{"value":"SampleSearchTarget","matchType":"Contains","ignoreCase":true}}}' \
-  --output-format json \
-  --limit 20
-```
-
-按字符串查找方法：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar find-method \
-  --input /path/to/classes.dex \
-  --query-json '{"matcher":{"usingStrings":[{"value":"dexclub-needle-string","matchType":"Equals"}]}}'
-```
-
-规则：
-
-- `--query-file` 与 `--query-json` 二选一
-- `--output-format` 支持 `text` 与 `json`
-- `--limit` 可选
-
-### export-dex / export-smali / export-java
-
-导出单类 dex：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar export-dex \
-  --input /path/to/classes.dex \
-  --class fixture.samples.SampleSearchTarget \
-  --output /tmp/SampleSearchTarget.dex
-```
-
-导出 smali：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar export-smali \
-  --input /path/to/classes.dex \
-  --class fixture.samples.SampleSearchTarget \
-  --output /tmp/SampleSearchTarget.smali
-```
-
-导出 Java：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar export-java \
-  --input /path/to/classes.dex \
-  --class fixture.samples.SampleSearchTarget \
-  --output /tmp/SampleSearchTarget.java
-```
-
-规则：
-
-- 这组导出命令当前仅支持单个 `dex` 输入
-- 必须显式传入 `--class` 与 `--output`
-
-### workspace
-
-`workspace` 是显式的工程化静态分析模式，状态固定写入：
-
-```text
-<workspace>/.dexclub-cli/
-```
-
-支持三类输入：
-
-- `apk`
-- `dex`
-- `dexs`
-
-其中：
-
-- `apk` workspace 支持 `manifest` / `res`
-- `dex` / `dexs` workspace 不支持 `manifest` / `res`，会显式失败
-- 顶层无状态命令不会读写 `.dexclub-cli/`
-
-初始化 APK workspace：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar workspace init \
-  --workspace /tmp/app-ws \
-  --input /path/to/app.apk
-```
-
-初始化单 dex workspace：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar workspace init \
-  --workspace /tmp/dex-ws \
-  --input /path/to/classes.dex
-```
-
-初始化 dexs workspace：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar workspace init \
-  --workspace /tmp/dexs-ws \
-  --input /path/to/classes.dex \
-  --input /path/to/classes2.dex \
-  --type dexs
-```
-
-查看 workspace 身份与状态：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar workspace status \
-  --workspace /tmp/app-ws
-```
-
-查看当前 workspace 绑定输入的分析摘要：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar workspace inspect \
-  --workspace /tmp/app-ws
-```
-
-查看 workspace 分析摘要的 JSON：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar workspace inspect \
-  --workspace /tmp/app-ws \
-  --output-format json
-```
-
-查看当前 workspace 能力矩阵：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar workspace capabilities \
-  --workspace /tmp/app-ws
-```
-
-在 workspace 上查找方法：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar workspace find-method \
-  --workspace /tmp/app-ws \
-  --query-json '{"matcher":{"usingStrings":[{"value":"dexclub-needle-string","matchType":"Equals"}]}}'
-```
-
-在 workspace 上导出 smali：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar workspace export-smali \
-  --workspace /tmp/dexs-ws \
-  --class fixture.samples.SampleSearchTarget \
-  --output /tmp/SampleSearchTarget.smali
-```
-
-读取 APK workspace 的 manifest：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar workspace manifest \
-  --workspace /tmp/app-ws
-```
-
-列出 APK workspace 的资源入口：
-
-```bash
-java -jar cli/build/libs/dexclub-cli-all.jar workspace res \
-  --workspace /tmp/app-ws
-```
-
-当前约束：
-
-- `workspace status` 只展示 workspace 身份与状态摘要
-- `workspace inspect` 展示绑定输入的分析摘要
-- `workspace export-*` 在 `dexs` 上会先解析唯一 `source dex`；若命中多个 dex，则显式失败
-- `workspace cache/*` 与 `workspace runs/*` 当前未进入主 CLI 产品面
-
-## 构建
+## 构建与验证
 
 编译 `dexkit`：
 
@@ -284,6 +83,13 @@ java -jar cli/build/libs/dexclub-cli-all.jar workspace res \
 ./gradlew :core:compileKotlinJvm :cli:compileKotlin
 ```
 
+运行模块测试：
+
+```bash
+./gradlew :core:jvmTest
+./gradlew :cli:test
+```
+
 打包 fat jar：
 
 ```bash
@@ -294,113 +100,193 @@ java -jar cli/build/libs/dexclub-cli-all.jar workspace res \
 
 ```bash
 ./gradlew :cli:installShadowDist :cli:shadowDistZip
-./gradlew :cli:installAndroidArm64ShadowDist :cli:androidArm64ShadowDistZip
-./gradlew :cli:verifyAndroidArm64ShadowDist
 ```
 
-## 分发产物
-
-zip 解压后的默认桌面目录结构：
+Windows PowerShell 下推荐优先使用：
 
 ```text
-bin/
-├── cli
-└── cli.bat
-lib/
-├── dexclub-cli-all.jar
-├── libgcc_s_seh-1.dll            # Windows
-├── libwinpthread-1.dll           # Windows
-├── libstdc++-6.dll               # Windows
-└── zlib1.dll                     # Windows
+cli/build/install/cli-shadow/bin/cli.ps1
 ```
 
-`android-arm64` 分发会额外携带显式 native 目录：
+fat jar 默认输出为：
 
 ```text
-bin/
-├── cli
-└── cli.bat
-lib/
-├── dexclub-cli-all.jar
-└── library/
-    └── libdexkit.so              # android-arm64 / bionic
+cli/build/libs/dexclub-cli-all.jar
+```
+
+## CLI 使用
+
+fat jar 入口：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar <command> [args]
+```
+
+查看 help：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar
+java -jar cli/build/libs/dexclub-cli-all.jar --version
+java -jar cli/build/libs/dexclub-cli-all.jar --help
+java -jar cli/build/libs/dexclub-cli-all.jar help
+java -jar cli/build/libs/dexclub-cli-all.jar help find-method
+java -jar cli/build/libs/dexclub-cli-all.jar find-method --help
+```
+
+Windows PowerShell 若要通过分发脚本传递复杂 `--query-json`，优先使用：
+
+```powershell
+& .\cli\build\install\cli-shadow\bin\cli.ps1 find-class E:\path\to\workdir --query-json '{"matcher":{"className":{"value":"Sample","matchType":"Contains","ignoreCase":true}}}'
 ```
 
 说明：
 
-- `bin/cli` 用于 Linux / macOS
-- `bin/cli.bat` 用于 Windows
-- Windows 分发包会带上桌面 DexKit 运行所需 sidecar，并在启动脚本中把 `%APP_HOME%\lib` 前置到 `PATH`
-- `android-arm64` 是给 native Termux / Android `bionic` 运行时使用的 JVM CLI 分发，不是 Android app，也不是 `androidMain` 运行线
-- ARM64 Unix 现在按 runtime ABI 区分：
-  - `glibc + arm64 -> linux-arm64`
-  - `bionic + arm64 -> android-arm64`
-  - `musl` / `unknown` -> 停止并报告，不回退
-- 使用者仍需自行准备 Java 21 运行环境
+- `cli.ps1` 会比 `cli.bat` 更稳定地保留 PowerShell 参数边界
+- 对复杂 JSON 查询，仍可优先使用 `--query-file` 或 `java -jar`
 
-## 仓库结构
+当前命令面遵循两条规则：
 
-- `cli/`
-  - 命令行入口，依赖 `:core`
-- `core/`
-  - 自有 facade / model / config / request 边界
-- `dexkit/`
-  - KMP DexKit 包装层
-- `dexkit/vendor/DexKit`
-  - vendored 上游 DexKit
-- `dexkit/vendor/libcxx-prefab`
-  - Android 构建链依赖的本地 `libcxx` prefab
-- `skills/`
-  - 本地 skill，包括 `dexclub-cli-launcher`
+- `init` 必须显式传入单文件输入路径
+- 其余命令统一在已初始化工作区上执行，`[workdir]` 可省略；省略时默认使用当前目录
 
-## GitHub Actions
+### 工作区命令
 
-仓库内提供：
+初始化工作区：
 
-- `.github/workflows/build-cli.yml`
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar init /path/to/app.apk
+java -jar cli/build/libs/dexclub-cli-all.jar init /path/to/classes.dex
+java -jar cli/build/libs/dexclub-cli-all.jar init /path/to/AndroidManifest.xml
+```
 
-用途：
+查看状态、摘要和清理缓存：
 
-- 按 `OS + 架构` 构建 CLI 分发包
-- tag 构建成功后上传 GitHub Release
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar status /path/to/workdir
+java -jar cli/build/libs/dexclub-cli-all.jar inspect /path/to/workdir --json
+java -jar cli/build/libs/dexclub-cli-all.jar gc /path/to/workdir
+```
 
-当前矩阵：
+受管工作区固定写入：
 
-- `linux-x64`
-- `linux-arm64`
-- `android-arm64`
-- `windows-x64`
-- `windows-arm64`
-- `macos-x64`
-- `macos-arm64`
+```text
+<workdir>/.dexclub/
+```
 
-每个平台上传：
+### Dex 查询命令
 
-- `dexclub-cli-<os>-<arch>.zip`
-- `dexclub-cli-<os>-<arch>.sha256`
+当前支持：
 
-## Skill
+- `find-class`
+- `find-method`
+- `find-field`
+- `find-class-using-strings`
+- `find-method-using-strings`
 
-仓库内提供本地 skill：
+示例：
 
-- `skills/dexclub-cli-launcher/`
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar find-class /path/to/workdir \
+  --query-json '{"matcher":{"className":{"value":"Sample","matchType":"Contains","ignoreCase":true}}}' \
+  --json
+```
 
-详细说明见：
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar find-method-using-strings /path/to/workdir \
+  --query-file /path/to/query.json
+```
 
-- `skills/dexclub-cli-launcher/README.md`
-- `skills/dexclub-cli-launcher/SKILL.md`
+规则：
+
+- `--query-json` 与 `--query-file` 必须且只能传一个
+- `--query-file` 按 UTF-8 读取
+- `--offset` 默认 `0`
+- `--limit` 默认 `all`
+
+### Dex 导出命令
+
+当前支持：
+
+- `export-class-dex`
+- `export-class-smali`
+- `export-class-java`
+- `export-method-smali`
+
+示例：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar export-class-smali /path/to/workdir \
+  --class Lcom/example/Sample; \
+  --output /tmp/Sample.smali
+```
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar export-method-smali /path/to/workdir \
+  --method 'Lcom/example/Sample;->name()Ljava/lang/String;' \
+  --output /tmp/Sample_method.smali
+```
+
+### 资源命令
+
+当前支持：
+
+- `manifest`
+- `res-table`
+- `decode-xml`
+- `list-res`
+- `resolve-res`
+- `find-res`
+
+其中：
+
+- `list-res` 当前仅支持 APK 工作区
+- `resolve-res` / `find-res` 支持 APK 与 `resources.arsc` 工作区
+
+示例：
+
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar manifest /path/to/workdir
+java -jar cli/build/libs/dexclub-cli-all.jar res-table /path/to/workdir --json
+java -jar cli/build/libs/dexclub-cli-all.jar decode-xml /path/to/workdir --path res/layout/activity_main.xml
+java -jar cli/build/libs/dexclub-cli-all.jar resolve-res /path/to/workdir --id 0x7f0a0001
+```
+
+## 设计文档
+
+完整命令契约、对象模型与执行流请直接参考：
+
+- [.docs/v3/40-cli-surface.md](.docs/v3/40-cli-surface.md)
+- [.docs/v3/10-domain-model.md](.docs/v3/10-domain-model.md)
+- [.docs/v3/60-execution-flow.md](.docs/v3/60-execution-flow.md)
+- [.docs/v3/50-storage-layout.md](.docs/v3/50-storage-layout.md)
+- [.docs/v3/51-state-file-schemas.md](.docs/v3/51-state-file-schemas.md)
+
+如果要继续推进当前实现顺序，请参考：
+
+- [.docs/v3/63-p0-delivery-order.md](.docs/v3/63-p0-delivery-order.md)
+- [.docs/v3/64-implementation-checklist.md](.docs/v3/64-implementation-checklist.md)
 
 ## 开发说明
 
-当前设计约束：
+当前依赖边界：
 
 - `cli` 只负责用户交互和命令组织
-- `core` 提供稳定的公共能力边界
+- `core` 负责公开稳定能力边界
 - `dexkit` 负责承接上游 DexKit
-- 导出相关能力当前依赖：
+
+当前实现依赖：
+
+- Dex 导出相关：
   - `dexlib2`
   - `baksmali`
   - `jadx`
+- 资源解析相关：
+  - `ARSCLib`
+
+其中：
+
+- `jadx` 主要用于 Java 导出
+- `manifest / binary xml / resource table` 不以 `jadx` 作为主解析路径
 
 JVM 侧 DexKit native 相关配置：
 
@@ -410,3 +296,11 @@ JVM 侧 DexKit native 相关配置：
 - 显式 native 目录：
   - JVM property: `dexclub.dexkit.native.library.dir`
   - 环境变量: `DEXCLUB_DEXKIT_NATIVE_LIBRARY_DIR`
+
+## CI
+
+仓库内当前提供：
+
+- [.github/workflows/build-cli.yml](.github/workflows/build-cli.yml)
+
+用途是按平台构建 CLI 分发产物，并在 tag 构建时上传发布附件。
