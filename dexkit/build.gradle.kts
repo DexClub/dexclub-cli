@@ -1,5 +1,3 @@
-import org.gradle.language.jvm.tasks.ProcessResources
-
 plugins {
     alias(libs.plugins.android.multiplatform.library)
     alias(libs.plugins.kotlin.multiplatform)
@@ -33,12 +31,14 @@ kotlin {
 
         val androidMain by getting {
             dependencies {
+                // noinspection UseTomlInstead
                 implementation("io.github.dexclub.dexkit:android-core:0.0.0-local")
             }
         }
 
         val jvmMain by getting {
             dependencies {
+                // noinspection UseTomlInstead
                 implementation("io.github.dexclub.dexkit:desktop-core:0.0.0-local")
             }
         }
