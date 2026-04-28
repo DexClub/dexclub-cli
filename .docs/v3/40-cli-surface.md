@@ -453,9 +453,9 @@ Lcom/example/Foo;->bar(I)Ljava/lang/String;
 模式语义：
 
 - `snippet`
-  - 导出方法级 smali 片段
+  - 导出目标方法本身的 smali 方法块
 - `class`
-  - 导出最小 class-level smali 壳，仅保留目标方法
+  - 导出方法级最小类 smali，只保留类头和目标方法
 
 `class` 模式的约束：
 
@@ -463,6 +463,12 @@ Lcom/example/Foo;->bar(I)Ljava/lang/String;
 - 不保留其它方法
 - 不保留 fields
 - 不保证运行时完整性
+
+实现边界：
+
+- `snippet` 与 `class` 共用同一个方法级最小类构造结果
+- `snippet` 只是从该最小类的渲染结果中提取唯一方法块
+- `class` 直接输出该最小类的完整 smali 文本
 
 成功输出固定为：
 

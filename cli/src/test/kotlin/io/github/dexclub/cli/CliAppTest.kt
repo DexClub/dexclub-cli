@@ -957,7 +957,10 @@ class CliAppTest {
 
         assertEquals(0, output.exitCode, output.stderr)
         assertEquals("output=${outputFile.absolutePath}", output.stdout.trimEnd())
-        assertTrue(outputFile.readText().startsWith(".method public exposeNeedle()Ljava/lang/String;"))
+        val text = outputFile.readText()
+        assertTrue(text.startsWith(".method public exposeNeedle()Ljava/lang/String;"))
+        assertTrue(!text.contains(".field "))
+        assertTrue(!text.contains("callExposeNeedle"))
     }
 
     @Test
@@ -989,6 +992,7 @@ class CliAppTest {
         val text = outputFile.readText()
         assertTrue(text.contains(".class public Lfixture/samples/SampleSearchTarget;"))
         assertTrue(!text.contains(".field public static final NEEDLE:"))
+        assertTrue(!text.contains(".method public callExposeNeedle()Ljava/lang/String;"))
     }
 
     @Test

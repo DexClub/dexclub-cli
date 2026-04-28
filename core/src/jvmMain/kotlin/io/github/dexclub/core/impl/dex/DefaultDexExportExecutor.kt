@@ -7,6 +7,8 @@ import com.android.tools.smali.dexlib2.Opcodes
 import com.android.tools.smali.dexlib2.dexbacked.DexBackedDexFile
 import com.android.tools.smali.dexlib2.iface.ClassDef
 import com.android.tools.smali.dexlib2.iface.Method
+import com.android.tools.smali.dexlib2.immutable.ImmutableClassDef
+import com.android.tools.smali.dexlib2.immutable.ImmutableMethod
 import com.android.tools.smali.dexlib2.writer.io.MemoryDataStore
 import com.android.tools.smali.dexlib2.writer.pool.DexPool
 import io.github.dexclub.core.api.dex.DexExportError
@@ -140,8 +142,12 @@ internal class DefaultDexExportExecutor(
                 }
             },
         )
-        val classSmali = renderClassSmaliText(
+        val methodOnlyClassDef = buildMethodOnlyClassDef(
             classDef = match.classDef,
+            method = method,
+        )
+        val classSmali = renderClassSmaliText(
+            classDef = methodOnlyClassDef,
             autoUnicodeDecode = request.autoUnicodeDecode,
         )
         val methodBlock = extractMethodBlock(
@@ -158,6 +164,22 @@ internal class DefaultDexExportExecutor(
                 outputPath = request.outputPath,
                 text = outputText,
             ),
+        )
+    }
+
+    private fun buildMethodOnlyClassDef(classDef: ClassDef, method: Method): ClassDef {
+        val immutableMethod = ImmutableMethod.of(method)
+        return ImmutableClassDef(
+            classDef.type,
+            classDef.accessFlags,
+            classDef.superclass,
+            classDef.interfaces,
+            classDef.sourceFile,
+            classDef.annotations,
+            emptyList(),
+            emptyList(),
+            if (method in classDef.directMethods) listOf(immutableMethod) else emptyList(),
+            if (method in classDef.virtualMethods) listOf(immutableMethod) else emptyList(),
         )
     }
 

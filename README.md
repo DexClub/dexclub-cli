@@ -236,6 +236,21 @@ java -jar cli/build/libs/dexclub-cli-all.jar export-method-smali /path/to/workdi
   --output /tmp/Sample_method.smali
 ```
 
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar export-method-smali /path/to/workdir \
+  --method 'Lcom/example/Sample;->name()Ljava/lang/String;' \
+  --mode class \
+  --output /tmp/Sample_method.class.smali
+```
+
+规则：
+
+- `export-method-smali` 的 `--method` 使用完整 smali 方法签名
+- `--mode` 默认 `snippet`
+- `snippet` 只导出目标方法块
+- `class` 导出方法级最小类壳，只保留类头和目标方法
+- `class` 模式当前不保留字段，也不保留其他方法
+
 ### 资源命令
 
 当前支持：

@@ -333,6 +333,8 @@ class DefaultDexAnalysisServiceTest {
         val text = output.readText()
         assertTrue(text.startsWith(".method public exposeNeedle()Ljava/lang/String;"))
         assertTrue(!text.contains(".class "))
+        assertTrue(!text.contains(".field "))
+        assertTrue(!text.contains("callExposeNeedle"))
         assertTrue(text.contains("return-object"))
     }
 
@@ -359,6 +361,7 @@ class DefaultDexAnalysisServiceTest {
         assertTrue(text.contains(".method public exposeNeedle()Ljava/lang/String;"))
         assertTrue(!text.contains(".field public static final NEEDLE:"))
         assertTrue(!text.contains(".method public constructor <init>()V"))
+        assertTrue(!text.contains(".method public callExposeNeedle()Ljava/lang/String;"))
     }
 
     @Test
