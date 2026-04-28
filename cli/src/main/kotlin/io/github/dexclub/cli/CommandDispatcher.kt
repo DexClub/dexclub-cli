@@ -39,5 +39,6 @@ internal class CommandDispatcher(
             is CliRequest.ExportClassJava -> export.exportClassJava(request)
             is CliRequest.ExportClassSmali -> export.exportClassSmali(request)
             is CliRequest.ExportMethodSmali -> export.exportMethodSmali(request)
+            is CliRequest.ExportMethodDex -> export.exportMethodDex(request)
         }
 }

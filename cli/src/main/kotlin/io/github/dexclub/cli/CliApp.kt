@@ -119,6 +119,7 @@ private fun CliRequest.toCommandName(): String =
         is CliRequest.ExportClassJava -> "export-class-java"
         is CliRequest.ExportClassSmali -> "export-class-smali"
         is CliRequest.ExportMethodSmali -> "export-method-smali"
+        is CliRequest.ExportMethodDex -> "export-method-dex"
     }
 
 private fun Operation.toCommandName(): String =

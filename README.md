@@ -221,6 +221,7 @@ java -jar cli/build/libs/dexclub-cli-all.jar inspect-method /path/to/workdir \
 - `export-class-smali`
 - `export-class-java`
 - `export-method-smali`
+- `export-method-dex`
 
 示例：
 
@@ -243,6 +244,12 @@ java -jar cli/build/libs/dexclub-cli-all.jar export-method-smali /path/to/workdi
   --output /tmp/Sample_method.class.smali
 ```
 
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar export-method-dex /path/to/workdir \
+  --method 'Lcom/example/Sample;->name()Ljava/lang/String;' \
+  --output /tmp/Sample_method.dex
+```
+
 规则：
 
 - `export-method-smali` 的 `--method` 使用完整 smali 方法签名
@@ -250,6 +257,7 @@ java -jar cli/build/libs/dexclub-cli-all.jar export-method-smali /path/to/workdi
 - `snippet` 只导出目标方法块
 - `class` 导出方法级最小类壳，只保留类头和目标方法
 - `class` 模式当前不保留字段，也不保留其他方法
+- `export-method-dex` 导出方法级最小单类 dex，只保留类头和目标方法
 
 ### 资源命令
 

@@ -16,6 +16,7 @@ import io.github.dexclub.core.api.dex.DexExportErrorReason
 import io.github.dexclub.core.api.dex.ExportClassDexRequest
 import io.github.dexclub.core.api.dex.ExportClassJavaRequest
 import io.github.dexclub.core.api.dex.ExportClassSmaliRequest
+import io.github.dexclub.core.api.dex.ExportMethodDexRequest
 import io.github.dexclub.core.api.dex.ExportMethodSmaliRequest
 import io.github.dexclub.core.api.dex.ExportResult
 import io.github.dexclub.core.api.shared.MethodSmaliMode
@@ -118,33 +119,12 @@ internal class DefaultDexExportExecutor(
     ): ExportResult {
         val workdirPath = Paths.get(workspace.workdir)
         val signature = parseMethodSignature(request.methodSignature)
-        val match = resolveUniqueClassSource(
+        val methodOnlyClassDef = resolveMethodOnlyClassDef(
             workdirPath = workdirPath,
             inventory = inventory,
-            className = signature.classSignature,
+            methodSignature = request.methodSignature,
             source = request.source,
             workspace = workspace,
-        )
-        val method = match.classDef.methods.firstOrNull {
-            it.name == signature.methodName && methodDescriptorOf(it) == signature.descriptor
-        } ?: throw DexExportError(
-            reason = DexExportErrorReason.MethodNotFound,
-            message = buildString {
-                append("method not found: ")
-                append(request.methodSignature)
-                append(" in class ")
-                append(signature.classSignature)
-                val sourceDescription = request.source.describe()
-                if (sourceDescription != null) {
-                    append(" (")
-                    append(sourceDescription)
-                    append(')')
-                }
-            },
-        )
-        val methodOnlyClassDef = buildMethodOnlyClassDef(
-            classDef = match.classDef,
-            method = method,
         )
         val classSmali = renderClassSmaliText(
             classDef = methodOnlyClassDef,
@@ -164,6 +144,65 @@ internal class DefaultDexExportExecutor(
                 outputPath = request.outputPath,
                 text = outputText,
             ),
+        )
+    }
+
+    override fun exportMethodDex(
+        workspace: WorkspaceContext,
+        inventory: MaterialInventory,
+        request: ExportMethodDexRequest,
+    ): ExportResult {
+        val workdirPath = Paths.get(workspace.workdir)
+        val methodOnlyClassDef = resolveMethodOnlyClassDef(
+            workdirPath = workdirPath,
+            inventory = inventory,
+            methodSignature = request.methodSignature,
+            source = request.source,
+            workspace = workspace,
+        )
+        return ExportResult(
+            outputPath = writeSingleClassDex(
+                classDef = methodOnlyClassDef,
+                outputPath = request.outputPath,
+            ),
+        )
+    }
+
+    private fun resolveMethodOnlyClassDef(
+        workdirPath: Path,
+        inventory: MaterialInventory,
+        methodSignature: String,
+        source: SourceLocator,
+        workspace: WorkspaceContext,
+    ): ClassDef {
+        val signature = parseMethodSignature(methodSignature)
+        val match = resolveUniqueClassSource(
+            workdirPath = workdirPath,
+            inventory = inventory,
+            className = signature.classSignature,
+            source = source,
+            workspace = workspace,
+        )
+        val method = match.classDef.methods.firstOrNull {
+            it.name == signature.methodName && methodDescriptorOf(it) == signature.descriptor
+        } ?: throw DexExportError(
+            reason = DexExportErrorReason.MethodNotFound,
+            message = buildString {
+                append("method not found: ")
+                append(methodSignature)
+                append(" in class ")
+                append(signature.classSignature)
+                val sourceDescription = source.describe()
+                if (sourceDescription != null) {
+                    append(" (")
+                    append(sourceDescription)
+                    append(')')
+                }
+            },
+        )
+        return buildMethodOnlyClassDef(
+            classDef = match.classDef,
+            method = method,
         )
     }
 

@@ -5,6 +5,7 @@ import io.github.dexclub.core.api.dex.DexAnalysisService
 import io.github.dexclub.core.api.dex.ExportClassDexRequest
 import io.github.dexclub.core.api.dex.ExportClassJavaRequest
 import io.github.dexclub.core.api.dex.ExportClassSmaliRequest
+import io.github.dexclub.core.api.dex.ExportMethodDexRequest
 import io.github.dexclub.core.api.dex.ExportMethodSmaliRequest
 import io.github.dexclub.core.api.dex.ExportResult
 import io.github.dexclub.core.api.dex.FieldHit
@@ -205,6 +206,24 @@ internal class DefaultDexAnalysisService(
                 message = "Active target snapshot is missing: ${workspace.activeTargetId}",
             )
         return exportExecutor.exportMethodSmali(
+            workspace = workspace,
+            inventory = snapshot.inventory,
+            request = request,
+        )
+    }
+
+    override fun exportMethodDex(
+        workspace: WorkspaceContext,
+        request: ExportMethodDexRequest,
+    ): ExportResult {
+        capabilityChecker.require(workspace, Operation.ExportDex)
+        val snapshot = store.loadSnapshot(workspace.workdir, workspace.activeTargetId)
+            ?: throw WorkspaceResolveError(
+                reason = WorkspaceResolveErrorReason.InvalidSnapshot,
+                workdir = workspace.workdir,
+                message = "Active target snapshot is missing: ${workspace.activeTargetId}",
+            )
+        return exportExecutor.exportMethodDex(
             workspace = workspace,
             inventory = snapshot.inventory,
             request = request,

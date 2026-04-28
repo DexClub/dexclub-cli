@@ -106,6 +106,12 @@ data class ExportMethodSmaliRequest(
     val mode: MethodSmaliMode = MethodSmaliMode.Snippet,
 )
 
+data class ExportMethodDexRequest(
+    val methodSignature: String,
+    val source: SourceLocator = SourceLocator(),
+    val outputPath: String,
+)
+
 data class ExportResult(
     val outputPath: String,
 )

@@ -1,5 +1,8 @@
 package io.github.dexclub.core.impl.dex
 
+import com.android.tools.smali.dexlib2.Opcodes
+import com.android.tools.smali.dexlib2.dexbacked.DexBackedDexFile
+import io.github.dexclub.core.api.dex.ExportMethodDexRequest
 import io.github.dexclub.core.api.dex.FindClassesRequest
 import io.github.dexclub.core.api.dex.FindClassesUsingStringsRequest
 import io.github.dexclub.core.api.dex.FindFieldsRequest
@@ -382,6 +385,39 @@ class DefaultDexAnalysisServiceTest {
         }
 
         assertEquals(io.github.dexclub.core.api.dex.DexExportErrorReason.AmbiguousClass, error.reason)
+    }
+
+    @Test
+    fun exportMethodDexWritesMethodOnlyDex() {
+        val fixture = DexAnalysisFixture.generated()
+        val services = createDefaultServices()
+        services.workspace.initialize(fixture.dexFile.absolutePath)
+        val workspace = services.workspace.open(WorkspaceRef(fixture.dexWorkspaceDir.absolutePath))
+        val output = File(fixture.dexWorkspaceDir, "exposeNeedle.method.dex")
+
+        val result = services.dex.exportMethodDex(
+            workspace = workspace,
+            request = ExportMethodDexRequest(
+                methodSignature = "Lfixture/samples/SampleSearchTarget;->exposeNeedle()Ljava/lang/String;",
+                outputPath = output.absolutePath,
+            ),
+        )
+
+        assertEquals(output.absolutePath, result.outputPath)
+        val dexFile = DexBackedDexFile(Opcodes.getDefault(), Files.readAllBytes(output.toPath()))
+        val classDef = dexFile.classes.single()
+        assertEquals("Lfixture/samples/SampleSearchTarget;", classDef.type)
+        assertTrue(classDef.staticFields.none())
+        assertTrue(classDef.instanceFields.none())
+        val methods = classDef.methods.toList()
+        assertEquals(1, methods.size)
+        assertEquals("exposeNeedle", methods.single().name)
+        assertEquals("()Ljava/lang/String;", buildString {
+            append('(')
+            methods.single().parameterTypes.forEach { append(it) }
+            append(')')
+            append(methods.single().returnType)
+        })
     }
 
     @Test

@@ -36,6 +36,7 @@ internal class CliParser {
             "export-class-java" -> parseExportClassJava(argv.drop(1))
             "export-class-smali" -> parseExportClassSmali(argv.drop(1))
             "export-method-smali" -> parseExportMethodSmali(argv.drop(1))
+            "export-method-dex" -> parseExportMethodDex(argv.drop(1))
             else -> throw CliUsageError(
                 message = "unknown command: $command",
                 usage = CliUsages.general,
@@ -489,6 +490,20 @@ internal class CliParser {
             output = parsed.output,
             autoUnicodeDecode = parsed.autoUnicodeDecode,
             mode = parsed.mode,
+        )
+    }
+
+    private fun parseExportMethodDex(tokens: List<String>): CliRequest {
+        if (tokens.size == 1 && CliHelp.isHelpFlag(tokens.single())) {
+            return CliRequest.Help("export-method-dex")
+        }
+        val parsed = parseExportMethodDexCommand(tokens, CliUsages.exportMethodDex)
+        return CliRequest.ExportMethodDex(
+            workdir = parsed.workdir,
+            methodSignature = parsed.methodSignature,
+            sourcePath = parsed.sourcePath,
+            sourceEntry = parsed.sourceEntry,
+            output = parsed.output,
         )
     }
 
@@ -953,6 +968,97 @@ internal class CliParser {
         )
     }
 
+    private fun parseExportMethodDexCommand(
+        tokens: List<String>,
+        usage: String,
+    ): ParsedExportMethodDexCommand {
+        val positionals = mutableListOf<String>()
+        var methodSignature: String? = null
+        var sourcePath: String? = null
+        var sourceEntry: String? = null
+        var output: String? = null
+        var seenOption = false
+        val seenFlags = mutableSetOf<String>()
+        var index = 0
+
+        while (index < tokens.size) {
+            val token = tokens[index]
+            if (!token.startsWith("--")) {
+                if (seenOption) {
+                    throw CliUsageError(
+                        message = "positional arguments must appear before options",
+                        usage = usage,
+                    )
+                }
+                positionals += token
+                index += 1
+                continue
+            }
+
+            seenOption = true
+            if (!seenFlags.add(token)) {
+                throw CliUsageError(
+                    message = "option may only be specified once: $token",
+                    usage = usage,
+                )
+            }
+
+            when (token) {
+                "--method" -> {
+                    methodSignature = requireOptionValue(tokens, token, index, usage)
+                    index += 2
+                }
+
+                "--source-path" -> {
+                    sourcePath = requireOptionValue(tokens, token, index, usage)
+                    index += 2
+                }
+
+                "--source-entry" -> {
+                    sourceEntry = requireOptionValue(tokens, token, index, usage)
+                    index += 2
+                }
+
+                "--output" -> {
+                    output = requireOptionValue(tokens, token, index, usage)
+                    index += 2
+                }
+
+                else -> throw CliUsageError(
+                    message = "unknown option: $token",
+                    usage = usage,
+                )
+            }
+        }
+
+        if (positionals.size > 1) {
+            throw CliUsageError(
+                message = "too many positional arguments",
+                usage = usage,
+            )
+        }
+        if (sourceEntry != null && sourcePath == null) {
+            throw CliUsageError(
+                message = "--source-entry requires --source-path",
+                usage = usage,
+            )
+        }
+
+        return ParsedExportMethodDexCommand(
+            workdir = positionals.singleOrNull(),
+            methodSignature = methodSignature ?: throw CliUsageError(
+                message = "missing required option: --method",
+                usage = usage,
+            ),
+            sourcePath = sourcePath,
+            sourceEntry = sourceEntry,
+            output = output ?: throw CliUsageError(
+                message = "missing required option: --output",
+                usage = usage,
+            ),
+        )
+    }
+
     private fun parseExportClassJavaCommand(
         tokens: List<String>,
         usage: String,
@@ -1154,6 +1260,14 @@ internal class CliParser {
         val mode: String,
     )
 
+    private data class ParsedExportMethodDexCommand(
+        val workdir: String?,
+        val methodSignature: String,
+        val sourcePath: String?,
+        val sourceEntry: String?,
+        val output: String,
+    )
+
     private data class ParsedExportClassJavaCommand(
         val workdir: String?,
         val className: String,
@@ -1198,6 +1312,8 @@ internal object CliUsages {
         "cli export-class-smali [workdir] --class <class-name> [--source-path <path>] [--source-entry <entry>] --output <file> [--auto-unicode-decode true|false]"
     const val exportMethodSmali: String =
         "cli export-method-smali [workdir] --method <signature> [--source-path <path>] [--source-entry <entry>] --output <file> [--auto-unicode-decode true|false] [--mode snippet|class]"
+    const val exportMethodDex: String =
+        "cli export-method-dex [workdir] --method <signature> [--source-path <path>] [--source-entry <entry>] --output <file>"
 
     fun forCommand(command: String): String =
         when (command) {
@@ -1221,6 +1337,7 @@ internal object CliUsages {
             "export-class-java" -> exportClassJava
             "export-class-smali" -> exportClassSmali
             "export-method-smali" -> exportMethodSmali
+            "export-method-dex" -> exportMethodDex
             else -> general
         }
 }

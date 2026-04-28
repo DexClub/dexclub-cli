@@ -3,6 +3,7 @@ package io.github.dexclub.core.impl.dex
 import io.github.dexclub.core.api.dex.ExportClassDexRequest
 import io.github.dexclub.core.api.dex.ExportClassJavaRequest
 import io.github.dexclub.core.api.dex.ExportClassSmaliRequest
+import io.github.dexclub.core.api.dex.ExportMethodDexRequest
 import io.github.dexclub.core.api.dex.ExportMethodSmaliRequest
 import io.github.dexclub.core.api.dex.ExportResult
 import io.github.dexclub.core.api.workspace.WorkspaceContext
@@ -31,5 +32,11 @@ internal interface DexExportExecutor {
         workspace: WorkspaceContext,
         inventory: MaterialInventory,
         request: ExportMethodSmaliRequest,
+    ): ExportResult
+
+    fun exportMethodDex(
+        workspace: WorkspaceContext,
+        inventory: MaterialInventory,
+        request: ExportMethodDexRequest,
     ): ExportResult
 }

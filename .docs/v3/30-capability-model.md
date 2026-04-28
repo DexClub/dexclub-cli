@@ -180,6 +180,7 @@ enum class Operation {
 - `find-class-using-strings` -> `FindClass`
 - `find-method-using-strings` -> `FindMethod`
 - `export-class-dex` -> `ExportDex`
+- `export-method-dex` -> `ExportDex`
 - `export-class-smali` -> `ExportSmali`
 - `export-class-java` -> `ExportJava`
 - `export-method-smali` -> `ExportSmali`
