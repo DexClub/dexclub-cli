@@ -11,15 +11,12 @@ import io.github.dexclub.dexkit.result.FieldData
 import io.github.dexclub.dexkit.result.FieldDataList
 import io.github.dexclub.dexkit.result.MethodData
 import io.github.dexclub.dexkit.result.MethodDataList
+import io.github.dexclub.dexkit.result.UsingFieldData
 import io.github.dexclub.dexkit.result.toClassDataList
 import io.github.dexclub.dexkit.result.toFieldDataList
 import io.github.dexclub.dexkit.result.toMethodDataList
 import org.luckypray.dexkit.DexKitBridge as NativeDexKitBridge
 import java.io.File
-import java.nio.file.AtomicMoveNotSupportedException
-import java.nio.file.FileAlreadyExistsException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.util.zip.ZipFile
 
 actual class DexKitBridge {
@@ -134,6 +131,12 @@ actual class DexKitBridge {
         return ensureDelegate().getMethodData(descriptor)
             ?.invokes?.map { it.toKmpMethodData() }.orEmpty()
             .toMethodDataList(this)
+    }
+
+    actual fun getMethodUsingFields(descriptor: String): List<UsingFieldData> {
+        require(descriptor.isNotEmpty()) { "descriptor 不能为空" }
+        return ensureDelegate().getMethodData(descriptor)
+            ?.usingFields?.map { it.toKmpUsingFieldData() }.orEmpty()
     }
 
     actual fun close() {

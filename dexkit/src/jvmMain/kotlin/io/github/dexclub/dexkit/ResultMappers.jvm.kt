@@ -30,8 +30,10 @@ import io.github.dexclub.dexkit.query.TargetElementTypesMatcher as KmpTargetElem
 import io.github.dexclub.dexkit.query.UsingFieldMatcher as KmpUsingFieldMatcher
 import io.github.dexclub.dexkit.query.UsingType as KmpUsingType
 import io.github.dexclub.dexkit.result.ClassData
+import io.github.dexclub.dexkit.result.FieldUsingType
 import io.github.dexclub.dexkit.result.FieldData
 import io.github.dexclub.dexkit.result.MethodData
+import io.github.dexclub.dexkit.result.UsingFieldData
 import org.luckypray.dexkit.DexKitBridge as NativeDexKitBridge
 import org.luckypray.dexkit.query.BatchFindClassUsingStrings as NativeBatchFindClassUsingStrings
 import org.luckypray.dexkit.query.BatchFindMethodUsingStrings as NativeBatchFindMethodUsingStrings
@@ -66,7 +68,9 @@ import org.luckypray.dexkit.query.matchers.base.StringMatcher as NativeStringMat
 import org.luckypray.dexkit.query.matchers.base.TargetElementTypesMatcher as NativeTargetElementTypesMatcher
 import org.luckypray.dexkit.result.ClassData as NativeClassData
 import org.luckypray.dexkit.result.FieldData as NativeFieldData
+import org.luckypray.dexkit.result.FieldUsingType as NativeFieldUsingType
 import org.luckypray.dexkit.result.MethodData as NativeMethodData
+import org.luckypray.dexkit.result.UsingFieldData as NativeUsingFieldData
 
 internal fun NativeClassData.toKmpClassData(): ClassData =
     ClassData(
@@ -96,6 +100,17 @@ internal fun NativeFieldData.toKmpFieldData(): FieldData =
         className = className,
         typeName = typeName,
         modifiers = modifiers,
+    )
+
+internal fun NativeFieldUsingType.toKmpFieldUsingType(): FieldUsingType = when (this) {
+    NativeFieldUsingType.Read -> FieldUsingType.Read
+    NativeFieldUsingType.Write -> FieldUsingType.Write
+}
+
+internal fun NativeUsingFieldData.toKmpUsingFieldData(): UsingFieldData =
+    UsingFieldData(
+        field = field.toKmpFieldData(),
+        usingType = usingType.toKmpFieldUsingType(),
     )
 
 internal fun KmpStringMatchType.toNative(): NativeStringMatchType = when (this) {

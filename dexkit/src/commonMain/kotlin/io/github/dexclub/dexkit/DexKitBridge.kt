@@ -11,6 +11,7 @@ import io.github.dexclub.dexkit.result.FieldData
 import io.github.dexclub.dexkit.result.FieldDataList
 import io.github.dexclub.dexkit.result.MethodData
 import io.github.dexclub.dexkit.result.MethodDataList
+import io.github.dexclub.dexkit.result.UsingFieldData
 
 expect class DexKitBridge(dexPaths: List<String>) {
 
@@ -51,6 +52,8 @@ expect class DexKitBridge(dexPaths: List<String>) {
     fun getMethodCallers(descriptor: String): MethodDataList
 
     fun getMethodInvokes(descriptor: String): MethodDataList
+
+    fun getMethodUsingFields(descriptor: String): List<UsingFieldData>
 
     fun close()
 }
