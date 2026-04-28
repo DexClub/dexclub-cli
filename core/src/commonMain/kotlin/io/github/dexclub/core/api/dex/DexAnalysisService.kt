@@ -19,6 +19,8 @@ interface DexAnalysisService {
         request: FindMethodsUsingStringsRequest,
     ): List<MethodHit>
 
+    fun inspectMethod(workspace: WorkspaceContext, request: InspectMethodRequest): MethodDetail
+
     fun exportClassDex(workspace: WorkspaceContext, request: ExportClassDexRequest): ExportResult
 
     fun exportClassSmali(workspace: WorkspaceContext, request: ExportClassSmaliRequest): ExportResult

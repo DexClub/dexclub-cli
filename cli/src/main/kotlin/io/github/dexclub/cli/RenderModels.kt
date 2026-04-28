@@ -3,6 +3,8 @@ package io.github.dexclub.cli
 import io.github.dexclub.core.api.dex.ClassHit
 import io.github.dexclub.core.api.dex.ExportResult
 import io.github.dexclub.core.api.dex.FieldHit
+import io.github.dexclub.core.api.dex.MethodDetail
+import io.github.dexclub.core.api.dex.MethodFieldUsage
 import io.github.dexclub.core.api.dex.MethodHit
 import io.github.dexclub.core.api.resource.DecodedXmlResult
 import io.github.dexclub.core.api.resource.ManifestResult
@@ -36,6 +38,7 @@ internal sealed interface RenderPayload {
     data class ResourceValueHits(val hits: List<ResourceEntryValueHitView>) : RenderPayload
     data class ClassHits(val hits: List<ClassHitView>) : RenderPayload
     data class MethodHits(val hits: List<MethodHitView>) : RenderPayload
+    data class MethodDetail(val view: MethodDetailView) : RenderPayload
     data class FieldHits(val hits: List<FieldHitView>) : RenderPayload
     data class Export(val view: ExportView) : RenderPayload
 }
@@ -311,6 +314,38 @@ internal data class MethodHitView(
                 descriptor = hit.descriptor,
                 sourcePath = hit.sourcePath,
                 sourceEntry = hit.sourceEntry,
+            )
+    }
+}
+
+@Serializable
+internal data class MethodFieldUsageView(
+    val usingType: String,
+    val field: FieldHitView,
+) {
+    companion object {
+        fun from(usage: MethodFieldUsage): MethodFieldUsageView =
+            MethodFieldUsageView(
+                usingType = usage.usingType.name,
+                field = FieldHitView.from(usage.field),
+            )
+    }
+}
+
+@Serializable
+internal data class MethodDetailView(
+    val method: MethodHitView,
+    val usingFields: List<MethodFieldUsageView>? = null,
+    val callers: List<MethodHitView>? = null,
+    val invokes: List<MethodHitView>? = null,
+) {
+    companion object {
+        fun from(detail: MethodDetail): MethodDetailView =
+            MethodDetailView(
+                method = MethodHitView.from(detail.method),
+                usingFields = detail.usingFields?.map(MethodFieldUsageView::from),
+                callers = detail.callers?.map(MethodHitView::from),
+                invokes = detail.invokes?.map(MethodHitView::from),
             )
     }
 }

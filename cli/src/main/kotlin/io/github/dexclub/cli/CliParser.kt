@@ -1,5 +1,6 @@
 package io.github.dexclub.cli
 
+import io.github.dexclub.core.api.dex.MethodDetailSection
 import io.github.dexclub.core.api.shared.PageWindow
 
 internal class CliParser {
@@ -27,6 +28,7 @@ internal class CliParser {
             "find-res" -> parseFindRes(argv.drop(1))
             "find-class" -> parseFindClass(argv.drop(1))
             "find-method" -> parseFindMethod(argv.drop(1))
+            "inspect-method" -> parseInspectMethod(argv.drop(1))
             "find-field" -> parseFindField(argv.drop(1))
             "find-class-using-strings" -> parseFindClassUsingStrings(argv.drop(1))
             "find-method-using-strings" -> parseFindMethodUsingStrings(argv.drop(1))
@@ -310,6 +312,85 @@ internal class CliParser {
             query = parsed.query,
             window = parsed.window,
             outputFormat = parsed.outputFormat,
+        )
+    }
+
+    private fun parseInspectMethod(tokens: List<String>): CliRequest {
+        if (tokens.size == 1 && CliHelp.isHelpFlag(tokens.single())) {
+            return CliRequest.Help("inspect-method")
+        }
+        val usage = CliUsages.inspectMethod
+        val positionals = mutableListOf<String>()
+        var outputFormat = OutputFormat.Text
+        var descriptor: String? = null
+        var includes: Set<MethodDetailSection>? = null
+        var seenOption = false
+        val seenFlags = mutableSetOf<String>()
+        var index = 0
+
+        while (index < tokens.size) {
+            val token = tokens[index]
+            if (!token.startsWith("--")) {
+                if (seenOption) {
+                    throw CliUsageError(
+                        message = "positional arguments must appear before options",
+                        usage = usage,
+                    )
+                }
+                positionals += token
+                index += 1
+                continue
+            }
+
+            seenOption = true
+            if (!seenFlags.add(token)) {
+                throw CliUsageError(
+                    message = "option may only be specified once: $token",
+                    usage = usage,
+                )
+            }
+
+            when (token) {
+                "--json" -> {
+                    outputFormat = OutputFormat.Json
+                    index += 1
+                }
+
+                "--descriptor" -> {
+                    descriptor = requireOptionValue(tokens, token, index, usage)
+                    index += 2
+                }
+
+                "--include" -> {
+                    includes = parseMethodDetailIncludes(
+                        requireOptionValue(tokens, token, index, usage),
+                        usage,
+                    )
+                    index += 2
+                }
+
+                else -> throw CliUsageError(
+                    message = "unknown option: $token",
+                    usage = usage,
+                )
+            }
+        }
+
+        if (positionals.size > 1) {
+            throw CliUsageError(
+                message = "too many positional arguments",
+                usage = usage,
+            )
+        }
+
+        return CliRequest.InspectMethod(
+            workdir = positionals.singleOrNull(),
+            descriptor = descriptor ?: throw CliUsageError(
+                message = "missing required option: --descriptor",
+                usage = usage,
+            ),
+            includes = includes ?: MethodDetailSection.entries.toSet(),
+            outputFormat = outputFormat,
         )
     }
 
@@ -1002,6 +1083,38 @@ internal class CliParser {
         }
     }
 
+    private fun parseMethodDetailIncludes(value: String, usage: String): Set<MethodDetailSection> {
+        if (value.isBlank()) {
+            throw CliUsageError(
+                message = "invalid value for --include: expected a comma-separated list",
+                usage = usage,
+            )
+        }
+        val sections = value.split(',')
+            .map { token ->
+                when (val normalized = token.trim()) {
+                    "using-fields" -> MethodDetailSection.UsingFields
+                    "callers" -> MethodDetailSection.Callers
+                    "invokes" -> MethodDetailSection.Invokes
+                    "" -> throw CliUsageError(
+                        message = "invalid value for --include: empty section is not allowed",
+                        usage = usage,
+                    )
+                    else -> throw CliUsageError(
+                        message = "invalid value for --include: unsupported section '$normalized'",
+                        usage = usage,
+                    )
+                }
+            }
+        if (sections.distinct().size != sections.size) {
+            throw CliUsageError(
+                message = "invalid value for --include: duplicate sections are not allowed",
+                usage = usage,
+            )
+        }
+        return sections.toSet()
+    }
+
     private data class ParsedCommand(
         val positionals: List<String>,
         val outputFormat: OutputFormat,
@@ -1069,6 +1182,8 @@ internal object CliUsages {
         "cli find-class [workdir] (--query-json <json> | --query-file <file>) [--offset <n>] [--limit <n>] [--json]"
     const val findMethod: String =
         "cli find-method [workdir] (--query-json <json> | --query-file <file>) [--offset <n>] [--limit <n>] [--json]"
+    const val inspectMethod: String =
+        "cli inspect-method [workdir] --descriptor <method-descriptor> [--include <sections>] [--json]"
     const val findField: String =
         "cli find-field [workdir] (--query-json <json> | --query-file <file>) [--offset <n>] [--limit <n>] [--json]"
     const val findClassUsingStrings: String =
@@ -1098,6 +1213,7 @@ internal object CliUsages {
             "find-res" -> findRes
             "find-class" -> findClass
             "find-method" -> findMethod
+            "inspect-method" -> inspectMethod
             "find-field" -> findField
             "find-class-using-strings" -> findClassUsingStrings
             "find-method-using-strings" -> findMethodUsingStrings

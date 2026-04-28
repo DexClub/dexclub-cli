@@ -10,6 +10,18 @@ class DexQueryError(
     cause: Throwable? = null,
 ) : RuntimeException(message, cause)
 
+enum class DexInspectErrorReason {
+    InvalidMethodDescriptor,
+    MethodNotFound,
+    AmbiguousMethod,
+}
+
+class DexInspectError(
+    val reason: DexInspectErrorReason,
+    message: String,
+    cause: Throwable? = null,
+) : RuntimeException(message, cause)
+
 enum class DexExportErrorReason {
     InvalidSourceLocator,
     InvalidMethodSignature,

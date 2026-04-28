@@ -69,6 +69,7 @@ internal class Renderer {
             is RenderPayload.ResourceValueHits -> renderResourceValueHits(payload.hits)
             is RenderPayload.ClassHits -> renderClassHits(payload.hits)
             is RenderPayload.MethodHits -> renderMethodHits(payload.hits)
+            is RenderPayload.MethodDetail -> renderMethodDetail(payload.view)
             is RenderPayload.FieldHits -> renderFieldHits(payload.hits)
             is RenderPayload.Export -> renderExport(payload.view)
         }
@@ -88,6 +89,7 @@ internal class Renderer {
             is RenderPayload.ResourceValueHits -> json.encodeToString(payload.hits)
             is RenderPayload.ClassHits -> json.encodeToString(payload.hits)
             is RenderPayload.MethodHits -> json.encodeToString(payload.hits)
+            is RenderPayload.MethodDetail -> json.encodeToString(payload.view)
             is RenderPayload.FieldHits -> json.encodeToString(payload.hits)
             is RenderPayload.Export -> json.encodeToString(payload.view)
         }
@@ -232,6 +234,73 @@ internal class Renderer {
                 append(hit.sourcePath.orEmpty())
                 append('\t')
                 append(hit.sourceEntry.orEmpty())
+            }
+        }
+
+    private fun renderMethodDetail(view: MethodDetailView): String =
+        buildString {
+            appendLine("method.className=${view.method.className}")
+            appendLine("method.methodName=${view.method.methodName}")
+            appendLine("method.descriptor=${view.method.descriptor}")
+            appendLine("method.sourcePath=${view.method.sourcePath.orEmpty()}")
+            appendLine("method.sourceEntry=${view.method.sourceEntry.orEmpty()}")
+
+            view.usingFields?.let { usages ->
+                appendLine()
+                appendLine("usingFields")
+                append("usingType\tclassName\tfieldName\tdescriptor\tsourcePath\tsourceEntry")
+                usages.forEach { usage ->
+                    appendLine()
+                    append(usage.usingType)
+                    append('\t')
+                    append(usage.field.className)
+                    append('\t')
+                    append(usage.field.fieldName)
+                    append('\t')
+                    append(usage.field.descriptor)
+                    append('\t')
+                    append(usage.field.sourcePath.orEmpty())
+                    append('\t')
+                    append(usage.field.sourceEntry.orEmpty())
+                }
+            }
+
+            view.callers?.let { callers ->
+                appendLine()
+                appendLine()
+                appendLine("callers")
+                append("className\tmethodName\tdescriptor\tsourcePath\tsourceEntry")
+                callers.forEach { caller ->
+                    appendLine()
+                    append(caller.className)
+                    append('\t')
+                    append(caller.methodName)
+                    append('\t')
+                    append(caller.descriptor)
+                    append('\t')
+                    append(caller.sourcePath.orEmpty())
+                    append('\t')
+                    append(caller.sourceEntry.orEmpty())
+                }
+            }
+
+            view.invokes?.let { invokes ->
+                appendLine()
+                appendLine()
+                appendLine("invokes")
+                append("className\tmethodName\tdescriptor\tsourcePath\tsourceEntry")
+                invokes.forEach { invoke ->
+                    appendLine()
+                    append(invoke.className)
+                    append('\t')
+                    append(invoke.methodName)
+                    append('\t')
+                    append(invoke.descriptor)
+                    append('\t')
+                    append(invoke.sourcePath.orEmpty())
+                    append('\t')
+                    append(invoke.sourceEntry.orEmpty())
+                }
             }
         }
 

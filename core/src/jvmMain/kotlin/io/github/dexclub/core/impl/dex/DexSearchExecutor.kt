@@ -2,6 +2,8 @@ package io.github.dexclub.core.impl.dex
 
 import io.github.dexclub.core.api.dex.ClassHit
 import io.github.dexclub.core.api.dex.FieldHit
+import io.github.dexclub.core.api.dex.InspectMethodRequest
+import io.github.dexclub.core.api.dex.MethodDetail
 import io.github.dexclub.core.api.dex.MethodHit
 import io.github.dexclub.core.api.workspace.WorkspaceContext
 import io.github.dexclub.core.impl.workspace.model.MaterialInventory
@@ -41,4 +43,10 @@ internal interface DexSearchExecutor {
         inventory: MaterialInventory,
         query: BatchFindMethodUsingStrings,
     ): List<MethodHit>
+
+    fun inspectMethod(
+        workspace: WorkspaceContext,
+        inventory: MaterialInventory,
+        request: InspectMethodRequest,
+    ): MethodDetail
 }

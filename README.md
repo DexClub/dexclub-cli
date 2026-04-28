@@ -182,6 +182,7 @@ java -jar cli/build/libs/dexclub-cli-all.jar gc /path/to/workdir
 - `find-field`
 - `find-class-using-strings`
 - `find-method-using-strings`
+- `inspect-method`
 
 示例：
 
@@ -196,12 +197,21 @@ java -jar cli/build/libs/dexclub-cli-all.jar find-method-using-strings /path/to/
   --query-file /path/to/query.json
 ```
 
+```bash
+java -jar cli/build/libs/dexclub-cli-all.jar inspect-method /path/to/workdir \
+  --descriptor 'Lcom/example/Sample;->name()Ljava/lang/String;' \
+  --include using-fields,callers,invokes \
+  --json
+```
+
 规则：
 
 - `--query-json` 与 `--query-file` 必须且只能传一个
 - `--query-file` 按 UTF-8 读取
 - `--offset` 默认 `0`
 - `--limit` 默认 `all`
+- `inspect-method` 是详情命令，不接受查询 JSON
+- `inspect-method` 的 `--descriptor` 必须在当前工作区内唯一命中
 
 ### Dex 导出命令
 

@@ -1,5 +1,6 @@
 package io.github.dexclub.cli
 
+import io.github.dexclub.core.api.dex.MethodDetailSection
 import io.github.dexclub.core.api.shared.PageWindow
 
 enum class OutputFormat {
@@ -92,6 +93,13 @@ sealed interface CliRequest {
         val workdir: String?,
         val query: QueryInput,
         val window: PageWindow,
+        override val outputFormat: OutputFormat,
+    ) : CliRequest
+
+    data class InspectMethod(
+        val workdir: String?,
+        val descriptor: String,
+        val includes: Set<MethodDetailSection>,
         override val outputFormat: OutputFormat,
     ) : CliRequest
 

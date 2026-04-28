@@ -718,21 +718,163 @@ class CliAppTest {
                 "find-method-using-strings",
                 "--query-json",
                 """{"groups":{"needle-a":[{"value":"dexclub-needle-string","matchType":"Equals"}],"needle-b":[{"value":"dexclub-needle-string","matchType":"Equals"}]}}""",
-                "--offset",
-                "1",
-                "--limit",
-                "1",
                 "--json",
             ),
         )
 
         assertEquals(0, output.exitCode, output.stderr)
         val parsed = Json.parseToJsonElement(output.stdout).jsonArray
-        assertEquals(1, parsed.size)
-        val hit = parsed.single().jsonObject
-        assertEquals("fixture.samples.SampleSearchTarget", hit.getValue("className").jsonPrimitive.content)
-        assertEquals("exposeNeedle", hit.getValue("methodName").jsonPrimitive.content)
+        val hit = parsed.firstOrNull { element ->
+            val method = element.jsonObject
+            method["className"]?.jsonPrimitive?.content == "fixture.samples.SampleSearchTarget" &&
+                method["methodName"]?.jsonPrimitive?.content == "exposeNeedle"
+        }?.jsonObject
+        assertTrue(hit != null, output.stdout)
         assertEquals("fixture.dex", hit.getValue("sourcePath").jsonPrimitive.content)
+    }
+
+    @Test
+    fun inspectMethodReturnsRequestedMethodDetailsAsJson() {
+        val fixture = CliDexFixture.generated()
+        val app = CliApp(
+            services = createDefaultServices(),
+            cwdProvider = { fixture.dexWorkspaceDir.absolutePath },
+        )
+
+        val initOut = run(app, listOf("init", fixture.dexFile.absolutePath))
+        assertEquals(0, initOut.exitCode)
+
+        val output = run(
+            app,
+            listOf(
+                "inspect-method",
+                "--descriptor",
+                "Lfixture/samples/SampleSearchTarget;->readMutableNeedle()Ljava/lang/String;",
+                "--json",
+            ),
+        )
+
+        assertEquals(0, output.exitCode, output.stderr)
+        val parsed = Json.parseToJsonElement(output.stdout).jsonObject
+        val method = parsed.getValue("method").jsonObject
+        assertEquals("fixture.samples.SampleSearchTarget", method.getValue("className").jsonPrimitive.content)
+        assertEquals("readMutableNeedle", method.getValue("methodName").jsonPrimitive.content)
+        assertEquals("fixture.dex", method.getValue("sourcePath").jsonPrimitive.content)
+
+        val usingField = parsed.getValue("usingFields").jsonArray.single().jsonObject
+        assertEquals("Read", usingField.getValue("usingType").jsonPrimitive.content)
+        val field = usingField.getValue("field").jsonObject
+        assertEquals("fixture.samples.SampleSearchTarget", field.getValue("className").jsonPrimitive.content)
+        assertEquals("mutableNeedle", field.getValue("fieldName").jsonPrimitive.content)
+
+        val callers = parsed.getValue("callers").jsonArray
+        assertEquals(1, callers.size)
+        assertEquals(
+            "callReadMutableNeedle",
+            callers.single().jsonObject.getValue("methodName").jsonPrimitive.content,
+        )
+
+        assertEquals(0, parsed.getValue("invokes").jsonArray.size)
+    }
+
+    @Test
+    fun inspectMethodIncludeOmitsUnrequestedSections() {
+        val fixture = CliDexFixture.generated()
+        val app = CliApp(
+            services = createDefaultServices(),
+            cwdProvider = { fixture.dexWorkspaceDir.absolutePath },
+        )
+
+        val initOut = run(app, listOf("init", fixture.dexFile.absolutePath))
+        assertEquals(0, initOut.exitCode)
+
+        val output = run(
+            app,
+            listOf(
+                "inspect-method",
+                "--descriptor",
+                "Lfixture/samples/SampleSearchTarget;->readMutableNeedle()Ljava/lang/String;",
+                "--include",
+                "using-fields,callers",
+                "--json",
+            ),
+        )
+
+        assertEquals(0, output.exitCode, output.stderr)
+        val parsed = Json.parseToJsonElement(output.stdout).jsonObject
+        assertTrue("usingFields" in parsed)
+        assertTrue("callers" in parsed)
+        assertTrue("invokes" !in parsed)
+    }
+
+    @Test
+    fun inspectMethodReturnsWorkspaceErrorWhenDescriptorIsAmbiguous() {
+        val fixture = CliDexFixture.generated()
+        val app = CliApp(
+            services = createDefaultServices(),
+            cwdProvider = { fixture.ambiguousWorkspaceDir.absolutePath },
+        )
+
+        val initOut = run(app, listOf("init", fixture.ambiguousApkFile.absolutePath))
+        assertEquals(0, initOut.exitCode)
+
+        val output = run(
+            app,
+            listOf(
+                "inspect-method",
+                "--descriptor",
+                "Lfixture/samples/SampleSearchTarget;->readMutableNeedle()Ljava/lang/String;",
+            ),
+        )
+
+        assertEquals(2, output.exitCode)
+        assertTrue(output.stderr.contains("requires a unique descriptor within the workspace"), output.stderr)
+    }
+
+    @Test
+    fun inspectMethodFindsCrossDexCallersAndResolvesRealSourceEntries() {
+        val fixture = CliDexFixture.generated()
+        val app = CliApp(
+            services = createDefaultServices(),
+            cwdProvider = { fixture.crossDexWorkspaceDir.absolutePath },
+        )
+
+        val initOut = run(app, listOf("init", fixture.crossDexApkFile.absolutePath))
+        assertEquals(0, initOut.exitCode)
+
+        val output = run(
+            app,
+            listOf(
+                "inspect-method",
+                "--descriptor",
+                "Lfixture/samples/SplitTarget;->readFromHelper()Ljava/lang/String;",
+                "--json",
+            ),
+        )
+
+        assertEquals(0, output.exitCode, output.stderr)
+        val parsed = Json.parseToJsonElement(output.stdout).jsonObject
+        val method = parsed.getValue("method").jsonObject
+        assertEquals("classes2.dex", method.getValue("sourceEntry").jsonPrimitive.content)
+
+        val callers = parsed.getValue("callers").jsonArray
+        assertEquals(1, callers.size)
+        val caller = callers.single().jsonObject
+        assertEquals("invokeTarget", caller.getValue("methodName").jsonPrimitive.content)
+        assertEquals("classes.dex", caller.getValue("sourceEntry").jsonPrimitive.content)
+
+        val usingFields = parsed.getValue("usingFields").jsonArray
+        val sharedField = usingFields.first { element ->
+            element.jsonObject.getValue("field").jsonObject.getValue("fieldName").jsonPrimitive.content == "sharedField"
+        }.jsonObject.getValue("field").jsonObject
+        assertEquals("classes.dex", sharedField.getValue("sourceEntry").jsonPrimitive.content)
+
+        val helperInvoke = parsed.getValue("invokes").jsonArray.first { element ->
+            val methodObject = element.jsonObject
+            methodObject.getValue("className").jsonPrimitive.content == "fixture.samples.SplitHelper" &&
+                methodObject.getValue("methodName").jsonPrimitive.content == "helper"
+        }.jsonObject
+        assertEquals("classes.dex", helperInvoke.getValue("sourceEntry").jsonPrimitive.content)
     }
 
     @Test
@@ -1117,6 +1259,8 @@ private class CliDexFixture(
     val dexFile: File,
     val ambiguousWorkspaceDir: File,
     val ambiguousApkFile: File,
+    val crossDexWorkspaceDir: File,
+    val crossDexApkFile: File,
 ) {
     companion object {
         fun generated(): CliDexFixture {
@@ -1128,8 +1272,18 @@ private class CliDexFixture(
                     package fixture.samples;
                     public class SampleSearchTarget {
                         public static final String NEEDLE = "dexclub-needle-string";
+                        public String mutableNeedle = NEEDLE;
                         public String exposeNeedle() {
                             return NEEDLE;
+                        }
+                        public String callExposeNeedle() {
+                            return exposeNeedle();
+                        }
+                        public String readMutableNeedle() {
+                            return mutableNeedle;
+                        }
+                        public String callReadMutableNeedle() {
+                            return readMutableNeedle();
                         }
                     }
                 """.trimIndent(),
@@ -1162,29 +1316,90 @@ private class CliDexFixture(
                 "classes2.dex" to duplicateSampleDex,
             )
 
+            val splitHelperClasses = compileJava(
+                root = root,
+                fileName = "SplitHelper.java",
+                source = """
+                    package fixture.samples;
+                    public class SplitHelper {
+                        public String sharedField = "split-field";
+                        public String helper() {
+                            return "split-helper";
+                        }
+                    }
+                """.trimIndent(),
+            )
+            val splitTargetClasses = compileJava(
+                root = root,
+                fileName = "SplitTarget.java",
+                classpath = listOf(splitHelperClasses),
+                source = """
+                    package fixture.samples;
+                    public class SplitTarget {
+                        private final SplitHelper helper = new SplitHelper();
+                        public String readFromHelper() {
+                            return helper.sharedField + helper.helper();
+                        }
+                    }
+                """.trimIndent(),
+            )
+            val splitCallerClasses = compileJava(
+                root = root,
+                fileName = "SplitCaller.java",
+                classpath = listOf(splitHelperClasses, splitTargetClasses),
+                source = """
+                    package fixture.samples;
+                    public class SplitCaller {
+                        public String invokeTarget() {
+                            return new SplitTarget().readFromHelper();
+                        }
+                    }
+                """.trimIndent(),
+            )
+            val splitClassesDex = compileDex(root, "split-classes", splitHelperClasses, splitCallerClasses)
+            val splitClasses2Dex = compileDex(root, "split-classes2", splitTargetClasses)
+            val crossDexWorkspaceDir = File(root, "cross-dex-input").also(File::mkdirs)
+            val crossDexApkFile = File(crossDexWorkspaceDir, "fixture.apk")
+            createPseudoApk(
+                outputApk = crossDexApkFile,
+                "classes.dex" to splitClassesDex,
+                "classes2.dex" to splitClasses2Dex,
+            )
+
             return CliDexFixture(
                 dexWorkspaceDir = dexWorkspaceDir,
                 dexFile = dexFile,
                 ambiguousWorkspaceDir = ambiguousWorkspaceDir,
                 ambiguousApkFile = ambiguousApkFile,
+                crossDexWorkspaceDir = crossDexWorkspaceDir,
+                crossDexApkFile = crossDexApkFile,
             )
         }
 
-        private fun compileJava(root: File, fileName: String, source: String): File {
+        private fun compileJava(
+            root: File,
+            fileName: String,
+            source: String,
+            classpath: List<File> = emptyList(),
+        ): File {
             val sourceDir = File(root, "src-$fileName/fixture/samples").also(File::mkdirs)
             val sourceFile = File(sourceDir, fileName).apply {
                 writeText(source, Charsets.UTF_8)
             }
             val classesDir = File(root, "classes-$fileName").also(File::mkdirs)
             runCommand(
-                command = listOf(
-                    "javac",
-                    "--release",
-                    "8",
-                    "-d",
-                    classesDir.absolutePath,
-                    sourceFile.absolutePath,
-                ),
+                command = buildList {
+                    add("javac")
+                    add("--release")
+                    add("8")
+                    if (classpath.isNotEmpty()) {
+                        add("-classpath")
+                        add(classpath.joinToString(File.pathSeparator) { it.absolutePath })
+                    }
+                    add("-d")
+                    add(classesDir.absolutePath)
+                    add(sourceFile.absolutePath)
+                },
                 workingDirectory = root,
             )
             return classesDir

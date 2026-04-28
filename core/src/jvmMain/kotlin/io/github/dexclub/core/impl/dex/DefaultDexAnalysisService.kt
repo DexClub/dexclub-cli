@@ -8,9 +8,13 @@ import io.github.dexclub.core.api.dex.ExportClassSmaliRequest
 import io.github.dexclub.core.api.dex.ExportMethodSmaliRequest
 import io.github.dexclub.core.api.dex.ExportResult
 import io.github.dexclub.core.api.dex.FieldHit
+import io.github.dexclub.core.api.dex.FieldUsageType
 import io.github.dexclub.core.api.dex.FindClassesRequest
 import io.github.dexclub.core.api.dex.FindClassesUsingStringsRequest
 import io.github.dexclub.core.api.dex.FindFieldsRequest
+import io.github.dexclub.core.api.dex.InspectMethodRequest
+import io.github.dexclub.core.api.dex.MethodDetail
+import io.github.dexclub.core.api.dex.MethodFieldUsage
 import io.github.dexclub.core.api.dex.FindMethodsRequest
 import io.github.dexclub.core.api.dex.FindMethodsUsingStringsRequest
 import io.github.dexclub.core.api.dex.MethodHit
@@ -122,6 +126,27 @@ internal class DefaultDexAnalysisService(
             applyWindow(sortMethodHits(hits), request.window.offset, request.window.limit)
         }
 
+    override fun inspectMethod(
+        workspace: WorkspaceContext,
+        request: InspectMethodRequest,
+    ): MethodDetail =
+        run {
+            capabilityChecker.require(workspace, Operation.FindMethod)
+            val snapshot = store.loadSnapshot(workspace.workdir, workspace.activeTargetId)
+                ?: throw WorkspaceResolveError(
+                    reason = WorkspaceResolveErrorReason.InvalidSnapshot,
+                    workdir = workspace.workdir,
+                    message = "Active target snapshot is missing: ${workspace.activeTargetId}",
+                )
+            sortMethodDetail(
+                searchExecutor.inspectMethod(
+                    workspace = workspace,
+                    inventory = snapshot.inventory,
+                    request = request,
+                ),
+            )
+        }
+
     override fun exportClassDex(workspace: WorkspaceContext, request: ExportClassDexRequest): ExportResult {
         capabilityChecker.require(workspace, Operation.ExportDex)
         val snapshot = store.loadSnapshot(workspace.workdir, workspace.activeTargetId)
@@ -211,6 +236,23 @@ internal class DefaultDexAnalysisService(
                 { it.sourcePath.orEmpty() },
                 { it.sourceEntry.orEmpty() },
             ),
+        )
+
+    private fun sortMethodDetail(detail: MethodDetail): MethodDetail =
+        MethodDetail(
+            method = detail.method,
+            usingFields = detail.usingFields?.sortedWith(
+                compareBy<MethodFieldUsage>(
+                    { it.usingType != FieldUsageType.Read },
+                    { it.field.className },
+                    { it.field.fieldName },
+                    { it.field.descriptor },
+                    { it.field.sourcePath.orEmpty() },
+                    { it.field.sourceEntry.orEmpty() },
+                ),
+            ),
+            callers = detail.callers?.let(::sortMethodHits),
+            invokes = detail.invokes?.let(::sortMethodHits),
         )
 
     private fun <T> applyWindow(hits: List<T>, offset: Int, limit: Int?): List<T> {

@@ -1,6 +1,7 @@
 package io.github.dexclub.cli
 
 import io.github.dexclub.core.api.dex.DexQueryError
+import io.github.dexclub.core.api.dex.DexInspectError
 import io.github.dexclub.core.api.dex.DexExportError
 import io.github.dexclub.core.api.shared.CapabilityError
 import io.github.dexclub.core.api.shared.Operation
@@ -67,6 +68,11 @@ class CliApp(
                 message = error.message ?: "Dex query failed",
                 hint = null,
             )
+        } catch (error: DexInspectError) {
+            renderer.renderWorkspaceError(
+                message = error.message ?: "Method inspection failed",
+                hint = null,
+            )
         } catch (error: DexExportError) {
             renderer.renderWorkspaceError(
                 message = error.message ?: "Dex export failed",
@@ -97,6 +103,7 @@ private fun CliRequest.toCommandName(): String =
         is CliRequest.Status -> "status"
         is CliRequest.Gc -> "gc"
         is CliRequest.Inspect -> "inspect"
+        is CliRequest.InspectMethod -> "inspect-method"
         is CliRequest.Manifest -> "manifest"
         is CliRequest.ResTable -> "res-table"
         is CliRequest.DecodeXml -> "decode-xml"

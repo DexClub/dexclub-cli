@@ -23,6 +23,7 @@ internal class CommandDispatcher(
             is CliRequest.Status -> workspace.loadStatus(request)
             is CliRequest.Gc -> workspace.gc(request)
             is CliRequest.Inspect -> inspect.inspect(request)
+            is CliRequest.InspectMethod -> inspect.inspectMethod(request)
             is CliRequest.Manifest -> resource.manifest(request)
             is CliRequest.ResTable -> resource.resTable(request)
             is CliRequest.DecodeXml -> resource.decodeXml(request)

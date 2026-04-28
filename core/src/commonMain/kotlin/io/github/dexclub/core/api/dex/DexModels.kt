@@ -26,6 +26,29 @@ data class FieldHit(
     val sourceEntry: String? = null,
 )
 
+enum class MethodDetailSection {
+    UsingFields,
+    Callers,
+    Invokes,
+}
+
+enum class FieldUsageType {
+    Read,
+    Write,
+}
+
+data class MethodFieldUsage(
+    val usingType: FieldUsageType,
+    val field: FieldHit,
+)
+
+data class MethodDetail(
+    val method: MethodHit,
+    val usingFields: List<MethodFieldUsage>? = null,
+    val callers: List<MethodHit>? = null,
+    val invokes: List<MethodHit>? = null,
+)
+
 data class FindClassesRequest(
     val queryText: String,
     val window: PageWindow = PageWindow(),
@@ -49,6 +72,11 @@ data class FindClassesUsingStringsRequest(
 data class FindMethodsUsingStringsRequest(
     val queryText: String,
     val window: PageWindow = PageWindow(),
+)
+
+data class InspectMethodRequest(
+    val descriptor: String,
+    val includes: Set<MethodDetailSection> = MethodDetailSection.entries.toSet(),
 )
 
 data class ExportClassDexRequest(
