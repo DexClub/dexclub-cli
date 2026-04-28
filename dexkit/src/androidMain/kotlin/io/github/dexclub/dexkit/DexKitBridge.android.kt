@@ -22,7 +22,6 @@ actual class DexKitBridge {
 
     actual constructor(dexPaths: List<String>) {
         require(dexPaths.isNotEmpty()) { "dexPaths 不能为空" }
-        ensureLibraryLoaded()
         val dexBytesArray = dexPaths.map { path ->
             val dexFile = File(path)
             require(dexFile.exists()) { "dex 文件不存在: ${dexFile.absolutePath}" }
@@ -33,7 +32,6 @@ actual class DexKitBridge {
     }
 
     actual constructor(apkPath: String) {
-        ensureLibraryLoaded()
         require(apkPath.isNotEmpty()) { "apkPath 不能为空" }
         val apkFile = File(apkPath)
         require(apkFile.exists()) { "apk 文件不存在: ${apkFile.absolutePath}" }
@@ -42,7 +40,6 @@ actual class DexKitBridge {
     }
 
     actual constructor(dexBytesArray: Array<ByteArray>) {
-        ensureLibraryLoaded()
         require(dexBytesArray.isNotEmpty()) { "dexBytesArray 不能为空" }
         delegate = NativeDexKitBridge.create(dexBytesArray)
     }
@@ -54,7 +51,6 @@ actual class DexKitBridge {
      * @param useMemoryDexFile 是否使用内存中的 dex 文件
      */
     constructor(loader: ClassLoader, useMemoryDexFile: Boolean = false) {
-        ensureLibraryLoaded()
         delegate = NativeDexKitBridge.create(loader, useMemoryDexFile)
     }
 
@@ -149,20 +145,4 @@ actual class DexKitBridge {
 
     private fun ensureDelegate(): NativeDexKitBridge =
         checkNotNull(delegate) { "DexKitBridge 未初始化，请传入有效的 dex/apk 数据" }
-
-    private companion object {
-        private val lock = Any()
-
-        @Volatile
-        private var loaded = false
-
-        private fun ensureLibraryLoaded() {
-            if (loaded) return
-            synchronized(lock) {
-                if (loaded) return
-                System.loadLibrary("dexkit")
-                loaded = true
-            }
-        }
-    }
 }

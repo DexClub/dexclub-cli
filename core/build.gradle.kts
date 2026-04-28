@@ -72,3 +72,7 @@ tasks.named("processJvmMainResources") {
     dependsOn(generateCoreVersionResource)
     (this as org.gradle.language.jvm.tasks.ProcessResources).from(generateCoreVersionResource)
 }
+
+tasks.named("jvmTest") {
+    dependsOn(gradle.includedBuild("DexKit").task(":dexkit:copyLibrary"))
+}

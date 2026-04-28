@@ -4,8 +4,6 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-val vendoredDexKitDir = rootProject.layout.projectDirectory.dir("dexkit/vendor/DexKit")
-
 kotlin {
     android {
         namespace = "io.github.dexclub.dexkit"
@@ -46,13 +44,5 @@ kotlin {
 
     compilerOptions {
         freeCompilerArgs.add("-Xexpect-actual-classes")
-    }
-}
-
-tasks.named<ProcessResources>("jvmProcessResources") {
-    dependsOn(gradle.includedBuild("DexKit").task(":dexkit:copyLibrary"))
-    from(vendoredDexKitDir.dir("dexkit/build/library")) {
-        include("**/*.so", "**/*.dll", "**/*.dylib")
-        into("natives")
     }
 }

@@ -24,6 +24,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
         inventory: MaterialInventory,
         query: FindClass,
     ): List<ClassHit> {
+        ensureDexKitLoaded()
         val workdirPath = Paths.get(workspace.workdir)
         val hits = mutableListOf<ClassHit>()
 
@@ -51,6 +52,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
         inventory: MaterialInventory,
         query: FindMethod,
     ): List<MethodHit> {
+        ensureDexKitLoaded()
         val workdirPath = Paths.get(workspace.workdir)
         val hits = mutableListOf<MethodHit>()
 
@@ -78,6 +80,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
         inventory: MaterialInventory,
         query: FindField,
     ): List<FieldHit> {
+        ensureDexKitLoaded()
         val workdirPath = Paths.get(workspace.workdir)
         val hits = mutableListOf<FieldHit>()
 
@@ -105,6 +108,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
         inventory: MaterialInventory,
         query: BatchFindClassUsingStrings,
     ): List<ClassHit> {
+        ensureDexKitLoaded()
         val workdirPath = Paths.get(workspace.workdir)
         val hits = mutableListOf<ClassHit>()
 
@@ -124,6 +128,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
         inventory: MaterialInventory,
         query: BatchFindMethodUsingStrings,
     ): List<MethodHit> {
+        ensureDexKitLoaded()
         val workdirPath = Paths.get(workspace.workdir)
         val hits = mutableListOf<MethodHit>()
 
@@ -425,6 +430,10 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
         } else {
             Int.MAX_VALUE to name
         }
+    }
+
+    private fun ensureDexKitLoaded() {
+        DexKitNativeLoader.ensureLoaded()
     }
 
     private inline fun <T> DexKitBridge.useFindClass(query: FindClass, block: (List<ClassData>) -> T): T =

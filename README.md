@@ -290,12 +290,15 @@ java -jar cli/build/libs/dexclub-cli-all.jar resolve-res /path/to/workdir --id 0
 
 JVM 侧 DexKit native 相关配置：
 
-- native 缓存目录：
-  - JVM property: `dexclub.dexkit.native.cache.dir`
-  - 环境变量: `DEXCLUB_DEXKIT_NATIVE_CACHE_DIR`
+- 显式 native 文件路径：
+  - JVM property: `dexclub.dexkit.native.library.path`
+  - 环境变量: `DEXCLUB_DEXKIT_NATIVE_LIBRARY_PATH`
 - 显式 native 目录：
   - JVM property: `dexclub.dexkit.native.library.dir`
   - 环境变量: `DEXCLUB_DEXKIT_NATIVE_LIBRARY_DIR`
+
+当前 JVM/CLI 侧不再从 `jar` 内解压 DexKit native，也不再使用独立的 native 缓存目录。
+调用方需要显式提供 native 文件，或确保其位于 `java.library.path` 可见范围内。
 
 ## CI
 

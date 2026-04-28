@@ -19,6 +19,8 @@ application {
     mainClass = "io.github.dexclub.cli.MainKt"
 }
 
+val vendoredDexKitDir = rootProject.layout.projectDirectory.dir("dexkit/vendor/DexKit")
+
 fun resolveCliVersion(): String {
     val configured = project.version.toString()
     if (configured.isNotBlank() && configured != "unspecified") {
@@ -48,6 +50,7 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    dependsOn(gradle.includedBuild("DexKit").task(":dexkit:copyLibrary"))
 }
 
 val generateCliVersionResource = tasks.register("generateCliVersionResource") {
@@ -123,11 +126,26 @@ val generateWindowsPowerShellLauncher = tasks.register("generateWindowsPowerShel
     }
 }
 
+val prepareDexKitNativeLibraries = tasks.register<Sync>("prepareDexKitNativeLibraries") {
+    dependsOn(gradle.includedBuild("DexKit").task(":dexkit:copyLibrary"))
+    from(vendoredDexKitDir.dir("dexkit/build/library")) {
+        include("**/*.so", "**/*.dll", "**/*.dylib")
+        eachFile {
+            path = name
+        }
+        includeEmptyDirs = false
+    }
+    into(layout.buildDirectory.dir("generated/native/shadowDist"))
+}
+
 distributions {
     named("shadow") {
         contents {
             from(generateWindowsPowerShellLauncher) {
                 into("bin")
+            }
+            from(prepareDexKitNativeLibraries) {
+                into("lib")
             }
         }
     }
@@ -135,8 +153,10 @@ distributions {
 
 tasks.named<Sync>("installShadowDist") {
     dependsOn(generateWindowsPowerShellLauncher)
+    dependsOn(prepareDexKitNativeLibraries)
 }
 
 tasks.named<Zip>("shadowDistZip") {
     dependsOn(generateWindowsPowerShellLauncher)
+    dependsOn(prepareDexKitNativeLibraries)
 }
