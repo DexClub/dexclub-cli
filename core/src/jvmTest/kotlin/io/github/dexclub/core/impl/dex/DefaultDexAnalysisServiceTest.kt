@@ -444,6 +444,7 @@ class DefaultDexAnalysisServiceTest {
         assertTrue(text.contains("exposeNeedle()"))
         assertTrue(text.contains("dexclub-needle-string"))
         assertTrue(!text.contains("callExposeNeedle("))
+        assertNoJavaExportTempsLeaked(fixture.dexWorkspaceDir, workspace, output)
     }
 
     @Test
@@ -508,6 +509,7 @@ class DefaultDexAnalysisServiceTest {
         val text = output.readText()
         assertTrue(text.contains("class SampleSearchTarget"))
         assertTrue(text.contains("dexclub-needle-string"))
+        assertNoJavaExportTempsLeaked(fixture.dexWorkspaceDir, workspace, output)
     }
 
     @Test
@@ -629,6 +631,24 @@ class DefaultDexAnalysisServiceTest {
         assertEquals("fixture.dex", mappings["Lfixture/samples/SampleSearchTarget;"]?.jsonPrimitive?.content)
         assertNotNull(mappings["Lfixture/samples/AnotherSearchTarget;"])
     }
+}
+
+private fun assertNoJavaExportTempsLeaked(
+    workspaceDir: File,
+    workspace: io.github.dexclub.core.api.workspace.WorkspaceContext,
+    outputFile: File,
+) {
+    assertTrue(!File(outputFile.parentFile, "${outputFile.name}.tmp.dex").exists())
+    assertTrue(
+        outputFile.parentFile.listFiles()
+            ?.none { it.name.startsWith(".jadx-tmp-") } != false,
+    )
+    val exportTempDir = File(
+        workspaceDir,
+        ".dexclub/targets/${workspace.activeTargetId}/cache/exports/tmp",
+    )
+    assertTrue(exportTempDir.isDirectory)
+    assertTrue(exportTempDir.listFiles()?.isEmpty() != false)
 }
 
 private fun isDexFile(file: File): Boolean {

@@ -47,6 +47,8 @@ V3 需要一个能承载以下职责的工作区存储布局：
         cache/
           decoded/
           indexes/
+          exports/
+            tmp/
 ```
 
 ## 审阅边界
@@ -125,6 +127,19 @@ V3 需要一个能承载以下职责的工作区存储布局：
 - `export-class-java`
 
 这类内容偏“内部加速结构”，通常不直接面向最终用户展示。
+
+### `targets/<target-id>/cache/exports/tmp/`
+
+导出链内部使用的一次性中间产物目录，例如：
+
+- `export-class-java` / `export-method-java` 生成的临时单类 dex
+- `jadx` 反编译过程中写出的临时输出目录
+
+约束：
+
+- 仅承载命令执行期的中间产物
+- 不作为稳定状态文件目录
+- 命令完成后应尽量清空，不向用户输出目录泄露临时文件
 
 ## target id
 

@@ -15,6 +15,8 @@ internal interface WorkspaceStore {
 
     fun dexclubDir(workdir: String): String
 
+    fun exportTempDir(workdir: String, targetId: String): String
+
     fun initialize(
         workdir: String,
         workspace: WorkspaceRecord,

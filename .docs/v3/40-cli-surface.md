@@ -175,6 +175,7 @@ cli gc [workdir] [--json]
 
 - `targets/<target-id>/cache/decoded/`
 - `targets/<target-id>/cache/indexes/`
+- `targets/<target-id>/cache/exports/tmp/`
 
 不处理：
 
@@ -547,6 +548,7 @@ Lcom/example/Foo;->bar(I)Ljava/lang/String;
 
 - 与 `export-method-dex` 共用同一个方法级最小类构造结果
 - 先将该最小类写出为临时单类 dex，再交给 `jadx` 反编译
+- 中间产物统一落在 `targets/<target-id>/cache/exports/tmp/`
 
 成功输出固定为：
 

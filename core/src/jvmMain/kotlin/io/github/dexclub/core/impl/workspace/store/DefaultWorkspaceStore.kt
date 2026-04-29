@@ -24,6 +24,9 @@ internal class DefaultWorkspaceStore : WorkspaceStore {
 
     override fun dexclubDir(workdir: String): String = dexclubDirPath(workdir).toString()
 
+    override fun exportTempDir(workdir: String, targetId: String): String =
+        targetDir(workdir, targetId).resolve("cache/exports/tmp").toString()
+
     override fun initialize(
         workdir: String,
         workspace: WorkspaceRecord,
@@ -32,8 +35,7 @@ internal class DefaultWorkspaceStore : WorkspaceStore {
     ) {
         val targetDir = targetDir(workdir, target.targetId)
         writeState {
-            Files.createDirectories(targetDir.resolve("cache/decoded"))
-            Files.createDirectories(targetDir.resolve("cache/indexes"))
+            initializeCacheDirs(targetDir)
             writeJson(workspaceFile(workdir), workspace.toDto())
             writeJson(targetDir.resolve("target.json"), target.toDto())
             writeJson(targetDir.resolve("snapshot.json"), snapshot.toDto())
@@ -193,12 +195,10 @@ internal class DefaultWorkspaceStore : WorkspaceStore {
     }
 
     override fun clearTargetCache(workdir: String, targetId: String): GcResult {
-        val decodedDir = targetDir(workdir, targetId).resolve("cache/decoded")
-        val indexesDir = targetDir(workdir, targetId).resolve("cache/indexes")
-        val deleted = deleteDirectoryContents(decodedDir) + deleteDirectoryContents(indexesDir)
+        val cacheRoot = targetDir(workdir, targetId).resolve("cache")
+        val deleted = deleteDirectoryContents(cacheRoot)
         writeState {
-            Files.createDirectories(decodedDir)
-            Files.createDirectories(indexesDir)
+            initializeCacheDirs(targetDir(workdir, targetId))
         }
         return GcResult(
             workdir = normalizedWorkdir(workdir).toString(),
@@ -272,6 +272,12 @@ internal class DefaultWorkspaceStore : WorkspaceStore {
     }
 
     private fun workspaceFile(workdir: String): Path = dexclubDirPath(workdir).resolve("workspace.json")
+
+    private fun initializeCacheDirs(targetDir: Path) {
+        Files.createDirectories(targetDir.resolve("cache/decoded"))
+        Files.createDirectories(targetDir.resolve("cache/indexes"))
+        Files.createDirectories(targetDir.resolve("cache/exports/tmp"))
+    }
 
     private fun targetDir(workdir: String, targetId: String): Path =
         dexclubDirPath(workdir).resolve("targets").resolve(targetId)

@@ -98,6 +98,7 @@ internal class DefaultDexExportExecutor(
         )
         return ExportResult(
             outputPath = decompileSingleClassDefToJava(
+                workspace = workspace,
                 classDef = match.classDef,
                 outputPath = request.outputPath,
             ),
@@ -175,6 +176,7 @@ internal class DefaultDexExportExecutor(
         )
         return ExportResult(
             outputPath = decompileSingleClassDefToJava(
+                workspace = workspace,
                 classDef = methodOnlyClassDef,
                 outputPath = request.outputPath,
             ),
@@ -235,10 +237,17 @@ internal class DefaultDexExportExecutor(
         )
     }
 
-    private fun decompileSingleClassDefToJava(classDef: ClassDef, outputPath: String): String {
+    private fun decompileSingleClassDefToJava(
+        workspace: WorkspaceContext,
+        classDef: ClassDef,
+        outputPath: String,
+    ): String {
         val outputFile = File(outputPath)
         outputFile.parentFile?.mkdirs()
-        val tempDex = File(outputFile.parentFile ?: File("."), "${outputFile.name}.tmp.dex")
+        val exportTempRoot = Paths.get(store.exportTempDir(workspace.workdir, workspace.activeTargetId))
+        Files.createDirectories(exportTempRoot)
+        val sessionDir = Files.createTempDirectory(exportTempRoot, "${outputFile.nameWithoutExtension}-").toFile()
+        val tempDex = File(sessionDir, "input.dex")
         val sanitizedClassDef = sanitizeClassDefForJavaDecompile(classDef)
         return try {
             writeSingleClassDex(
@@ -248,9 +257,10 @@ internal class DefaultDexExportExecutor(
             jadxDecompilerService.decompileDexToJavaSource(
                 dexPath = tempDex.absolutePath,
                 outputPath = outputPath,
+                tempDirectory = sessionDir,
             )
         } finally {
-            tempDex.delete()
+            sessionDir.deleteRecursively()
         }
     }
 

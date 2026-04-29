@@ -10,7 +10,6 @@ import jadx.api.usage.impl.EmptyUsageInfoCache
 import jadx.plugins.input.dex.DexInputPlugin
 import jadx.plugins.kotlin.metadata.KotlinMetadataPlugin
 import java.io.File
-import java.util.UUID
 import java.util.function.Function
 
 internal class JadxDecompilerService {
@@ -30,15 +29,12 @@ internal class JadxDecompilerService {
     fun decompileDexToJavaSource(
         dexPath: String,
         outputPath: String,
+        tempDirectory: File,
     ): String {
         val dexFile = File(dexPath)
         val javaFile = File(outputPath)
-        val outputDirectory = javaFile.parentFile
-            ?: throw IllegalArgumentException("output must have a parent directory")
-        val jadxOutputDirectory = File(
-            outputDirectory,
-            ".jadx-tmp-${javaFile.nameWithoutExtension}-${UUID.randomUUID().toString().replace("-", "")}",
-        )
+        val outputDirectory = javaFile.parentFile ?: throw IllegalArgumentException("output must have a parent directory")
+        val jadxOutputDirectory = File(tempDirectory, "jadx")
         return try {
             val javaCode = loadSingleJavaCode(
                 dexFile = dexFile,
