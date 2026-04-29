@@ -6,6 +6,7 @@ import io.github.dexclub.core.api.shared.WorkspaceKind
 import io.github.dexclub.core.api.resource.ResourceEntry
 import io.github.dexclub.core.api.resource.ResourceResolution
 import io.github.dexclub.core.impl.workspace.model.ClassSourceMapRecord
+import io.github.dexclub.core.impl.workspace.model.ClassSourceRefRecord
 import io.github.dexclub.core.impl.workspace.model.ManifestCacheRecord
 import io.github.dexclub.core.impl.workspace.model.DecodedXmlCacheRecord
 import io.github.dexclub.core.impl.workspace.model.MaterialInventory
@@ -77,6 +78,13 @@ internal data class CapabilitySetDto(
 )
 
 @Serializable
+internal data class ClassSourceRefDto(
+    val id: Int,
+    val sourcePath: String,
+    val sourceEntry: String? = null,
+)
+
+@Serializable
 internal data class ClassSourceMapDto(
     val schemaVersion: Int,
     val generatedAt: String,
@@ -84,7 +92,8 @@ internal data class ClassSourceMapDto(
     val toolVersion: String,
     val contentFingerprint: String,
     val format: String,
-    val mappings: Map<String, String>,
+    val sources: List<ClassSourceRefDto> = emptyList(),
+    val mappings: Map<String, Int>,
 )
 
 @Serializable
@@ -288,6 +297,7 @@ internal fun ClassSourceMapDto.toRecord(): ClassSourceMapRecord =
         toolVersion = toolVersion,
         contentFingerprint = contentFingerprint,
         format = format,
+        sources = sources.map(ClassSourceRefDto::toRecord),
         mappings = mappings,
     )
 
@@ -299,7 +309,22 @@ internal fun ClassSourceMapRecord.toDto(): ClassSourceMapDto =
         toolVersion = toolVersion,
         contentFingerprint = contentFingerprint,
         format = format,
+        sources = sources.map(ClassSourceRefRecord::toDto),
         mappings = mappings,
+    )
+
+internal fun ClassSourceRefDto.toRecord(): ClassSourceRefRecord =
+    ClassSourceRefRecord(
+        id = id,
+        sourcePath = sourcePath,
+        sourceEntry = sourceEntry,
+    )
+
+internal fun ClassSourceRefRecord.toDto(): ClassSourceRefDto =
+    ClassSourceRefDto(
+        id = id,
+        sourcePath = sourcePath,
+        sourceEntry = sourceEntry,
     )
 
 internal fun ManifestCacheDto.toRecord(): ManifestCacheRecord =

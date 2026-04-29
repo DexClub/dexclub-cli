@@ -564,15 +564,27 @@ APK 中 XML 示例：
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "generatedAt": "2026-04-25T12:26:00Z",
   "targetId": "e3b0c44298fc1c149afbf4c8996fb924...",
   "toolVersion": "dev",
   "contentFingerprint": "97af4d...",
-  "format": "class-source-map-v1",
+  "format": "class-source-map-v2",
+  "sources": [
+    {
+      "id": 0,
+      "sourcePath": "app.apk",
+      "sourceEntry": "classes58.dex"
+    },
+    {
+      "id": 1,
+      "sourcePath": "1.dex",
+      "sourceEntry": null
+    }
+  ],
   "mappings": {
-    "Lcom/example/Foo;": "1.dex",
-    "Lcom/example/Bar;": "2.dex"
+    "Lcom/example/Foo;": 0,
+    "Lcom/example/Bar;": 1
   }
 }
 ```
@@ -587,12 +599,15 @@ APK 中 XML 示例：
 | `toolVersion` | `string` | 是 | 生成该索引的工具版本 |
 | `contentFingerprint` | `string` | 是 | 内容指纹 |
 | `format` | `string` | 是 | 索引格式名 |
-| `mappings` | `object` | 是 | `classSignature -> sourceDexPath` 映射 |
+| `sources` | `array` | 是 | `sourceId -> sourcePath/sourceEntry` 来源表 |
+| `mappings` | `object` | 是 | `classSignature -> sourceId` 映射 |
 
 ### 约束
 
 - key 建议统一使用 type signature，例如 `Lcom/example/Foo;`
-- value 建议使用相对 `workdir` 的 dex 路径
+- `sources[*].sourcePath` 使用相对 `workdir` 的路径
+- `sources[*].sourceEntry` 仅在容器输入场景出现，例如 APK 内的 `classes58.dex`
+- `mappings` 中只保存 `sourceId`，避免重复存储相同来源路径
 
 ## 8. `cache/indexes/resource-entry-index.json`
 

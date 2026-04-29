@@ -26,7 +26,9 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.io.path.writeText
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -552,8 +554,40 @@ class DefaultDexAnalysisServiceTest {
         assertTrue(indexFile.isFile)
         val root = Json.parseToJsonElement(indexFile.readText()).jsonObject
         assertEquals(workspace.snapshot.contentFingerprint, root.getValue("contentFingerprint").jsonPrimitive.content)
+        val sources = root.getValue("sources").jsonArray
+        assertEquals(1, sources.size)
+        assertEquals("fixture.dex", sources.single().jsonObject.getValue("sourcePath").jsonPrimitive.content)
+        assertEquals(0, sources.single().jsonObject.getValue("id").jsonPrimitive.int)
         val mappings = root.getValue("mappings").jsonObject
-        assertEquals("fixture.dex", mappings.getValue("Lfixture/samples/SampleSearchTarget;").jsonPrimitive.content)
+        assertEquals(0, mappings.getValue("Lfixture/samples/SampleSearchTarget;").jsonPrimitive.int)
+    }
+
+    @Test
+    fun exportCreatesClassSourceMapWithApkEntryPrecision() {
+        val fixture = DexAnalysisFixture.generated()
+        val services = createDefaultServices()
+        services.workspace.initialize(fixture.apkFile.absolutePath)
+        val workspace = services.workspace.open(WorkspaceRef(fixture.apkWorkspaceDir.absolutePath))
+        val indexFile = File(fixture.apkWorkspaceDir, ".dexclub/targets/${workspace.activeTargetId}/cache/indexes/class-source-map.json")
+        assertTrue(!indexFile.exists())
+
+        services.dex.exportClassSmali(
+            workspace = workspace,
+            request = ExportClassSmaliRequest(
+                className = "fixture.samples.SampleSearchTarget",
+                outputPath = File(fixture.apkWorkspaceDir, "SampleSearchTarget.smali").absolutePath,
+            ),
+        )
+
+        val root = Json.parseToJsonElement(indexFile.readText()).jsonObject
+        val sources = root.getValue("sources").jsonArray
+        assertEquals(1, sources.size)
+        val source = sources.single().jsonObject
+        assertEquals("fixture.apk", source.getValue("sourcePath").jsonPrimitive.content)
+        assertEquals("classes.dex", source.getValue("sourceEntry").jsonPrimitive.content)
+        assertEquals(0, source.getValue("id").jsonPrimitive.int)
+        val mappings = root.getValue("mappings").jsonObject
+        assertEquals(0, mappings.getValue("Lfixture/samples/SampleSearchTarget;").jsonPrimitive.int)
     }
 
     @Test
@@ -608,9 +642,16 @@ class DefaultDexAnalysisServiceTest {
               "targetId": "${workspace.activeTargetId}",
               "toolVersion": "test",
               "contentFingerprint": "stale-fingerprint",
-              "format": "class-source-map-v1",
+              "format": "class-source-map-v2",
+              "sources": [
+                {
+                  "id": 0,
+                  "sourcePath": "fixture.dex",
+                  "sourceEntry": null
+                }
+              ],
               "mappings": {
-                "Lfixture/samples/SampleSearchTarget;": "fixture.dex"
+                "Lfixture/samples/SampleSearchTarget;": 0
               }
             }
         """.trimIndent()
@@ -627,8 +668,11 @@ class DefaultDexAnalysisServiceTest {
 
         val rebuilt = Json.parseToJsonElement(indexFile.readText()).jsonObject
         assertEquals(workspace.snapshot.contentFingerprint, rebuilt.getValue("contentFingerprint").jsonPrimitive.content)
+        val sources = rebuilt.getValue("sources").jsonArray
+        assertEquals(1, sources.size)
+        assertEquals("fixture.dex", sources.single().jsonObject.getValue("sourcePath").jsonPrimitive.content)
         val mappings = rebuilt.getValue("mappings").jsonObject
-        assertEquals("fixture.dex", mappings["Lfixture/samples/SampleSearchTarget;"]?.jsonPrimitive?.content)
+        assertEquals(0, mappings["Lfixture/samples/SampleSearchTarget;"]?.jsonPrimitive?.int)
         assertNotNull(mappings["Lfixture/samples/AnotherSearchTarget;"])
     }
 }

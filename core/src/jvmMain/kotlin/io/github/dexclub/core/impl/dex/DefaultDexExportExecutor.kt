@@ -26,6 +26,7 @@ import io.github.dexclub.core.api.shared.MethodSmaliMode
 import io.github.dexclub.core.api.shared.SourceLocator
 import io.github.dexclub.core.api.workspace.WorkspaceContext
 import io.github.dexclub.core.impl.workspace.model.ClassSourceMapRecord
+import io.github.dexclub.core.impl.workspace.model.ClassSourceRefRecord
 import io.github.dexclub.core.impl.workspace.model.MaterialInventory
 import io.github.dexclub.core.impl.workspace.store.WorkspaceStore
 import java.io.File
@@ -433,8 +434,11 @@ internal class DefaultDexExportExecutor(
                 store.saveClassSourceMap(workspace.workdir, workspace.activeTargetId, it)
             }
 
-        val sourcePath = classSourceMap.mappings[classSignature] ?: return explicitSource
-        return SourceLocator(sourcePath = sourcePath)
+        val source = classSourceMap.sourceOf(classSignature) ?: return explicitSource
+        return SourceLocator(
+            sourcePath = source.sourcePath,
+            sourceEntry = source.sourceEntry,
+        )
     }
 
     private fun buildClassSourceMap(
@@ -443,7 +447,7 @@ internal class DefaultDexExportExecutor(
         contentFingerprint: String,
     ): ClassSourceMapRecord {
         val workdirPath = Paths.get(workspace.workdir)
-        val occurrences = linkedMapOf<String, MutableSet<String>>()
+        val occurrences = linkedMapOf<String, MutableSet<ClassSourceRefKey>>()
 
         inventory.dexFiles.forEach { dexPath ->
             val dexFile = DexBackedDexFile(
@@ -451,7 +455,9 @@ internal class DefaultDexExportExecutor(
                 Files.readAllBytes(workdirPath.resolve(dexPath).normalize()),
             )
             dexFile.classes.forEach { classDef ->
-                occurrences.getOrPut(classDef.type) { linkedSetOf() }.add(dexPath)
+                occurrences.getOrPut(classDef.type) { linkedSetOf() }.add(
+                    ClassSourceRefKey(sourcePath = dexPath, sourceEntry = null),
+                )
             }
         }
 
@@ -465,20 +471,39 @@ internal class DefaultDexExportExecutor(
                         val dexBytes = zip.getInputStream(entry).use { it.readBytes() }
                         val dexFile = DexBackedDexFile(Opcodes.getDefault(), dexBytes)
                         dexFile.classes.forEach { classDef ->
-                            occurrences.getOrPut(classDef.type) { linkedSetOf() }.add(apkPath)
+                            occurrences.getOrPut(classDef.type) { linkedSetOf() }.add(
+                                ClassSourceRefKey(sourcePath = apkPath, sourceEntry = entry.name),
+                            )
                         }
                     }
             }
         }
+
+        val sourceIds = linkedMapOf<ClassSourceRefKey, Int>()
+        val sources = mutableListOf<ClassSourceRefRecord>()
+
+        fun sourceIdOf(source: ClassSourceRefKey): Int =
+            sourceIds.getOrPut(source) {
+                val id = sources.size
+                sources += ClassSourceRefRecord(
+                    id = id,
+                    sourcePath = source.sourcePath,
+                    sourceEntry = source.sourceEntry,
+                )
+                id
+            }
+
+        val mappings = occurrences.mapNotNull { (classSignature, sourceRefs) ->
+            sourceRefs.singleOrNull()?.let { classSignature to sourceIdOf(it) }
+        }.toMap(linkedMapOf())
 
         return ClassSourceMapRecord(
             generatedAt = Instant.now().toString(),
             targetId = workspace.activeTargetId,
             toolVersion = toolVersion,
             contentFingerprint = contentFingerprint,
-            mappings = occurrences.mapNotNull { (classSignature, sourcePaths) ->
-                sourcePaths.singleOrNull()?.let { classSignature to it }
-            }.toMap(linkedMapOf()),
+            sources = sources,
+            mappings = mappings,
         )
     }
 
@@ -724,5 +749,10 @@ internal class DefaultDexExportExecutor(
         val classSignature: String,
         val methodName: String,
         val descriptor: String,
+    )
+
+    private data class ClassSourceRefKey(
+        val sourcePath: String,
+        val sourceEntry: String?,
     )
 }

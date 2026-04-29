@@ -11,12 +11,12 @@ internal const val workspaceSchemaVersion: Int = 1
 internal const val workspaceLayoutVersion: Int = 1
 internal const val targetSchemaVersion: Int = 1
 internal const val snapshotSchemaVersion: Int = 1
-internal const val classSourceMapSchemaVersion: Int = 1
+internal const val classSourceMapSchemaVersion: Int = 2
 internal const val manifestCacheSchemaVersion: Int = 1
 internal const val resourceTableCacheSchemaVersion: Int = 1
 internal const val decodedXmlCacheSchemaVersion: Int = 1
 internal const val resourceEntryIndexSchemaVersion: Int = 1
-internal const val classSourceMapFormat: String = "class-source-map-v1"
+internal const val classSourceMapFormat: String = "class-source-map-v2"
 internal const val manifestFormat: String = "xml-text"
 internal const val resourceTableFormat: String = "resource-table-v1"
 internal const val decodedXmlFormat: String = "xml-text"
@@ -76,6 +76,12 @@ internal data class PreparedWorkspace(
     val snapshot: SnapshotRecord,
 )
 
+internal data class ClassSourceRefRecord(
+    val id: Int,
+    val sourcePath: String,
+    val sourceEntry: String? = null,
+)
+
 internal data class ClassSourceMapRecord(
     val schemaVersion: Int = classSourceMapSchemaVersion,
     val generatedAt: String,
@@ -83,8 +89,14 @@ internal data class ClassSourceMapRecord(
     val toolVersion: String,
     val contentFingerprint: String,
     val format: String = classSourceMapFormat,
-    val mappings: Map<String, String>,
-)
+    val sources: List<ClassSourceRefRecord>,
+    val mappings: Map<String, Int>,
+) {
+    fun sourceOf(classSignature: String): ClassSourceRefRecord? {
+        val sourceId = mappings[classSignature] ?: return null
+        return sources.firstOrNull { it.id == sourceId }
+    }
+}
 
 internal data class ManifestCacheRecord(
     val schemaVersion: Int = manifestCacheSchemaVersion,
