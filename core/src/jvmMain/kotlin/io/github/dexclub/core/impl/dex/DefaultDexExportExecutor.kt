@@ -8,7 +8,9 @@ import com.android.tools.smali.dexlib2.dexbacked.DexBackedDexFile
 import com.android.tools.smali.dexlib2.iface.ClassDef
 import com.android.tools.smali.dexlib2.iface.Method
 import com.android.tools.smali.dexlib2.immutable.ImmutableClassDef
+import com.android.tools.smali.dexlib2.immutable.ImmutableField
 import com.android.tools.smali.dexlib2.immutable.ImmutableMethod
+import com.android.tools.smali.dexlib2.immutable.ImmutableMethodImplementation
 import com.android.tools.smali.dexlib2.writer.io.MemoryDataStore
 import com.android.tools.smali.dexlib2.writer.pool.DexPool
 import io.github.dexclub.core.api.dex.DexExportError
@@ -17,6 +19,7 @@ import io.github.dexclub.core.api.dex.ExportClassDexRequest
 import io.github.dexclub.core.api.dex.ExportClassJavaRequest
 import io.github.dexclub.core.api.dex.ExportClassSmaliRequest
 import io.github.dexclub.core.api.dex.ExportMethodDexRequest
+import io.github.dexclub.core.api.dex.ExportMethodJavaRequest
 import io.github.dexclub.core.api.dex.ExportMethodSmaliRequest
 import io.github.dexclub.core.api.dex.ExportResult
 import io.github.dexclub.core.api.shared.MethodSmaliMode
@@ -93,23 +96,12 @@ internal class DefaultDexExportExecutor(
             source = request.source,
             workspace = workspace,
         )
-        val outputFile = File(request.outputPath)
-        outputFile.parentFile?.mkdirs()
-        val tempDex = File(outputFile.parentFile ?: File("."), "${outputFile.name}.tmp.dex")
-        return try {
-            writeSingleClassDex(
+        return ExportResult(
+            outputPath = decompileSingleClassDefToJava(
                 classDef = match.classDef,
-                outputPath = tempDex.absolutePath,
-            )
-            ExportResult(
-                outputPath = jadxDecompilerService.decompileDexToJavaSource(
-                    dexPath = tempDex.absolutePath,
-                    outputPath = request.outputPath,
-                ),
-            )
-        } finally {
-            tempDex.delete()
-        }
+                outputPath = request.outputPath,
+            ),
+        )
     }
 
     override fun exportMethodSmali(
@@ -168,6 +160,27 @@ internal class DefaultDexExportExecutor(
         )
     }
 
+    override fun exportMethodJava(
+        workspace: WorkspaceContext,
+        inventory: MaterialInventory,
+        request: ExportMethodJavaRequest,
+    ): ExportResult {
+        val workdirPath = Paths.get(workspace.workdir)
+        val methodOnlyClassDef = resolveMethodOnlyClassDef(
+            workdirPath = workdirPath,
+            inventory = inventory,
+            methodSignature = request.methodSignature,
+            source = request.source,
+            workspace = workspace,
+        )
+        return ExportResult(
+            outputPath = decompileSingleClassDefToJava(
+                classDef = methodOnlyClassDef,
+                outputPath = request.outputPath,
+            ),
+        )
+    }
+
     private fun resolveMethodOnlyClassDef(
         workdirPath: Path,
         inventory: MaterialInventory,
@@ -219,6 +232,74 @@ internal class DefaultDexExportExecutor(
             emptyList(),
             if (method in classDef.directMethods) listOf(immutableMethod) else emptyList(),
             if (method in classDef.virtualMethods) listOf(immutableMethod) else emptyList(),
+        )
+    }
+
+    private fun decompileSingleClassDefToJava(classDef: ClassDef, outputPath: String): String {
+        val outputFile = File(outputPath)
+        outputFile.parentFile?.mkdirs()
+        val tempDex = File(outputFile.parentFile ?: File("."), "${outputFile.name}.tmp.dex")
+        val sanitizedClassDef = sanitizeClassDefForJavaDecompile(classDef)
+        return try {
+            writeSingleClassDex(
+                classDef = sanitizedClassDef,
+                outputPath = tempDex.absolutePath,
+            )
+            jadxDecompilerService.decompileDexToJavaSource(
+                dexPath = tempDex.absolutePath,
+                outputPath = outputPath,
+            )
+        } finally {
+            tempDex.delete()
+        }
+    }
+
+    private fun sanitizeClassDefForJavaDecompile(classDef: ClassDef): ClassDef =
+        ImmutableClassDef(
+            classDef.type,
+            classDef.accessFlags,
+            classDef.superclass,
+            classDef.interfaces,
+            null,
+            emptySet(),
+            classDef.staticFields.map(::sanitizeFieldForJavaDecompile),
+            classDef.instanceFields.map(::sanitizeFieldForJavaDecompile),
+            classDef.directMethods.map(::sanitizeMethodForJavaDecompile),
+            classDef.virtualMethods.map(::sanitizeMethodForJavaDecompile),
+        )
+
+    private fun sanitizeFieldForJavaDecompile(field: com.android.tools.smali.dexlib2.iface.Field) =
+        ImmutableField(
+            field.definingClass,
+            field.name,
+            field.type,
+            field.accessFlags,
+            field.initialValue,
+            emptySet(),
+            emptySet(),
+        )
+
+    private fun sanitizeMethodForJavaDecompile(method: Method): Method {
+        val implementation = method.implementation
+        val sanitizedImplementation = if (implementation == null) {
+            null
+        } else {
+            ImmutableMethodImplementation(
+                implementation.registerCount,
+                implementation.instructions,
+                implementation.tryBlocks,
+                emptyList(),
+            )
+        }
+        return ImmutableMethod(
+            method.definingClass,
+            method.name,
+            method.parameters,
+            method.returnType,
+            method.accessFlags,
+            emptySet(),
+            emptySet(),
+            sanitizedImplementation,
         )
     }
 

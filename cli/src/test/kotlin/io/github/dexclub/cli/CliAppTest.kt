@@ -1025,6 +1025,38 @@ class CliAppTest {
     }
 
     @Test
+    fun exportMethodJavaRunsThroughCliPipeline() {
+        val fixture = CliDexFixture.generated()
+        val app = CliApp(
+            services = createDefaultServices(),
+            cwdProvider = { fixture.dexWorkspaceDir.absolutePath },
+        )
+
+        val initOut = run(app, listOf("init", fixture.dexFile.absolutePath))
+        assertEquals(0, initOut.exitCode)
+
+        val outputFile = File(fixture.dexWorkspaceDir, "exposeNeedle.method.java")
+        val output = run(
+            app,
+            listOf(
+                "export-method-java",
+                "--method",
+                "Lfixture/samples/SampleSearchTarget;->exposeNeedle()Ljava/lang/String;",
+                "--output",
+                outputFile.absolutePath,
+            ),
+        )
+
+        assertEquals(0, output.exitCode, output.stderr)
+        assertEquals("output=${outputFile.absolutePath}", output.stdout.trimEnd())
+        val text = outputFile.readText()
+        assertTrue(text.contains("class SampleSearchTarget"))
+        assertTrue(text.contains("exposeNeedle()"))
+        assertTrue(text.contains("dexclub-needle-string"))
+        assertTrue(!text.contains("callExposeNeedle("))
+    }
+
+    @Test
     fun exportClassDexRunsThroughCliPipeline() {
         val fixture = CliDexFixture.generated()
         val app = CliApp(

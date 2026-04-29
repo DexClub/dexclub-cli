@@ -1,0 +1,2 @@
+jadx.plugins.input.dex.DexInputPlugin
+jadx.plugins.kotlin.metadata.KotlinMetadataPlugin

@@ -30,4 +30,6 @@ interface DexAnalysisService {
     fun exportMethodSmali(workspace: WorkspaceContext, request: ExportMethodSmaliRequest): ExportResult
 
     fun exportMethodDex(workspace: WorkspaceContext, request: ExportMethodDexRequest): ExportResult
+
+    fun exportMethodJava(workspace: WorkspaceContext, request: ExportMethodJavaRequest): ExportResult
 }

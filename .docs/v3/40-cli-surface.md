@@ -30,6 +30,7 @@ export-class-smali
 export-class-java
 export-method-smali
 export-method-dex
+export-method-java
 manifest
 res-table
 decode-xml
@@ -508,6 +509,44 @@ Lcom/example/Foo;->bar(I)Ljava/lang/String;
 
 - 与 `export-method-smali` 共用同一个方法级最小类构造结果
 - 直接将该最小类写出为单类 dex
+
+成功输出固定为：
+
+```text
+output=<absolute-path>
+```
+
+### export-method-java
+
+```text
+cli export-method-java [workdir] --method <signature> [--source-path <path>] [--source-entry <entry>] --output <file>
+```
+
+约束：
+
+- `--method` 必填
+- `--output` 必填
+- `--source-entry` 不允许单独出现，必须与 `--source-path` 一起传
+- 若方法无法仅凭 `--method` 唯一定位，则必须显式补充来源参数
+
+`--method` 的值统一使用完整 smali 方法签名，例如：
+
+```text
+Lcom/example/Foo;->bar(I)Ljava/lang/String;
+```
+
+输出语义：
+
+- 导出方法级最小单类对应的 Java 文本
+- 只保留类头与目标方法
+- 不保留其它方法
+- 不保留 fields
+- 不保证运行时完整性
+
+实现边界：
+
+- 与 `export-method-dex` 共用同一个方法级最小类构造结果
+- 先将该最小类写出为临时单类 dex，再交给 `jadx` 反编译
 
 成功输出固定为：
 

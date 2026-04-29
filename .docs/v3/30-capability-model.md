@@ -183,6 +183,7 @@ enum class Operation {
 - `export-method-dex` -> `ExportDex`
 - `export-class-smali` -> `ExportSmali`
 - `export-class-java` -> `ExportJava`
+- `export-method-java` -> `ExportJava`
 - `export-method-smali` -> `ExportSmali`
 - `manifest` -> `ManifestDecode`
 - `res-table` -> `ResourceTableDecode`

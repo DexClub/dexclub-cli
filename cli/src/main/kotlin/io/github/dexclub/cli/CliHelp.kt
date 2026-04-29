@@ -252,6 +252,22 @@ internal object CliHelp {
             ),
         ),
         CommandHelpSpec(
+            command = "export-method-java",
+            usage = CliUsages.exportMethodJava,
+            description = "Export a uniquely resolved method as decompiled Java text.",
+            arguments = listOf("[workdir]  Optional workspace directory. Defaults to the current directory."),
+            options = listOf(
+                "--method <signature>  Full smali method signature.",
+                "--source-path <path>  Optional source path disambiguation.",
+                "--source-entry <entry>  Optional container entry disambiguation.",
+                "--output <file>  Output Java file path.",
+            ),
+            output = "Success always prints output=<absolute-path>.",
+            notes = listOf(
+                "The target method must resolve uniquely within the selected source scope.",
+            ),
+        ),
+        CommandHelpSpec(
             command = "manifest",
             usage = CliUsages.manifest,
             description = "Decode the active workspace AndroidManifest.xml.",
@@ -373,6 +389,7 @@ internal object CliHelp {
             appendLine("  export-class-java        Export a uniquely resolved class as Java.")
             appendLine("  export-method-smali      Export a uniquely resolved method as smali.")
             appendLine("  export-method-dex        Export a uniquely resolved method as dex.")
+            appendLine("  export-method-java       Export a uniquely resolved method as Java.")
             appendLine()
             appendLine("Resource Commands:")
             appendLine("  manifest                 Decode AndroidManifest.xml.")

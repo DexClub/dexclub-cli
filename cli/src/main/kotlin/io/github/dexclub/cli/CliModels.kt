@@ -171,6 +171,15 @@ sealed interface CliRequest {
         val output: String,
         override val outputFormat: OutputFormat = OutputFormat.Text,
     ) : CliRequest
+
+    data class ExportMethodJava(
+        val workdir: String?,
+        val methodSignature: String,
+        val sourcePath: String?,
+        val sourceEntry: String?,
+        val output: String,
+        override val outputFormat: OutputFormat = OutputFormat.Text,
+    ) : CliRequest
 }
 
 class CliUsageError(

@@ -112,6 +112,12 @@ data class ExportMethodDexRequest(
     val outputPath: String,
 )
 
+data class ExportMethodJavaRequest(
+    val methodSignature: String,
+    val source: SourceLocator = SourceLocator(),
+    val outputPath: String,
+)
+
 data class ExportResult(
     val outputPath: String,
 )

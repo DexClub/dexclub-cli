@@ -3,6 +3,7 @@ package io.github.dexclub.core.impl.dex
 import com.android.tools.smali.dexlib2.Opcodes
 import com.android.tools.smali.dexlib2.dexbacked.DexBackedDexFile
 import io.github.dexclub.core.api.dex.ExportMethodDexRequest
+import io.github.dexclub.core.api.dex.ExportMethodJavaRequest
 import io.github.dexclub.core.api.dex.FindClassesRequest
 import io.github.dexclub.core.api.dex.FindClassesUsingStringsRequest
 import io.github.dexclub.core.api.dex.FindFieldsRequest
@@ -418,6 +419,31 @@ class DefaultDexAnalysisServiceTest {
             append(')')
             append(methods.single().returnType)
         })
+    }
+
+    @Test
+    fun exportMethodJavaWritesMethodOnlyJavaForUniqueMethod() {
+        val fixture = DexAnalysisFixture.generated()
+        val services = createDefaultServices()
+        services.workspace.initialize(fixture.dexFile.absolutePath)
+        val workspace = services.workspace.open(WorkspaceRef(fixture.dexWorkspaceDir.absolutePath))
+        val output = File(fixture.dexWorkspaceDir, "exposeNeedle.method.java")
+
+        val result = services.dex.exportMethodJava(
+            workspace = workspace,
+            request = ExportMethodJavaRequest(
+                methodSignature = "Lfixture/samples/SampleSearchTarget;->exposeNeedle()Ljava/lang/String;",
+                outputPath = output.absolutePath,
+            ),
+        )
+
+        assertEquals(output.absolutePath, result.outputPath)
+        assertTrue(output.isFile)
+        val text = output.readText()
+        assertTrue(text.contains("class SampleSearchTarget"))
+        assertTrue(text.contains("exposeNeedle()"))
+        assertTrue(text.contains("dexclub-needle-string"))
+        assertTrue(!text.contains("callExposeNeedle("))
     }
 
     @Test

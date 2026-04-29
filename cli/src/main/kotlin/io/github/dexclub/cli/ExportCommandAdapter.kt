@@ -4,6 +4,7 @@ import io.github.dexclub.core.api.dex.ExportClassSmaliRequest
 import io.github.dexclub.core.api.dex.ExportClassDexRequest
 import io.github.dexclub.core.api.dex.ExportClassJavaRequest
 import io.github.dexclub.core.api.dex.ExportMethodDexRequest
+import io.github.dexclub.core.api.dex.ExportMethodJavaRequest
 import io.github.dexclub.core.api.dex.ExportMethodSmaliRequest
 import io.github.dexclub.core.api.shared.MethodSmaliMode
 import io.github.dexclub.core.api.shared.SourceLocator
@@ -105,6 +106,26 @@ internal class ExportCommandAdapter(
         val result = services.dex.exportMethodDex(
             workspace = workspace,
             request = ExportMethodDexRequest(
+                methodSignature = request.methodSignature,
+                source = SourceLocator(
+                    sourcePath = request.sourcePath,
+                    sourceEntry = request.sourceEntry,
+                ),
+                outputPath = request.output,
+            ),
+        )
+        return CommandResult(
+            payload = RenderPayload.Export(ExportView.from(result)),
+            outputFormat = request.outputFormat,
+            exitCode = 0,
+        )
+    }
+
+    fun exportMethodJava(request: CliRequest.ExportMethodJava): CommandResult {
+        val workspace = services.workspace.open(workdirResolver.resolve(request.workdir))
+        val result = services.dex.exportMethodJava(
+            workspace = workspace,
+            request = ExportMethodJavaRequest(
                 methodSignature = request.methodSignature,
                 source = SourceLocator(
                     sourcePath = request.sourcePath,
