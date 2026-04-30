@@ -8,6 +8,20 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      native_target:
+        description: "仅构建指定 DexKit native 目标；留空时构建全部"
+        required: false
+        type: choice
+        default: all
+        options:
+          - all
+          - linux-x64
+          - linux-arm64
+          - android-arm64
+          - windows-x64
+          - macos-x64
+          - macos-arm64
 
 permissions:
   contents: read
@@ -17,8 +31,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  prepare-libcxx:
-    name: prepare-libcxx
+  build-libcxx:
+    name: build-libcxx
     runs-on: ubuntu-24.04
 
     steps:
@@ -82,9 +96,13 @@ jobs:
           path: artifacts/m2/
           if-no-files-found: error
 
-  build:
-    needs: prepare-libcxx
-    name: ${{ matrix.target }}
+  build-dexkit-native:
+    needs: build-libcxx
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.native_target == 'all' ||
+      github.event.inputs.native_target == matrix.target
+    name: build-dexkit-native (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -94,8 +112,11 @@ jobs:
             runner: ubuntu-24.04
             os_name: linux
             arch: x64
-            dist_task: :cli:shadowDistZip
-            dist_zip_name: cli-shadow.zip
+            native_glob: libdexkit.so
+            native_file_name: libdexkit.so
+            native_build_shell: pwsh
+            gradle_command: ./gradlew
+            gradle_task: :DexKit:dexkit:copyLibrary
             msys2_msystem: ""
             msys2_install: ""
             msys2_bin_subdir: ""
@@ -103,8 +124,11 @@ jobs:
             runner: ubuntu-24.04-arm
             os_name: linux
             arch: arm64
-            dist_task: :cli:shadowDistZip
-            dist_zip_name: cli-shadow.zip
+            native_glob: libdexkit.so
+            native_file_name: libdexkit.so
+            native_build_shell: pwsh
+            gradle_command: ./gradlew
+            gradle_task: :DexKit:dexkit:copyLibrary
             msys2_msystem: ""
             msys2_install: ""
             msys2_bin_subdir: ""
@@ -112,8 +136,11 @@ jobs:
             runner: ubuntu-24.04
             os_name: android
             arch: arm64
-            dist_task: :cli:verifyAndroidArm64ShadowDist
-            dist_zip_name: cli-shadow-android-arm64.zip
+            native_glob: libdexkit.so
+            native_file_name: libdexkit.so
+            native_build_shell: pwsh
+            gradle_command: ./gradlew
+            gradle_task: :DexKit:dexkit-android:assembleRelease
             msys2_msystem: ""
             msys2_install: ""
             msys2_bin_subdir: ""
@@ -121,8 +148,11 @@ jobs:
             runner: windows-2022
             os_name: windows
             arch: x64
-            dist_task: :cli:shadowDistZip
-            dist_zip_name: cli-shadow.zip
+            native_glob: libdexkit.dll
+            native_file_name: libdexkit.dll
+            native_build_shell: pwsh
+            gradle_command: .\\gradlew.bat
+            gradle_task: :DexKit:dexkit:copyLibrary
             msys2_msystem: MINGW64
             msys2_install: >-
               mingw-w64-x86_64-gcc
@@ -130,25 +160,15 @@ jobs:
               mingw-w64-x86_64-ninja
               mingw-w64-x86_64-zlib
             msys2_bin_subdir: mingw64/bin
-          - target: windows-arm64
-            runner: windows-11-arm
-            os_name: windows
-            arch: arm64
-            dist_task: :cli:shadowDistZip
-            dist_zip_name: cli-shadow.zip
-            msys2_msystem: CLANGARM64
-            msys2_install: >-
-              mingw-w64-clang-aarch64-clang
-              mingw-w64-clang-aarch64-cmake
-              mingw-w64-clang-aarch64-ninja
-              mingw-w64-clang-aarch64-zlib
-            msys2_bin_subdir: clangarm64/bin
           - target: macos-x64
             runner: macos-15-intel
             os_name: macos
             arch: x64
-            dist_task: :cli:shadowDistZip
-            dist_zip_name: cli-shadow.zip
+            native_glob: libdexkit.dylib
+            native_file_name: libdexkit.dylib
+            native_build_shell: pwsh
+            gradle_command: ./gradlew
+            gradle_task: :DexKit:dexkit:copyLibrary
             msys2_msystem: ""
             msys2_install: ""
             msys2_bin_subdir: ""
@@ -156,8 +176,11 @@ jobs:
             runner: macos-15
             os_name: macos
             arch: arm64
-            dist_task: :cli:shadowDistZip
-            dist_zip_name: cli-shadow.zip
+            native_glob: libdexkit.dylib
+            native_file_name: libdexkit.dylib
+            native_build_shell: pwsh
+            gradle_command: ./gradlew
+            gradle_task: :DexKit:dexkit:copyLibrary
             msys2_msystem: ""
             msys2_install: ""
             msys2_bin_subdir: ""
@@ -228,7 +251,7 @@ jobs:
           "sdk.dir=$sdkDir" | Out-File -FilePath (Join-Path $PWD "local.properties") -Encoding ascii
           "sdk.dir=$sdkDir" | Out-File -FilePath (Join-Path $PWD "dexkit/vendor/DexKit/local.properties") -Encoding ascii
 
-      - name: Build CLI shadow distribution
+      - name: Build DexKit native artifact
         shell: pwsh
         run: |
           if ($env:RUNNER_OS -eq 'Windows') {
@@ -243,82 +266,46 @@ jobs:
             }
 
             $env:PATH = "$toolchainBin;$env:PATH"
-            & ".\gradlew.bat" --no-daemon ${{ matrix.dist_task }}
-          } else {
-            & "./gradlew" --no-daemon ${{ matrix.dist_task }}
           }
 
-      - name: Validate launcher runtime detection
-        if: matrix.target == 'android-arm64'
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash ./skills/dexclub-cli-launcher/launcher/scripts/validate_termux_runtime_detection.sh
+          & "${{ matrix.gradle_command }}" --no-daemon ${{ matrix.gradle_task }}
 
-      - name: Package artifact
+      - name: Stage native artifact
         shell: pwsh
         run: |
-          $distDir = Join-Path $PWD "cli/build/distributions"
-          $sourceZip = Join-Path $distDir "${{ matrix.dist_zip_name }}"
-          if (!(Test-Path $sourceZip)) {
-            throw "Missing distribution archive: $sourceZip"
-          }
-
-          $artifactDir = Join-Path $PWD "artifacts"
+          $artifactDir = Join-Path $PWD "artifacts/native"
           New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
 
-          $targetBaseName = "dexclub-cli-${{ matrix.os_name }}-${{ matrix.arch }}"
-          $targetZip = Join-Path $artifactDir "$targetBaseName.zip"
-          Copy-Item $sourceZip $targetZip
+          if ("${{ matrix.target }}" -eq "android-arm64") {
+            $aarPath = Join-Path $PWD "dexkit/vendor/DexKit/dexkit-android/build/outputs/aar/dexkit-android-release.aar"
+            if (!(Test-Path $aarPath)) {
+              throw "Missing Android AAR artifact: $aarPath"
+            }
 
-          $hash = (Get-FileHash -Path $targetZip -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  $targetBaseName.zip" | Out-File -FilePath (Join-Path $artifactDir "$targetBaseName.sha256") -Encoding ascii
+            $extractDir = Join-Path $PWD "artifacts/android-aar"
+            if (Test-Path $extractDir) {
+              Remove-Item -Recurse -Force $extractDir
+            }
+            Expand-Archive -Path $aarPath -DestinationPath $extractDir -Force
 
-      - name: Upload artifact
+            $nativePath = Join-Path $extractDir "jni/arm64-v8a/${{ matrix.native_file_name }}"
+            if (!(Test-Path $nativePath)) {
+              throw "Missing native library in AAR: $nativePath"
+            }
+
+            Copy-Item $nativePath (Join-Path $artifactDir "${{ matrix.native_file_name }}")
+          } else {
+            $nativePath = Join-Path $PWD "dexkit/vendor/DexKit/dexkit/build/library/${{ matrix.native_file_name }}"
+            if (!(Test-Path $nativePath)) {
+              throw "Missing native library artifact: $nativePath"
+            }
+
+            Copy-Item $nativePath (Join-Path $artifactDir "${{ matrix.native_file_name }}")
+          }
+
+      - name: Upload native artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dexclub-cli-${{ matrix.os_name }}-${{ matrix.arch }}
-          path: artifacts/
+          name: dexkit-native-${{ matrix.target }}
+          path: artifacts/native/
           if-no-files-found: error
-
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
-    name: release
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download release artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: dexclub-cli-*
-          path: .release-artifacts
-          merge-multiple: true
-
-      - name: Publish GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          tag="${GITHUB_REF#refs/tags/}"
-
-          shopt -s nullglob
-          assets=(.release-artifacts/*.zip .release-artifacts/*.sha256)
-          if [ "${#assets[@]}" -eq 0 ]; then
-            echo "No release assets found."
-            exit 1
-          fi
-
-          if gh release view "$tag" --repo "$GH_REPO" >/dev/null 2>&1; then
-            gh release upload "$tag" "${assets[@]}" --repo "$GH_REPO" --clobber
-          else
-            gh release create "$tag" "${assets[@]}" \
-              --repo "$GH_REPO" \
-              --title "$tag" \
-              --generate-notes
-          fi
