@@ -2,6 +2,7 @@ import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.gradle.api.tasks.Sync
 import org.gradle.api.tasks.bundling.Zip
 import org.gradle.jvm.tasks.Jar
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 plugins {
@@ -20,6 +21,7 @@ application {
 }
 
 val vendoredDexKitDir = rootProject.layout.projectDirectory.dir("dexkit/vendor/DexKit")
+val externalDexKitNativeDir = providers.gradleProperty("dexkit.native.dir")
 
 fun resolveCliVersion(): String {
     val configured = project.version.toString()
@@ -127,13 +129,23 @@ val generateWindowsPowerShellLauncher = tasks.register("generateWindowsPowerShel
 }
 
 val prepareDexKitNativeLibraries = tasks.register<Sync>("prepareDexKitNativeLibraries") {
-    dependsOn(gradle.includedBuild("DexKit").task(":dexkit:copyLibrary"))
-    from(vendoredDexKitDir.dir("dexkit/build/library")) {
-        include("**/*.so", "**/*.dll", "**/*.dylib")
-        eachFile {
-            path = name
+    val externalNativeDir = externalDexKitNativeDir.orNull?.trim().orEmpty()
+    if (externalNativeDir.isNotEmpty()) {
+        from(File(externalNativeDir)) {
+            eachFile {
+                path = name
+            }
+            includeEmptyDirs = false
         }
-        includeEmptyDirs = false
+    } else {
+        dependsOn(gradle.includedBuild("DexKit").task(":dexkit:copyLibrary"))
+        from(vendoredDexKitDir.dir("dexkit/build/library")) {
+            include("*.so", "*.dll", "*.dylib", "**/*.so", "**/*.dll", "**/*.dylib")
+            eachFile {
+                path = name
+            }
+            includeEmptyDirs = false
+        }
     }
     into(layout.buildDirectory.dir("generated/native/shadowDist"))
 }
