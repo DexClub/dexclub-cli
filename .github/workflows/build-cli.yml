@@ -483,6 +483,13 @@ jobs:
         if: steps.filter.outputs.enabled == 'true'
         shell: pwsh
         run: |
+          $nativeDir = (Resolve-Path (Join-Path $PWD ".ci/native")).Path
+          $gradleArgs = @(
+            "--no-daemon"
+            "-Pdexkit.native.dir=$nativeDir"
+            "${{ matrix.dist_task }}"
+          )
+
           if ($env:RUNNER_OS -eq 'Windows') {
             $msys2Location = "${{ steps.msys2.outputs.msys2-location }}"
             if ([string]::IsNullOrWhiteSpace($msys2Location)) {
@@ -495,9 +502,9 @@ jobs:
             }
 
             $env:PATH = "$toolchainBin;$env:PATH"
-            & ".\\gradlew.bat" --no-daemon -Pdexkit.native.dir="$PWD/.ci/native" ${{ matrix.dist_task }}
+            & ".\\gradlew.bat" @gradleArgs
           } else {
-            & "./gradlew" --no-daemon -Pdexkit.native.dir="$PWD/.ci/native" ${{ matrix.dist_task }}
+            & "./gradlew" @gradleArgs
           }
 
       - name: Package artifact
