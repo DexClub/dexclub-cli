@@ -98,10 +98,6 @@ jobs:
 
   build-dexkit-native:
     needs: build-libcxx
-    if: >-
-      github.event_name != 'workflow_dispatch' ||
-      github.event.inputs.native_target == 'all' ||
-      github.event.inputs.native_target == matrix.target
     name: build-dexkit-native (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -186,27 +182,47 @@ jobs:
             msys2_bin_subdir: ""
 
     steps:
+      - name: Select target
+        id: filter
+        shell: pwsh
+        run: |
+          $enabled = "${{ github.event_name }}" -ne "workflow_dispatch" -or
+            "${{ github.event.inputs.native_target }}" -eq "all" -or
+            "${{ github.event.inputs.native_target }}" -eq "${{ matrix.target }}"
+
+          if ($enabled) {
+            "enabled=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          } else {
+            "enabled=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            Write-Host "Skip matrix target: ${{ matrix.target }}"
+          }
+
       - name: Checkout
+        if: steps.filter.outputs.enabled == 'true'
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
       - name: Setup Java
+        if: steps.filter.outputs.enabled == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
 
       - name: Setup Gradle
+        if: steps.filter.outputs.enabled == 'true'
         uses: gradle/actions/setup-gradle@v4
 
       - name: Download libcxx mavenLocal files
+        if: steps.filter.outputs.enabled == 'true'
         uses: actions/download-artifact@v4
         with:
           name: libcxx-m2
           path: .ci/libcxx-m2
 
       - name: Restore libcxx mavenLocal files
+        if: steps.filter.outputs.enabled == 'true'
         shell: pwsh
         run: |
           $sourceDir = Join-Path $PWD ".ci/libcxx-m2/dev"
@@ -219,6 +235,7 @@ jobs:
           Copy-Item -Recurse -Force (Join-Path $sourceDir "*") $targetDir
 
       - name: Setup Android SDK
+        if: steps.filter.outputs.enabled == 'true'
         uses: android-actions/setup-android@v4
         with:
           packages: >-
@@ -230,7 +247,7 @@ jobs:
             cmake;3.31.6
 
       - name: Setup MSYS2 toolchain
-        if: runner.os == 'Windows'
+        if: steps.filter.outputs.enabled == 'true' && runner.os == 'Windows'
         id: msys2
         uses: msys2/setup-msys2@v2
         with:
@@ -240,6 +257,7 @@ jobs:
           install: ${{ matrix.msys2_install }}
 
       - name: Prepare Android local.properties
+        if: steps.filter.outputs.enabled == 'true'
         shell: pwsh
         run: |
           $sdkDir = $env:ANDROID_SDK_ROOT
@@ -252,6 +270,7 @@ jobs:
           "sdk.dir=$sdkDir" | Out-File -FilePath (Join-Path $PWD "dexkit/vendor/DexKit/local.properties") -Encoding ascii
 
       - name: Build DexKit native artifact
+        if: steps.filter.outputs.enabled == 'true'
         shell: pwsh
         run: |
           if ($env:RUNNER_OS -eq 'Windows') {
@@ -271,6 +290,7 @@ jobs:
           & "${{ matrix.gradle_command }}" --no-daemon ${{ matrix.gradle_task }}
 
       - name: Stage native artifact
+        if: steps.filter.outputs.enabled == 'true'
         shell: pwsh
         run: |
           $artifactDir = Join-Path $PWD "artifacts/native"
@@ -304,6 +324,7 @@ jobs:
           }
 
       - name: Upload native artifact
+        if: steps.filter.outputs.enabled == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: dexkit-native-${{ matrix.target }}
