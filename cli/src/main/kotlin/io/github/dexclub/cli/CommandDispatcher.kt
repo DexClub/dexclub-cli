@@ -20,6 +20,8 @@ internal class CommandDispatcher(
                 exitCode = 0,
             )
             is CliRequest.Init -> workspace.initialize(request)
+            is CliRequest.Switch -> workspace.switchTarget(request)
+            is CliRequest.Targets -> workspace.listTargets(request)
             is CliRequest.Status -> workspace.loadStatus(request)
             is CliRequest.Gc -> workspace.gc(request)
             is CliRequest.Inspect -> inspect.inspect(request)

@@ -31,6 +31,16 @@ sealed interface CliRequest {
         override val outputFormat: OutputFormat,
     ) : CliRequest
 
+    data class Switch(
+        val input: String,
+        override val outputFormat: OutputFormat,
+    ) : CliRequest
+
+    data class Targets(
+        val workdir: String?,
+        override val outputFormat: OutputFormat,
+    ) : CliRequest
+
     data class Status(
         val workdir: String?,
         override val outputFormat: OutputFormat,

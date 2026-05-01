@@ -64,6 +64,30 @@ internal class DefaultWorkspaceStore : WorkspaceStore {
             missingMessage = "Target metadata is missing: ${targetDir(workdir, targetId).resolve("target.json")}",
         ).toRecord()
 
+    override fun listTargets(workdir: String): List<TargetRecord> {
+        val targetsRoot = dexclubDirPath(workdir).resolve("targets")
+        if (!Files.isDirectory(targetsRoot)) return emptyList()
+        Files.list(targetsRoot).use { targets ->
+            val result = mutableListOf<TargetRecord>()
+            val iterator = targets.iterator()
+            while (iterator.hasNext()) {
+                val dir = iterator.next()
+                if (!Files.isDirectory(dir)) continue
+                val targetPath = dir.resolve("target.json")
+                if (!Files.isRegularFile(targetPath)) continue
+                val record = runCatching {
+                    workspaceJson.decodeFromString<TargetDto>(Files.readString(targetPath)).toRecord()
+                }.getOrNull() ?: continue
+                result += record
+            }
+            return result.sortedBy { it.inputPath }
+        }
+    }
+
+    override fun findTargetByInputPath(workdir: String, inputPath: String): TargetRecord? {
+        return listTargets(workdir).firstOrNull { it.inputPath == inputPath }
+    }
+
     override fun saveTarget(workdir: String, target: TargetRecord) {
         writeState {
             Files.createDirectories(targetDir(workdir, target.targetId))

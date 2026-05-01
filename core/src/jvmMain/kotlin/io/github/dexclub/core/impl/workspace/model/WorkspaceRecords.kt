@@ -3,6 +3,7 @@ package io.github.dexclub.core.impl.workspace.model
 import io.github.dexclub.core.api.shared.CapabilitySet
 import io.github.dexclub.core.api.shared.InputType
 import io.github.dexclub.core.api.workspace.TargetHandle
+import io.github.dexclub.core.api.workspace.TargetSummary
 import io.github.dexclub.core.api.workspace.TargetSnapshotSummary
 import io.github.dexclub.core.api.workspace.WorkspaceContext
 import io.github.dexclub.core.api.workspace.WorkspaceRef
@@ -45,6 +46,16 @@ internal data class TargetRecord(
             targetId = targetId,
             inputType = inputType,
             inputPath = inputPath,
+        )
+
+    fun toSummary(activeTargetId: String): TargetSummary =
+        TargetSummary(
+            targetId = targetId,
+            inputType = inputType,
+            inputPath = inputPath,
+            active = targetId == activeTargetId,
+            createdAt = createdAt,
+            updatedAt = updatedAt,
         )
 }
 

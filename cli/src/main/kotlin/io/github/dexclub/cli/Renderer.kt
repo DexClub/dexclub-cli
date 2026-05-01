@@ -59,6 +59,7 @@ internal class Renderer {
             is RenderPayload.Help -> payload.text
             is RenderPayload.Version -> payload.text
             is RenderPayload.Status -> renderStatus(payload.view)
+            is RenderPayload.Targets -> renderTargets(payload.views)
             is RenderPayload.Gc -> renderGc(payload.view)
             is RenderPayload.Inspect -> renderInspect(payload.view)
             is RenderPayload.Manifest -> renderManifest(payload.view)
@@ -79,6 +80,7 @@ internal class Renderer {
             is RenderPayload.Help -> payload.text
             is RenderPayload.Version -> payload.text
             is RenderPayload.Status -> json.encodeToString(payload.view)
+            is RenderPayload.Targets -> json.encodeToString(payload.views)
             is RenderPayload.Gc -> json.encodeToString(payload.view)
             is RenderPayload.Inspect -> json.encodeToString(payload.view)
             is RenderPayload.Manifest -> json.encodeToString(payload.view)
@@ -124,6 +126,25 @@ internal class Renderer {
             appendLine("targetId=${view.targetId}")
             appendLine("deletedFiles=${view.deletedFiles}")
             append("deletedBytes=${view.deletedBytes}")
+        }
+
+    private fun renderTargets(views: List<TargetSummaryView>): String =
+        buildString {
+            append("active\ttargetId\tinputType\tinputPath\tcreatedAt\tupdatedAt")
+            views.forEach { view ->
+                appendLine()
+                append(if (view.active) "*" else "")
+                append('\t')
+                append(view.targetId)
+                append('\t')
+                append(view.inputType)
+                append('\t')
+                append(view.inputPath)
+                append('\t')
+                append(view.createdAt)
+                append('\t')
+                append(view.updatedAt)
+            }
         }
 
     private fun renderInspect(view: InspectView): String =

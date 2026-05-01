@@ -55,6 +55,86 @@ class CliAppTest {
     }
 
     @Test
+    fun switchCommandReactivatesPreviouslyInitializedTarget() {
+        val workspaceDir = createTempDirectory("dexclub-cli-switch")
+        val aDex = workspaceDir.resolve("a.dex")
+        val bDex = workspaceDir.resolve("b.dex")
+        aDex.writeText("")
+        bDex.writeText("")
+        val app = CliApp(
+            services = createDefaultServices(),
+            cwdProvider = { workspaceDir.toString() },
+        )
+
+        val initA = run(app, listOf("init", aDex.toString()))
+        assertEquals(0, initA.exitCode)
+
+        val initB = run(app, listOf("init", bDex.toString()))
+        assertEquals(0, initB.exitCode)
+        assertTrue(initB.stdout.contains("inputPath=b.dex"))
+
+        val switched = run(app, listOf("switch", aDex.toString()))
+        assertEquals(0, switched.exitCode, switched.stderr)
+        assertTrue(switched.stdout.contains("inputPath=a.dex"))
+
+        val status = run(app, listOf("status"))
+        assertEquals(0, status.exitCode)
+        assertTrue(status.stdout.contains("inputPath=a.dex"))
+    }
+
+    @Test
+    fun targetsCommandListsInitializedTargetsAndMarksActiveOne() {
+        val workspaceDir = createTempDirectory("dexclub-cli-targets")
+        val aDex = workspaceDir.resolve("a.dex")
+        val bDex = workspaceDir.resolve("b.dex")
+        aDex.writeText("")
+        bDex.writeText("")
+        val app = CliApp(
+            services = createDefaultServices(),
+            cwdProvider = { workspaceDir.toString() },
+        )
+
+        assertEquals(0, run(app, listOf("init", aDex.toString())).exitCode)
+        assertEquals(0, run(app, listOf("init", bDex.toString())).exitCode)
+
+        val textOut = run(app, listOf("targets"))
+        assertEquals(0, textOut.exitCode, textOut.stderr)
+        assertTrue(textOut.stdout.contains("active\ttargetId\tinputType\tinputPath\tcreatedAt\tupdatedAt"))
+        assertTrue(textOut.stdout.contains("file\ta.dex"))
+        assertTrue(textOut.stdout.contains("*\t"))
+        assertTrue(textOut.stdout.contains("file\tb.dex"))
+
+        val jsonOut = run(app, listOf("targets", "--json"))
+        assertEquals(0, jsonOut.exitCode, jsonOut.stderr)
+        val parsed = Json.parseToJsonElement(jsonOut.stdout).jsonArray
+        assertEquals(2, parsed.size)
+        assertEquals(listOf("a.dex", "b.dex"), parsed.map { it.jsonObject.getValue("inputPath").jsonPrimitive.content })
+        assertEquals(listOf(false, true), parsed.map { it.jsonObject.getValue("active").jsonPrimitive.content.toBoolean() })
+    }
+
+    @Test
+    fun switchCommandCanReactivateMissingTargetInputWithinCurrentWorkspace() {
+        val workspaceDir = createTempDirectory("dexclub-cli-switch-missing")
+        val aDex = workspaceDir.resolve("a.dex")
+        val bDex = workspaceDir.resolve("b.dex")
+        aDex.writeText("")
+        bDex.writeText("")
+        val app = CliApp(
+            services = createDefaultServices(),
+            cwdProvider = { workspaceDir.toString() },
+        )
+
+        assertEquals(0, run(app, listOf("init", aDex.toString())).exitCode)
+        assertEquals(0, run(app, listOf("init", bDex.toString())).exitCode)
+        aDex.deleteExisting()
+
+        val switched = run(app, listOf("switch", "a.dex"))
+        assertEquals(2, switched.exitCode, switched.stderr)
+        assertTrue(switched.stdout.contains("inputPath=a.dex"))
+        assertTrue(switched.stdout.contains("state=broken"))
+    }
+
+    @Test
     fun statusUsesBrokenExitCodeWhenInputIsMissing() {
         val workspaceDir = createTempDirectory("dexclub-cli-broken")
         val apkFile = workspaceDir.resolve("app.apk")

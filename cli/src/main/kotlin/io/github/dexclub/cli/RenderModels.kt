@@ -21,6 +21,7 @@ import io.github.dexclub.core.api.shared.WorkspaceKind
 import io.github.dexclub.core.api.shared.WorkspaceState
 import io.github.dexclub.core.api.workspace.GcResult
 import io.github.dexclub.core.api.workspace.InspectResult
+import io.github.dexclub.core.api.workspace.TargetSummary
 import io.github.dexclub.core.api.workspace.WorkspaceStatus
 import kotlinx.serialization.Serializable
 
@@ -28,6 +29,7 @@ internal sealed interface RenderPayload {
     data class Help(val text: String) : RenderPayload
     data class Version(val text: String) : RenderPayload
     data class Status(val view: StatusView) : RenderPayload
+    data class Targets(val views: List<TargetSummaryView>) : RenderPayload
     data class Gc(val view: GcView) : RenderPayload
     data class Inspect(val view: InspectView) : RenderPayload
     data class Manifest(val view: ManifestView) : RenderPayload
@@ -248,6 +250,28 @@ internal data class GcView(
                 targetId = result.targetId,
                 deletedFiles = result.deletedFiles,
                 deletedBytes = result.deletedBytes,
+            )
+    }
+}
+
+@Serializable
+internal data class TargetSummaryView(
+    val targetId: String,
+    val inputType: String,
+    val inputPath: String,
+    val active: Boolean,
+    val createdAt: String,
+    val updatedAt: String,
+) {
+    companion object {
+        fun from(target: TargetSummary): TargetSummaryView =
+            TargetSummaryView(
+                targetId = target.targetId,
+                inputType = target.inputType.toCliValue(),
+                inputPath = target.inputPath,
+                active = target.active,
+                createdAt = target.createdAt,
+                updatedAt = target.updatedAt,
             )
     }
 }

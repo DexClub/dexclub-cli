@@ -2,6 +2,8 @@ package io.github.dexclub.core.impl.workspace
 
 import io.github.dexclub.core.api.shared.WorkspaceKind
 import io.github.dexclub.core.api.shared.WorkspaceState
+import io.github.dexclub.core.api.workspace.WorkspaceResolveError
+import io.github.dexclub.core.api.workspace.WorkspaceResolveErrorReason
 import io.github.dexclub.core.api.workspace.WorkspaceRef
 import io.github.dexclub.core.impl.workspace.runtime.CapabilityResolver
 import io.github.dexclub.core.impl.workspace.runtime.DefaultWorkspaceRuntimeResolver
@@ -75,6 +77,89 @@ class DefaultWorkspaceServiceTest {
         assertEquals(context.snapshot, inspect.snapshot)
     }
 
+    @Test
+    fun switchTargetReactivatesPreviouslyInitializedInput() {
+        val workspaceDir = createTempDirectory("dexclub-core-service-switch")
+        val aDex = workspaceDir.resolve("a.dex")
+        val bDex = workspaceDir.resolve("b.dex")
+        aDex.writeText("")
+        bDex.writeText("")
+
+        val service = createService()
+
+        val aContext = service.initialize(aDex.toString())
+        val bContext = service.initialize(bDex.toString())
+        assertEquals(bContext.activeTargetId, service.open(WorkspaceRef(workspaceDir.toString())).activeTargetId)
+
+        val switchedRef = service.switchTarget(WorkspaceRef(workspaceDir.toString()), aDex.toString())
+        assertEquals(workspaceDir.toString(), switchedRef.workdir)
+
+        val status = service.loadStatus(WorkspaceRef(workspaceDir.toString()))
+        assertEquals(aContext.activeTargetId, status.activeTargetId)
+    }
+
+    @Test
+    fun listTargetsReturnsAllInitializedTargetsAndMarksActiveOne() {
+        val workspaceDir = createTempDirectory("dexclub-core-service-targets")
+        val aDex = workspaceDir.resolve("a.dex")
+        val bDex = workspaceDir.resolve("b.dex")
+        aDex.writeText("")
+        bDex.writeText("")
+
+        val service = createService()
+
+        val aContext = service.initialize(aDex.toString())
+        val bContext = service.initialize(bDex.toString())
+
+        val targets = service.listTargets(WorkspaceRef(workspaceDir.toString()))
+        assertEquals(2, targets.size)
+        assertEquals(listOf("a.dex", "b.dex"), targets.map { it.inputPath })
+        assertEquals(listOf(false, true), targets.map { it.active })
+        assertEquals(aContext.activeTargetId, targets.first { it.inputPath == "a.dex" }.targetId)
+        assertEquals(bContext.activeTargetId, targets.first { it.inputPath == "b.dex" }.targetId)
+    }
+
+    @Test
+    fun switchTargetDoesNotAllowCrossWorkspaceInput() {
+        val workspaceA = createTempDirectory("dexclub-core-service-switch-a")
+        val workspaceB = createTempDirectory("dexclub-core-service-switch-b")
+        val aDex = workspaceA.resolve("a.dex")
+        val bDex = workspaceB.resolve("b.dex")
+        aDex.writeText("")
+        bDex.writeText("")
+
+        val service = createService()
+        service.initialize(aDex.toString())
+        service.initialize(bDex.toString())
+
+        val error = kotlin.runCatching {
+            service.switchTarget(WorkspaceRef(workspaceA.toString()), bDex.toString())
+        }.exceptionOrNull() as? WorkspaceResolveError
+
+        assertEquals(WorkspaceResolveErrorReason.InvalidInputPath, error?.reason)
+    }
+
+    @Test
+    fun switchTargetCanReactivateTargetWhoseInputIsNowMissing() {
+        val workspaceDir = createTempDirectory("dexclub-core-service-switch-missing")
+        val aDex = workspaceDir.resolve("a.dex")
+        val bDex = workspaceDir.resolve("b.dex")
+        aDex.writeText("")
+        bDex.writeText("")
+
+        val service = createService()
+        val aContext = service.initialize(aDex.toString())
+        service.initialize(bDex.toString())
+        aDex.deleteExisting()
+
+        val switchedRef = service.switchTarget(WorkspaceRef(workspaceDir.toString()), "a.dex")
+        assertEquals(workspaceDir.toString(), switchedRef.workdir)
+
+        val status = service.loadStatus(WorkspaceRef(workspaceDir.toString()))
+        assertEquals(WorkspaceState.Broken, status.state)
+        assertEquals(aContext.activeTargetId, status.activeTargetId)
+    }
+
     private fun createService(): DefaultWorkspaceService {
         val inputResolver = WorkspaceInputResolver()
         val capabilityResolver = CapabilityResolver()
@@ -98,6 +183,7 @@ class DefaultWorkspaceServiceTest {
             store = store,
             bootstrapper = bootstrapper,
             runtimeResolver = runtimeResolver,
+            inputResolver = inputResolver,
         )
     }
 }

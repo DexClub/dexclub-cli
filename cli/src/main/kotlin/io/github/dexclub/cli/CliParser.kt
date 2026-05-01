@@ -17,6 +17,8 @@ internal class CliParser {
         return when (val command = argv.first()) {
             "help" -> parseHelp(argv.drop(1))
             "init" -> parseInit(argv.drop(1))
+            "switch" -> parseSwitch(argv.drop(1))
+            "targets" -> parseWorkdirCommand(command, argv.drop(1))
             "status" -> parseWorkdirCommand(command, argv.drop(1))
             "gc" -> parseWorkdirCommand(command, argv.drop(1))
             "inspect" -> parseWorkdirCommand(command, argv.drop(1))
@@ -90,6 +92,23 @@ internal class CliParser {
         )
     }
 
+    private fun parseSwitch(tokens: List<String>): CliRequest {
+        if (tokens.size == 1 && CliHelp.isHelpFlag(tokens.single())) {
+            return CliRequest.Help("switch")
+        }
+        val parsed = parsePositionalAndFlags(tokens, allowJson = false, usage = CliUsages.switch)
+        if (parsed.positionals.size != 1) {
+            throw CliUsageError(
+                message = "missing required argument: <input>",
+                usage = CliUsages.switch,
+            )
+        }
+        return CliRequest.Switch(
+            input = parsed.positionals.single(),
+            outputFormat = parsed.outputFormat,
+        )
+    }
+
     private fun parseWorkdirCommand(command: String, tokens: List<String>): CliRequest {
         if (tokens.size == 1 && CliHelp.isHelpFlag(tokens.single())) {
             return CliRequest.Help(command)
@@ -104,6 +123,7 @@ internal class CliParser {
         }
         return when (command) {
             "status" -> CliRequest.Status(parsed.positionals.singleOrNull(), parsed.outputFormat)
+            "targets" -> CliRequest.Targets(parsed.positionals.singleOrNull(), parsed.outputFormat)
             "gc" -> CliRequest.Gc(parsed.positionals.singleOrNull(), parsed.outputFormat)
             "inspect" -> CliRequest.Inspect(parsed.positionals.singleOrNull(), parsed.outputFormat)
             "manifest" -> CliRequest.Manifest(parsed.positionals.singleOrNull(), parsed.outputFormat)
@@ -1395,6 +1415,8 @@ internal object CliUsages {
     const val general: String = "cli <command> ..."
     const val help: String = "cli help [command]"
     const val init: String = "cli init <input>"
+    const val switch: String = "cli switch <input>"
+    const val targets: String = "cli targets [workdir] [--json]"
     const val status: String = "cli status [workdir] [--json]"
     const val gc: String = "cli gc [workdir] [--json]"
     const val inspect: String = "cli inspect [workdir] [--json]"
@@ -1434,6 +1456,8 @@ internal object CliUsages {
     fun forCommand(command: String): String =
         when (command) {
             "init" -> init
+            "switch" -> switch
+            "targets" -> targets
             "status" -> status
             "gc" -> gc
             "inspect" -> inspect

@@ -27,6 +27,28 @@ internal object CliHelp {
             ),
         ),
         CommandHelpSpec(
+            command = "switch",
+            usage = CliUsages.switch,
+            description = "Switch the active target to an already initialized input in the same workspace.",
+            arguments = listOf("<input>  Existing input path already bound in the workspace."),
+            output = "Text only. Prints the switched workspace status summary.",
+            notes = listOf(
+                "switch does not create a new target. Use init first if the input has never been initialized.",
+                "The input must belong to the same workspace as the current workdir.",
+            ),
+        ),
+        CommandHelpSpec(
+            command = "targets",
+            usage = CliUsages.targets,
+            description = "List initialized targets in the current workspace and mark the active one.",
+            arguments = listOf("[workdir]  Optional workspace directory. Defaults to the current directory."),
+            options = listOf("--json  Render the target list as JSON."),
+            output = "Text prints a stable tab-separated target table. JSON prints the target array directly.",
+            notes = listOf(
+                "targets is read-only and does not rebuild cache or refresh snapshots.",
+            ),
+        ),
+        CommandHelpSpec(
             command = "status",
             usage = CliUsages.status,
             description = "Read the current workspace status without modifying managed state.",
@@ -372,6 +394,8 @@ internal object CliHelp {
             appendLine()
             appendLine("Lifecycle Commands:")
             appendLine("  init                     Initialize a workspace from an input path.")
+            appendLine("  switch                   Switch to an existing target in the current workspace.")
+            appendLine("  targets                  List initialized targets in the current workspace.")
             appendLine("  status                   Show workspace status and issues.")
             appendLine("  gc                       Delete safe-to-rebuild derived state.")
             appendLine("  inspect                  Show the active target summary.")

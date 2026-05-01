@@ -30,6 +30,10 @@ internal interface WorkspaceStore {
 
     fun loadTarget(workdir: String, targetId: String): TargetRecord
 
+    fun listTargets(workdir: String): List<TargetRecord>
+
+    fun findTargetByInputPath(workdir: String, inputPath: String): TargetRecord?
+
     fun saveTarget(workdir: String, target: TargetRecord)
 
     fun loadSnapshot(workdir: String, targetId: String): SnapshotRecord?

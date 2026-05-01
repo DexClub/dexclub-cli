@@ -16,6 +16,8 @@ V3 的命令面必须体现以下事实：
 
 ```text
 init
+switch
+targets
 status
 gc
 inspect
@@ -60,6 +62,20 @@ cli <command> [workdir] [options]
 - `cwd` 必须直接存在 `.dexclub`
 - 不向上查找
 
+工作区允许同时保存多个 target，但任意时刻只有一个 active target。
+
+职责边界保持：
+
+- `init`
+  - 创建或刷新一个输入对应的 target
+  - 并将其设为 active target
+- `switch`
+  - 仅切换到已经存在的 target
+  - 不创建新 target
+- `targets`
+  - 只列出当前工作区已有 target
+  - 不修改任何状态
+
 ## init
 
 ### 签名
@@ -90,6 +106,60 @@ cli init <input>
 ```text
 cli init ./app.apk
 ```
+
+## switch
+
+### 签名
+
+```text
+cli switch <input>
+```
+
+### 语义
+
+- `input` 必须能解析到当前工作区内已经初始化过的 target
+- 成功后将该 target 设为当前 active target
+- 不创建新的 `.dexclub`
+- 不创建新的 target
+
+### 约束
+
+- `switch` 只接受单个输入参数
+- 若目标输入尚未初始化，必须直接失败
+- 若需要首次绑定某个输入，必须先执行 `init`
+
+## targets
+
+### 签名
+
+```text
+cli targets [workdir] [--json]
+```
+
+### 语义
+
+- 列出当前工作区下所有已初始化 target
+- 明确标出当前 active target
+- 不修改工作区状态
+
+### 推荐输出字段
+
+- `targetId`
+- `inputType`
+- `inputPath`
+- `active`
+- `createdAt`
+- `updatedAt`
+
+text 输出建议固定列：
+
+```text
+active	targetId	inputType	inputPath	createdAt	updatedAt
+*	abc123	file	a.apk	2026-05-01T10:00:00Z	2026-05-01T10:05:00Z
+	def456	file	b.apk	2026-05-01T10:01:00Z	2026-05-01T10:06:00Z
+```
+
+JSON 输出建议直接返回 target 数组，不额外包裹统计字段。
 
 ## 状态命令
 

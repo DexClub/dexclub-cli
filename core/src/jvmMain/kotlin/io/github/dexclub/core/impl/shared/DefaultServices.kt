@@ -52,6 +52,7 @@ actual fun createDefaultServices(): Services {
         store = store,
         bootstrapper = bootstrapper,
         runtimeResolver = runtimeResolver,
+        inputResolver = inputResolver,
     )
     val capabilityChecker = CapabilityChecker()
     val resourceTableLoader = ResourceTableLoader()

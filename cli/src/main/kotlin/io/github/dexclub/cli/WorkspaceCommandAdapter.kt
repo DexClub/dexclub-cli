@@ -18,6 +18,17 @@ internal class WorkspaceCommandAdapter(
         )
     }
 
+    fun switchTarget(request: CliRequest.Switch): CommandResult {
+        val workspaceRef = workdirResolver.resolve(null)
+        val switchedRef = services.workspace.switchTarget(workspaceRef, request.input)
+        val status = services.workspace.loadStatus(switchedRef)
+        return CommandResult(
+            payload = RenderPayload.Status(StatusView.from(switchedRef.workdir, status)),
+            outputFormat = request.outputFormat,
+            exitCode = exitCodeForStatus(status.state),
+        )
+    }
+
     fun loadStatus(request: CliRequest.Status): CommandResult {
         val workspaceRef = workdirResolver.resolve(request.workdir)
         val status = services.workspace.loadStatus(workspaceRef)
@@ -25,6 +36,16 @@ internal class WorkspaceCommandAdapter(
             payload = RenderPayload.Status(StatusView.from(workspaceRef.workdir, status)),
             outputFormat = request.outputFormat,
             exitCode = exitCodeForStatus(status.state),
+        )
+    }
+
+    fun listTargets(request: CliRequest.Targets): CommandResult {
+        val workspaceRef = workdirResolver.resolve(request.workdir)
+        val targets = services.workspace.listTargets(workspaceRef)
+        return CommandResult(
+            payload = RenderPayload.Targets(targets.map(TargetSummaryView::from)),
+            outputFormat = request.outputFormat,
+            exitCode = 0,
         )
     }
 

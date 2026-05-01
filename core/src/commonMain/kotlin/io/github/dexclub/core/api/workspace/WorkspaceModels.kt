@@ -18,6 +18,15 @@ data class TargetHandle(
     val inputPath: String,
 )
 
+data class TargetSummary(
+    val targetId: String,
+    val inputType: InputType,
+    val inputPath: String,
+    val active: Boolean,
+    val createdAt: String,
+    val updatedAt: String,
+)
+
 data class TargetSnapshotSummary(
     val kind: WorkspaceKind,
     val inventoryFingerprint: String,

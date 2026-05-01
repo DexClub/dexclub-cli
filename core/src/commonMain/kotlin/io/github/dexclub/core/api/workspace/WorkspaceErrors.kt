@@ -17,9 +17,11 @@ class WorkspaceInitError(
 
 enum class WorkspaceResolveErrorReason {
     InvalidWorkdir,
+    InvalidInputPath,
     NotInitialized,
     InvalidWorkspaceMetadata,
     MissingActiveTarget,
+    TargetNotFound,
     InvalidTargetMetadata,
     MissingBoundInput,
     InvalidSnapshot,

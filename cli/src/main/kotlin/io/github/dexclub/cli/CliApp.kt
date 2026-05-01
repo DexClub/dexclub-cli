@@ -100,6 +100,8 @@ private fun CliRequest.toCommandName(): String =
         is CliRequest.Help -> "help"
         is CliRequest.Version -> "version"
         is CliRequest.Init -> "init"
+        is CliRequest.Switch -> "switch"
+        is CliRequest.Targets -> "targets"
         is CliRequest.Status -> "status"
         is CliRequest.Gc -> "gc"
         is CliRequest.Inspect -> "inspect"
