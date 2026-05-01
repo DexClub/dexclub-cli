@@ -24,6 +24,9 @@ internal class DefaultWorkspaceStore : WorkspaceStore {
 
     override fun dexclubDir(workdir: String): String = dexclubDirPath(workdir).toString()
 
+    override fun apkDexDir(workdir: String, targetId: String): String =
+        targetDir(workdir, targetId).resolve("cache/decoded/apk-dex").toString()
+
     override fun exportTempDir(workdir: String, targetId: String): String =
         targetDir(workdir, targetId).resolve("cache/exports/tmp").toString()
 
@@ -299,6 +302,7 @@ internal class DefaultWorkspaceStore : WorkspaceStore {
 
     private fun initializeCacheDirs(targetDir: Path) {
         Files.createDirectories(targetDir.resolve("cache/decoded"))
+        Files.createDirectories(targetDir.resolve("cache/decoded/apk-dex"))
         Files.createDirectories(targetDir.resolve("cache/indexes"))
         Files.createDirectories(targetDir.resolve("cache/exports/tmp"))
     }

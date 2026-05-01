@@ -113,6 +113,7 @@ class DefaultDexAnalysisServiceTest {
                     it.sourceEntry == "classes.dex"
             },
         )
+        assertApkDexCacheContainsOnly(fixture.apkWorkspaceDir, workspace, "classes.dex")
     }
 
     @Test
@@ -155,6 +156,7 @@ class DefaultDexAnalysisServiceTest {
                     it.sourceEntry == "classes.dex"
             },
         )
+        assertApkDexCacheContainsOnly(fixture.apkWorkspaceDir, workspace, "classes.dex")
     }
 
     @Test
@@ -190,6 +192,7 @@ class DefaultDexAnalysisServiceTest {
         )
 
         assertTrue(hits.any { it.sourcePath == "fixture.apk" && it.sourceEntry == "classes.dex" })
+        assertApkDexCacheContainsOnly(fixture.apkWorkspaceDir, workspace, "classes.dex")
     }
 
     @Test
@@ -232,6 +235,7 @@ class DefaultDexAnalysisServiceTest {
                     it.sourceEntry == "classes.dex"
             },
         )
+        assertApkDexCacheContainsOnly(fixture.apkWorkspaceDir, workspace, "classes.dex")
     }
 
     @Test
@@ -693,6 +697,25 @@ private fun assertNoJavaExportTempsLeaked(
     )
     assertTrue(exportTempDir.isDirectory)
     assertTrue(exportTempDir.listFiles()?.isEmpty() != false)
+}
+
+private fun assertApkDexCacheContainsOnly(
+    workspaceDir: File,
+    workspace: io.github.dexclub.core.api.workspace.WorkspaceContext,
+    vararg fileNames: String,
+) {
+    val apkDexDir = File(
+        workspaceDir,
+        ".dexclub/targets/${workspace.activeTargetId}/cache/decoded/apk-dex",
+    )
+    assertTrue(apkDexDir.isDirectory)
+    assertTrue(File(apkDexDir, ".content-fingerprint").isFile)
+    val dexFiles = apkDexDir.listFiles()
+        ?.filter { it.isFile && it.extension == "dex" }
+        ?.map { it.name }
+        ?.sorted()
+        ?: emptyList()
+    assertEquals(fileNames.sorted(), dexFiles)
 }
 
 private fun isDexFile(file: File): Boolean {

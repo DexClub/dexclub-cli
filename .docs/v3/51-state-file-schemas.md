@@ -450,6 +450,35 @@ APK 中 manifest 示例：
 - `gc` 应视其为可安全删除、可完全重建的缓存目录
 - 命令完成后应尽量不留下残留文件
 
+## 4B. `cache/decoded/apk-dex/`
+
+### 职责
+
+保存从 APK 容器内解包出的 dex 文件缓存。
+
+典型内容：
+
+- `classes.dex`
+- `classes2.dex`
+- `classes3.dex`
+
+以及一个轻量校验文件：
+
+- `.content-fingerprint`
+
+### 约束
+
+- 这是目录约定，不是稳定 JSON 状态文件
+- 仅服务 APK 输入
+- 不复制 standalone `.dex` 输入
+- 文件名沿用 APK 内 dex entry 名称
+- `.content-fingerprint` 用于记录当前缓存对应的 `snapshot.contentFingerprint`
+
+### 生命周期
+
+- 若 `.content-fingerprint` 与当前 active target 的 `contentFingerprint` 不一致，则应清空并重建整个 `apk-dex/`
+- `gc` 应视其为可安全删除、可完全重建的缓存目录
+
 ## 5. `cache/decoded/resource-table.json`
 
 ### 职责

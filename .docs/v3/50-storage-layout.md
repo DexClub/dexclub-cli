@@ -110,8 +110,26 @@ V3 需要一个能承载以下职责的工作区存储布局：
 - manifest 解码结果
 - arsc 解码结果
 - xml 解码结果
+- APK 内解包缓存的 `classes*.dex`
 
 这类内容偏“可直接理解的解码结果”，通常更接近最终可展示内容。
+
+其中 APK dex 解包缓存建议放在：
+
+```text
+targets/<target-id>/cache/decoded/apk-dex/
+```
+
+职责是：
+
+- 保存从 APK 容器内一次性解包出的 `classes*.dex`
+- 供 dex 查询链复用，避免每次查询都重新从 zip 读取和解压 dex entry
+
+约束是：
+
+- 仅服务 APK 输入
+- 不复制 standalone `.dex` 输入
+- 生命周期绑定当前 target 的 `contentFingerprint`
 
 ### `targets/<target-id>/cache/indexes/`
 

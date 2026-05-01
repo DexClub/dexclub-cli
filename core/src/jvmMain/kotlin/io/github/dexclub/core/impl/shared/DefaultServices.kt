@@ -60,7 +60,7 @@ actual fun createDefaultServices(): Services {
         store = store,
         capabilityChecker = capabilityChecker,
         queryParser = DexQueryParser(),
-        searchExecutor = DefaultDexSearchExecutor(),
+        searchExecutor = DefaultDexSearchExecutor(store),
         exportExecutor = DefaultDexExportExecutor(store, toolVersion),
     )
     val resource: ResourceService = DefaultResourceService(

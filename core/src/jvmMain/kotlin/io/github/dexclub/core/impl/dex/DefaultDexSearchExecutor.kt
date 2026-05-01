@@ -12,6 +12,8 @@ import io.github.dexclub.core.api.dex.MethodFieldUsage
 import io.github.dexclub.core.api.dex.MethodHit
 import io.github.dexclub.core.api.workspace.WorkspaceContext
 import io.github.dexclub.core.impl.workspace.model.MaterialInventory
+import io.github.dexclub.core.impl.workspace.store.WorkspaceStore
+import java.nio.file.Files
 import io.github.dexclub.dexkit.DexKitBridge
 import io.github.dexclub.dexkit.query.ClassMatcher
 import io.github.dexclub.dexkit.query.BatchFindClassUsingStrings
@@ -33,7 +35,10 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.zip.ZipFile
 
-internal class DefaultDexSearchExecutor : DexSearchExecutor {
+internal class DefaultDexSearchExecutor(
+    private val store: WorkspaceStore,
+) : DexSearchExecutor {
+
     override fun findClasses(
         workspace: WorkspaceContext,
         inventory: MaterialInventory,
@@ -44,7 +49,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
         val hits = mutableListOf<ClassHit>()
 
         for (apkPath in inventory.apkFiles) {
-            val apkHits = findClassesInApk(workdirPath, apkPath, query)
+            val apkHits = findClassesInApk(workspace, workdirPath, apkPath, query)
             hits += apkHits
             if (query.findFirst && apkHits.isNotEmpty()) {
                 return listOf(apkHits.first())
@@ -72,7 +77,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
         val hits = mutableListOf<MethodHit>()
 
         for (apkPath in inventory.apkFiles) {
-            val apkHits = findMethodsInApk(workdirPath, apkPath, query)
+            val apkHits = findMethodsInApk(workspace, workdirPath, apkPath, query)
             hits += apkHits
             if (query.findFirst && apkHits.isNotEmpty()) {
                 return listOf(apkHits.first())
@@ -100,7 +105,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
         val hits = mutableListOf<FieldHit>()
 
         for (apkPath in inventory.apkFiles) {
-            val apkHits = findFieldsInApk(workdirPath, apkPath, query)
+            val apkHits = findFieldsInApk(workspace, workdirPath, apkPath, query)
             hits += apkHits
             if (query.findFirst && apkHits.isNotEmpty()) {
                 return listOf(apkHits.first())
@@ -128,7 +133,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
         val hits = mutableListOf<ClassHit>()
 
         for (apkPath in inventory.apkFiles) {
-            hits += findClassesUsingStringsInApk(workdirPath, apkPath, query)
+            hits += findClassesUsingStringsInApk(workspace, workdirPath, apkPath, query)
         }
 
         for (dexPath in inventory.dexFiles) {
@@ -148,7 +153,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
         val hits = mutableListOf<MethodHit>()
 
         for (apkPath in inventory.apkFiles) {
-            hits += findMethodsUsingStringsInApk(workdirPath, apkPath, query)
+            hits += findMethodsUsingStringsInApk(workspace, workdirPath, apkPath, query)
         }
 
         for (dexPath in inventory.dexFiles) {
@@ -170,7 +175,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
         val matches = mutableListOf<LocatedMethod>()
 
         for (apkPath in inventory.apkFiles) {
-            matches += locateMethodInApk(workdirPath, apkPath, descriptor)
+            matches += locateMethodInApk(workspace, workdirPath, apkPath, descriptor)
         }
 
         for (dexPath in inventory.dexFiles) {
@@ -199,6 +204,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
         }
 
         return loadMethodDetail(
+            workspace = workspace,
             workdirPath = workdirPath,
             inventory = inventory,
             locatedMethod = locatedMethod,
@@ -209,34 +215,25 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
     }
 
     private fun findClassesInApk(
+        workspace: WorkspaceContext,
         workdirPath: Path,
         relativeApkPath: String,
         query: FindClass,
     ): List<ClassHit> {
-        val apkPath = workdirPath.resolve(relativeApkPath).normalize()
         val hits = mutableListOf<ClassHit>()
-        ZipFile(apkPath.toFile()).use { zip ->
-            val dexEntries = zip.entries().asSequence()
-                .filterNot { it.isDirectory }
-                .filter { it.name.endsWith(".dex", ignoreCase = true) }
-                .sortedWith(compareBy({ dexEntrySortKey(it.name).first }, { dexEntrySortKey(it.name).second }, { it.name }))
-                .toList()
-            check(dexEntries.isNotEmpty()) { "APK does not contain any dex entries: $apkPath" }
-            for (entry in dexEntries) {
-                val dexBytes = zip.getInputStream(entry).use { it.readBytes() }
-                val entryHits = DexKitBridge(arrayOf(dexBytes)).useFindClass(query) { results ->
-                    results.map { result ->
-                        ClassHit(
-                            className = result.descriptor,
-                            sourcePath = relativeApkPath,
-                            sourceEntry = entry.name,
-                        )
-                    }
+        for ((entryName, dexPath) in prepareApkDexFiles(workspace, workdirPath, relativeApkPath)) {
+            val entryHits = DexKitBridge(listOf(dexPath.toString())).useFindClass(query) { results ->
+                results.map { result ->
+                    ClassHit(
+                        className = result.descriptor,
+                        sourcePath = relativeApkPath,
+                        sourceEntry = entryName,
+                    )
                 }
-                hits += entryHits
-                if (query.findFirst && entryHits.isNotEmpty()) {
-                    return listOf(entryHits.first())
-                }
+            }
+            hits += entryHits
+            if (query.findFirst && entryHits.isNotEmpty()) {
+                return listOf(entryHits.first())
             }
         }
         return hits
@@ -260,36 +257,27 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
     }
 
     private fun findMethodsInApk(
+        workspace: WorkspaceContext,
         workdirPath: Path,
         relativeApkPath: String,
         query: FindMethod,
     ): List<MethodHit> {
-        val apkPath = workdirPath.resolve(relativeApkPath).normalize()
         val hits = mutableListOf<MethodHit>()
-        ZipFile(apkPath.toFile()).use { zip ->
-            val dexEntries = zip.entries().asSequence()
-                .filterNot { it.isDirectory }
-                .filter { it.name.endsWith(".dex", ignoreCase = true) }
-                .sortedWith(compareBy({ dexEntrySortKey(it.name).first }, { dexEntrySortKey(it.name).second }, { it.name }))
-                .toList()
-            check(dexEntries.isNotEmpty()) { "APK does not contain any dex entries: $apkPath" }
-            for (entry in dexEntries) {
-                val dexBytes = zip.getInputStream(entry).use { it.readBytes() }
-                val entryHits = DexKitBridge(arrayOf(dexBytes)).useFindMethod(query) { results ->
-                    results.map { result ->
-                        MethodHit(
-                            className = result.className,
-                            methodName = result.name,
-                            descriptor = result.descriptor,
-                            sourcePath = relativeApkPath,
-                            sourceEntry = entry.name,
-                        )
-                    }
+        for ((entryName, dexPath) in prepareApkDexFiles(workspace, workdirPath, relativeApkPath)) {
+            val entryHits = DexKitBridge(listOf(dexPath.toString())).useFindMethod(query) { results ->
+                results.map { result ->
+                    MethodHit(
+                        className = result.className,
+                        methodName = result.name,
+                        descriptor = result.descriptor,
+                        sourcePath = relativeApkPath,
+                        sourceEntry = entryName,
+                    )
                 }
-                hits += entryHits
-                if (query.findFirst && entryHits.isNotEmpty()) {
-                    return listOf(entryHits.first())
-                }
+            }
+            hits += entryHits
+            if (query.findFirst && entryHits.isNotEmpty()) {
+                return listOf(entryHits.first())
             }
         }
         return hits
@@ -315,36 +303,27 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
     }
 
     private fun findFieldsInApk(
+        workspace: WorkspaceContext,
         workdirPath: Path,
         relativeApkPath: String,
         query: FindField,
     ): List<FieldHit> {
-        val apkPath = workdirPath.resolve(relativeApkPath).normalize()
         val hits = mutableListOf<FieldHit>()
-        ZipFile(apkPath.toFile()).use { zip ->
-            val dexEntries = zip.entries().asSequence()
-                .filterNot { it.isDirectory }
-                .filter { it.name.endsWith(".dex", ignoreCase = true) }
-                .sortedWith(compareBy({ dexEntrySortKey(it.name).first }, { dexEntrySortKey(it.name).second }, { it.name }))
-                .toList()
-            check(dexEntries.isNotEmpty()) { "APK does not contain any dex entries: $apkPath" }
-            for (entry in dexEntries) {
-                val dexBytes = zip.getInputStream(entry).use { it.readBytes() }
-                val entryHits = DexKitBridge(arrayOf(dexBytes)).useFindField(query) { results ->
-                    results.map { result ->
-                        FieldHit(
-                            className = result.className,
-                            fieldName = result.name,
-                            descriptor = result.descriptor,
-                            sourcePath = relativeApkPath,
-                            sourceEntry = entry.name,
-                        )
-                    }
+        for ((entryName, dexPath) in prepareApkDexFiles(workspace, workdirPath, relativeApkPath)) {
+            val entryHits = DexKitBridge(listOf(dexPath.toString())).useFindField(query) { results ->
+                results.map { result ->
+                    FieldHit(
+                        className = result.className,
+                        fieldName = result.name,
+                        descriptor = result.descriptor,
+                        sourcePath = relativeApkPath,
+                        sourceEntry = entryName,
+                    )
                 }
-                hits += entryHits
-                if (query.findFirst && entryHits.isNotEmpty()) {
-                    return listOf(entryHits.first())
-                }
+            }
+            hits += entryHits
+            if (query.findFirst && entryHits.isNotEmpty()) {
+                return listOf(entryHits.first())
             }
         }
         return hits
@@ -370,36 +349,27 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
     }
 
     private fun findClassesUsingStringsInApk(
+        workspace: WorkspaceContext,
         workdirPath: Path,
         relativeApkPath: String,
         query: BatchFindClassUsingStrings,
     ): List<ClassHit> {
-        val apkPath = workdirPath.resolve(relativeApkPath).normalize()
         val hits = mutableListOf<ClassHit>()
-        ZipFile(apkPath.toFile()).use { zip ->
-            val dexEntries = zip.entries().asSequence()
-                .filterNot { it.isDirectory }
-                .filter { it.name.endsWith(".dex", ignoreCase = true) }
-                .sortedWith(compareBy({ dexEntrySortKey(it.name).first }, { dexEntrySortKey(it.name).second }, { it.name }))
-                .toList()
-            check(dexEntries.isNotEmpty()) { "APK does not contain any dex entries: $apkPath" }
-            for (entry in dexEntries) {
-                val dexBytes = zip.getInputStream(entry).use { it.readBytes() }
-                val entryHits = DexKitBridge(arrayOf(dexBytes)).useBatchFindClassUsingStrings(query) { results ->
-                    results.values.asSequence()
-                        .flatten()
-                        .map { result ->
-                            ClassHit(
-                                className = result.descriptor,
-                                sourcePath = relativeApkPath,
-                                sourceEntry = entry.name,
-                            )
-                        }
-                        .distinct()
-                        .toList()
-                }
-                hits += entryHits
+        for ((entryName, dexPath) in prepareApkDexFiles(workspace, workdirPath, relativeApkPath)) {
+            val entryHits = DexKitBridge(listOf(dexPath.toString())).useBatchFindClassUsingStrings(query) { results ->
+                results.values.asSequence()
+                    .flatten()
+                    .map { result ->
+                        ClassHit(
+                            className = result.descriptor,
+                            sourcePath = relativeApkPath,
+                            sourceEntry = entryName,
+                        )
+                    }
+                    .distinct()
+                    .toList()
             }
+            hits += entryHits
         }
         return hits
     }
@@ -426,38 +396,29 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
     }
 
     private fun findMethodsUsingStringsInApk(
+        workspace: WorkspaceContext,
         workdirPath: Path,
         relativeApkPath: String,
         query: BatchFindMethodUsingStrings,
     ): List<MethodHit> {
-        val apkPath = workdirPath.resolve(relativeApkPath).normalize()
         val hits = mutableListOf<MethodHit>()
-        ZipFile(apkPath.toFile()).use { zip ->
-            val dexEntries = zip.entries().asSequence()
-                .filterNot { it.isDirectory }
-                .filter { it.name.endsWith(".dex", ignoreCase = true) }
-                .sortedWith(compareBy({ dexEntrySortKey(it.name).first }, { dexEntrySortKey(it.name).second }, { it.name }))
-                .toList()
-            check(dexEntries.isNotEmpty()) { "APK does not contain any dex entries: $apkPath" }
-            for (entry in dexEntries) {
-                val dexBytes = zip.getInputStream(entry).use { it.readBytes() }
-                val entryHits = DexKitBridge(arrayOf(dexBytes)).useBatchFindMethodUsingStrings(query) { results ->
-                    results.values.asSequence()
-                        .flatten()
-                        .map { result ->
-                            MethodHit(
-                                className = result.className,
-                                methodName = result.name,
-                                descriptor = result.descriptor,
-                                sourcePath = relativeApkPath,
-                                sourceEntry = entry.name,
-                            )
-                        }
-                        .distinct()
-                        .toList()
-                }
-                hits += entryHits
+        for ((entryName, dexPath) in prepareApkDexFiles(workspace, workdirPath, relativeApkPath)) {
+            val entryHits = DexKitBridge(listOf(dexPath.toString())).useBatchFindMethodUsingStrings(query) { results ->
+                results.values.asSequence()
+                    .flatten()
+                    .map { result ->
+                        MethodHit(
+                            className = result.className,
+                            methodName = result.name,
+                            descriptor = result.descriptor,
+                            sourcePath = relativeApkPath,
+                            sourceEntry = entryName,
+                        )
+                    }
+                    .distinct()
+                    .toList()
             }
+            hits += entryHits
         }
         return hits
     }
@@ -486,28 +447,19 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
     }
 
     private fun locateMethodInApk(
+        workspace: WorkspaceContext,
         workdirPath: Path,
         relativeApkPath: String,
         descriptor: String,
     ): List<LocatedMethod> {
-        val apkPath = workdirPath.resolve(relativeApkPath).normalize()
         val matches = mutableListOf<LocatedMethod>()
-        ZipFile(apkPath.toFile()).use { zip ->
-            val dexEntries = zip.entries().asSequence()
-                .filterNot { it.isDirectory }
-                .filter { it.name.endsWith(".dex", ignoreCase = true) }
-                .sortedWith(compareBy({ dexEntrySortKey(it.name).first }, { dexEntrySortKey(it.name).second }, { it.name }))
-                .toList()
-            check(dexEntries.isNotEmpty()) { "APK does not contain any dex entries: $apkPath" }
-            for (entry in dexEntries) {
-                val dexBytes = zip.getInputStream(entry).use { it.readBytes() }
-                locateMethodInBridge(
-                    bridge = DexKitBridge(arrayOf(dexBytes)),
-                    descriptor = descriptor,
-                    sourcePath = relativeApkPath,
-                    sourceEntry = entry.name,
-                )?.let(matches::add)
-            }
+        for ((entryName, dexPath) in prepareApkDexFiles(workspace, workdirPath, relativeApkPath)) {
+            locateMethodInBridge(
+                bridge = DexKitBridge(listOf(dexPath.toString())),
+                descriptor = descriptor,
+                sourcePath = relativeApkPath,
+                sourceEntry = entryName,
+            )?.let(matches::add)
         }
         return matches
     }
@@ -544,6 +496,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
         }
 
     private fun loadMethodDetail(
+        workspace: WorkspaceContext,
         workdirPath: Path,
         inventory: MaterialInventory,
         locatedMethod: LocatedMethod,
@@ -553,6 +506,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
     ): MethodDetail {
         val sourceMethodDetail = if (locatedMethod.sourceEntry != null) {
             loadMethodDetailInApk(
+                workspace = workspace,
                 workdirPath = workdirPath,
                 relativeApkPath = locatedMethod.sourcePath,
                 sourceEntry = locatedMethod.sourceEntry,
@@ -563,6 +517,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
             )
         } else {
             loadMethodDetailInDexFile(
+                workspace = workspace,
                 workdirPath = workdirPath,
                 relativeDexPath = locatedMethod.sourcePath,
                 descriptor = locatedMethod.method.descriptor,
@@ -581,6 +536,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
     }
 
     private fun loadMethodDetailInApk(
+        workspace: WorkspaceContext,
         workdirPath: Path,
         relativeApkPath: String,
         sourceEntry: String,
@@ -589,25 +545,25 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
         inventory: MaterialInventory,
         classSourceCache: MutableMap<String, MemberSource?>,
     ): MethodDetail {
-        val apkPath = workdirPath.resolve(relativeApkPath).normalize()
-        ZipFile(apkPath.toFile()).use { zip ->
-            val entry = zip.getEntry(sourceEntry)
-                ?: error("APK entry not found for inspected method: $relativeApkPath!$sourceEntry")
-            val dexBytes = zip.getInputStream(entry).use { it.readBytes() }
-            return loadMethodDetailInBridge(
-                bridge = DexKitBridge(arrayOf(dexBytes)),
-                descriptor = descriptor,
-                sourcePath = relativeApkPath,
-                sourceEntry = sourceEntry,
-                includes = includes,
-                workdirPath = workdirPath,
-                inventory = inventory,
-                classSourceCache = classSourceCache,
-            )
-        }
+        val dexPath = prepareApkDexFiles(workspace, workdirPath, relativeApkPath)
+            .firstOrNull { it.first == sourceEntry }
+            ?.second
+            ?: error("APK entry not found for inspected method: $relativeApkPath!$sourceEntry")
+        return loadMethodDetailInBridge(
+            workspace = workspace,
+            bridge = DexKitBridge(listOf(dexPath.toString())),
+            descriptor = descriptor,
+            sourcePath = relativeApkPath,
+            sourceEntry = sourceEntry,
+            includes = includes,
+            workdirPath = workdirPath,
+            inventory = inventory,
+            classSourceCache = classSourceCache,
+        )
     }
 
     private fun loadMethodDetailInDexFile(
+        workspace: WorkspaceContext,
         workdirPath: Path,
         relativeDexPath: String,
         descriptor: String,
@@ -617,6 +573,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
     ): MethodDetail {
         val dexPath = workdirPath.resolve(relativeDexPath).normalize().toString()
         return loadMethodDetailInBridge(
+            workspace = workspace,
             bridge = DexKitBridge(listOf(dexPath)),
             descriptor = descriptor,
             sourcePath = relativeDexPath,
@@ -629,6 +586,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
     }
 
     private fun loadMethodDetailInBridge(
+        workspace: WorkspaceContext,
         bridge: DexKitBridge,
         descriptor: String,
         sourcePath: String,
@@ -647,6 +605,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
                         MethodFieldUsage(
                             usingType = usage.usingType.toFieldUsageType(),
                             field = usage.field.toResolvedFieldHit(
+                                workspace = workspace,
                                 workdirPath = workdirPath,
                                 inventory = inventory,
                                 classSourceCache = classSourceCache,
@@ -658,6 +617,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
                 invokes = includes.takeIf { MethodDetailSection.Invokes in it }?.let {
                     bridge.getMethodInvokes(descriptor).map { invoked ->
                         invoked.toResolvedMethodHit(
+                            workspace = workspace,
                             workdirPath = workdirPath,
                             inventory = inventory,
                             classSourceCache = classSourceCache,
@@ -713,6 +673,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
         )
 
     private fun resolveClassSource(
+        workspace: WorkspaceContext,
         workdirPath: Path,
         inventory: MaterialInventory,
         className: String,
@@ -722,7 +683,7 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
             val descriptor = toTypeSignature(className)
             val matches = mutableListOf<MemberSource>()
             inventory.apkFiles.forEach { apkPath ->
-                matches += resolveClassSourceInApk(workdirPath, apkPath, descriptor)
+                matches += resolveClassSourceInApk(workspace, workdirPath, apkPath, descriptor)
             }
             inventory.dexFiles.forEach { dexPath ->
                 resolveClassSourceInDexFile(workdirPath, dexPath, descriptor)?.let(matches::add)
@@ -731,24 +692,16 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
         }
 
     private fun resolveClassSourceInApk(
+        workspace: WorkspaceContext,
         workdirPath: Path,
         relativeApkPath: String,
         descriptor: String,
     ): List<MemberSource> {
-        val apkPath = workdirPath.resolve(relativeApkPath).normalize()
         val matches = mutableListOf<MemberSource>()
-        ZipFile(apkPath.toFile()).use { zip ->
-            val dexEntries = zip.entries().asSequence()
-                .filterNot { it.isDirectory }
-                .filter { it.name.endsWith(".dex", ignoreCase = true) }
-                .sortedWith(compareBy({ dexEntrySortKey(it.name).first }, { dexEntrySortKey(it.name).second }, { it.name }))
-                .toList()
-            for (entry in dexEntries) {
-                val dexBytes = zip.getInputStream(entry).use { it.readBytes() }
-                val present = DexKitBridge(arrayOf(dexBytes)).useGetClassData(descriptor) { it != null }
-                if (present) {
-                    matches += MemberSource(sourcePath = relativeApkPath, sourceEntry = entry.name)
-                }
+        for ((entryName, dexPath) in prepareApkDexFiles(workspace, workdirPath, relativeApkPath)) {
+            val present = DexKitBridge(listOf(dexPath.toString())).useGetClassData(descriptor) { it != null }
+            if (present) {
+                matches += MemberSource(sourcePath = relativeApkPath, sourceEntry = entryName)
             }
         }
         return matches
@@ -762,6 +715,68 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
         val dexPath = workdirPath.resolve(relativeDexPath).normalize().toString()
         val present = DexKitBridge(listOf(dexPath)).useGetClassData(descriptor) { it != null }
         return if (present) MemberSource(sourcePath = relativeDexPath, sourceEntry = null) else null
+    }
+
+    private fun prepareApkDexFiles(
+        workspace: WorkspaceContext,
+        workdirPath: Path,
+        relativeApkPath: String,
+    ): List<Pair<String, Path>> {
+        val apkPath = workdirPath.resolve(relativeApkPath).normalize()
+        val cacheDir = Paths.get(store.apkDexDir(workspace.workdir, workspace.activeTargetId))
+        val fingerprintFile = cacheDir.resolve(".content-fingerprint")
+        Files.createDirectories(cacheDir)
+
+        val cachedFingerprint = if (Files.isRegularFile(fingerprintFile)) {
+            Files.readString(fingerprintFile)
+        } else {
+            null
+        }
+
+        if (cachedFingerprint != workspace.snapshot.contentFingerprint) {
+            clearDirectory(cacheDir)
+            extractApkDexEntries(apkPath, cacheDir)
+            Files.writeString(fingerprintFile, workspace.snapshot.contentFingerprint)
+        }
+
+        val dexFiles = Files.list(cacheDir).use { paths ->
+            paths.filter { Files.isRegularFile(it) }
+                .filter { it.fileName.toString().endsWith(".dex", ignoreCase = true) }
+                .sorted(compareBy({ dexEntrySortKey(it.fileName.toString()).first }, { dexEntrySortKey(it.fileName.toString()).second }, { it.fileName.toString() }))
+                .toList()
+        }
+
+        check(dexFiles.isNotEmpty()) { "APK does not contain any dex entries: $apkPath" }
+        return dexFiles.map { it.fileName.toString() to it }
+    }
+
+    private fun extractApkDexEntries(apkPath: Path, cacheDir: Path) {
+        ZipFile(apkPath.toFile()).use { zip ->
+            val dexEntries = zip.entries().asSequence()
+                .filterNot { it.isDirectory }
+                .filter { it.name.endsWith(".dex", ignoreCase = true) }
+                .sortedWith(compareBy({ dexEntrySortKey(it.name).first }, { dexEntrySortKey(it.name).second }, { it.name }))
+                .toList()
+            check(dexEntries.isNotEmpty()) { "APK does not contain any dex entries: $apkPath" }
+            for (entry in dexEntries) {
+                val output = cacheDir.resolve(entry.name)
+                zip.getInputStream(entry).use { input ->
+                    Files.copy(input, output)
+                }
+            }
+        }
+    }
+
+    private fun clearDirectory(path: Path) {
+        if (!Files.isDirectory(path)) return
+        Files.list(path).use { paths ->
+            paths.forEach { child ->
+                if (Files.isDirectory(child)) {
+                    clearDirectory(child)
+                }
+                Files.deleteIfExists(child)
+            }
+        }
     }
 
     private fun dexEntrySortKey(name: String): Pair<Int, String> {
@@ -865,20 +880,22 @@ internal class DefaultDexSearchExecutor : DexSearchExecutor {
         )
 
     private fun MethodData.toResolvedMethodHit(
+        workspace: WorkspaceContext,
         workdirPath: Path,
         inventory: MaterialInventory,
         classSourceCache: MutableMap<String, MemberSource?>,
     ): MethodHit {
-        val source = resolveClassSource(workdirPath, inventory, className, classSourceCache)
+        val source = resolveClassSource(workspace, workdirPath, inventory, className, classSourceCache)
         return toMethodHit(source?.sourcePath, source?.sourceEntry)
     }
 
     private fun FieldData.toResolvedFieldHit(
+        workspace: WorkspaceContext,
         workdirPath: Path,
         inventory: MaterialInventory,
         classSourceCache: MutableMap<String, MemberSource?>,
     ): FieldHit {
-        val source = resolveClassSource(workdirPath, inventory, className, classSourceCache)
+        val source = resolveClassSource(workspace, workdirPath, inventory, className, classSourceCache)
         return toFieldHit(source?.sourcePath, source?.sourceEntry)
     }
 
