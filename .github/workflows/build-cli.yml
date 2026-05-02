@@ -24,7 +24,7 @@ on:
           - macos-arm64
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: build-cli-${{ github.ref }}
@@ -534,3 +534,44 @@ jobs:
           name: dexclub-cli-${{ matrix.os_name }}-${{ matrix.arch }}
           path: artifacts/
           if-no-files-found: error
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build-cli-package
+    name: release
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dexclub-cli-*
+          path: release-artifacts
+
+      - name: Publish release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $isPrerelease = $tag -match '(preview|beta|rc)'
+          $assets = Get-ChildItem -Path release-artifacts -Recurse -File |
+            Where-Object { $_.Extension -in @('.zip', '.sha256') } |
+            Sort-Object FullName
+
+          if ($assets.Count -eq 0) {
+            throw "No release assets were collected."
+          }
+
+          if (gh release view $tag *> $null) {
+            $assetPaths = $assets | ForEach-Object { $_.FullName }
+            gh release upload $tag @assetPaths --clobber
+          } else {
+            $assetPaths = $assets | ForEach-Object { $_.FullName }
+            if ($isPrerelease) {
+              gh release create $tag @assetPaths --verify-tag --generate-notes --prerelease
+            } else {
+              gh release create $tag @assetPaths --verify-tag --generate-notes
+            }
+          }
