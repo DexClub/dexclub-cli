@@ -1,6 +1,5 @@
 package io.github.dexclub.mcp
 
-import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -8,25 +7,25 @@ import kotlin.test.assertNull
 
 class McpMainTest {
     @Test
-    fun resolveRuntimeFilesDirUsesAppHomeBinWhenPresent() {
-        val appHome = mcpAppTestDir("dexclub-mcp")
+    fun resolveRuntimeFilesDirUsesConfiguredDirectoryWhenPresent() {
+        val configuredDir = mcpAppTestDir("dexclub-mcp").resolve("bin")
         val callerDir = mcpAppTestDir("caller")
         val runtimeFilesDir = resolveRuntimeFilesDir(
-            appHomeRaw = appHome.toString(),
+            configuredDirRaw = configuredDir.toString(),
             fallbackWorkingDir = callerDir,
         )
 
         assertEquals(
-            appHome.resolve("bin").toAbsolutePath().normalize(),
+            configuredDir.toAbsolutePath().normalize(),
             runtimeFilesDir,
         )
     }
 
     @Test
-    fun resolveRuntimeFilesDirFallsBackToCallerWorkingDirWithoutAppHome() {
+    fun resolveRuntimeFilesDirFallsBackToCallerWorkingDirWithoutConfiguredDirectory() {
         val callerDir = mcpAppTestDir("caller")
         val runtimeFilesDir = resolveRuntimeFilesDir(
-            appHomeRaw = null,
+            configuredDirRaw = null,
             fallbackWorkingDir = callerDir.toAbsolutePath().normalize(),
         )
 
