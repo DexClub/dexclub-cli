@@ -93,7 +93,7 @@ Dex 查询支持 `offset`、`limit`、`brief` 和 `fields` 控制分页与投影
 
 也可以使用 JVM property `dexclub.dexkit.native.library.dir` 指定 native 目录。
 
-通过 `installDist` 脚本启动时，启动器使用 JVM property `dexclub.mcp.runtime.files.dir` 将运行文件目录设为分发包的 `bin`，trace 默认写入 `mcp-app/build/install/mcp/bin/logs/mcp.log`。直接启动主类且未设置该 property 时，运行文件目录退回进程当前工作目录。启动提示和监听地址始终输出；详细运行期控制台日志由 `DEXCLUB_MCP_STDERR` 控制。
+通过 `installDist` 脚本启动时，运行目录以分发包的 `bin` 为基准，trace 默认写入 `mcp-app/build/install/mcp/bin/logs/mcp.log`。启动提示和监听地址始终输出；详细运行期控制台日志由 `DEXCLUB_MCP_STDERR` 控制。
 
 ## 测试
 
