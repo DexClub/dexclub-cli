@@ -10,6 +10,7 @@ plugins {
 }
 
 val dexkitNativeLibraryDirProperty = "dexclub.dexkit.native.library.dir"
+val mcpRuntimeFilesDirProperty = "dexclub.mcp.runtime.files.dir"
 val externalDexKitNativeDir = providers.gradleProperty("dexkit.native.dir")
 
 kotlin {
@@ -41,13 +42,14 @@ tasks.named<CreateStartScripts>("startScripts") {
         patchGeneratedScript(
             file = windowsScript,
             expected = """set DEFAULT_JVM_OPTS="-XX:ErrorFile=hs_err_pid%%p.log" "-XX:+HeapDumpOnOutOfMemoryError" "-XX:HeapDumpPath=."""",
-            replacement = """set DEFAULT_JVM_OPTS="-XX:ErrorFile=%APP_HOME%\bin\hs_err_pid%%p.log" "-XX:+HeapDumpOnOutOfMemoryError" "-XX:HeapDumpPath=%APP_HOME%\bin"""",
+            replacement =
+                """set DEFAULT_JVM_OPTS="-D$mcpRuntimeFilesDirProperty=%APP_HOME%\bin" "-XX:ErrorFile=%APP_HOME%\bin\hs_err_pid%%p.log" "-XX:+HeapDumpOnOutOfMemoryError" "-XX:HeapDumpPath=%APP_HOME%\bin"""",
         )
         patchGeneratedScript(
             file = unixScript,
             expected = """DEFAULT_JVM_OPTS='"-XX:ErrorFile=hs_err_pid%p.log" "-XX:+HeapDumpOnOutOfMemoryError" "-XX:HeapDumpPath=."'""",
             replacement =
-                """DEFAULT_JVM_OPTS="\"-XX:ErrorFile=${'$'}APP_HOME/bin/hs_err_pid%p.log\" \"-XX:+HeapDumpOnOutOfMemoryError\" \"-XX:HeapDumpPath=${'$'}APP_HOME/bin\""""",
+                $$"""DEFAULT_JVM_OPTS="\"-D$$mcpRuntimeFilesDirProperty=$APP_HOME/bin\" \"-XX:ErrorFile=$APP_HOME/bin/hs_err_pid%p.log\" \"-XX:+HeapDumpOnOutOfMemoryError\" \"-XX:HeapDumpPath=$APP_HOME/bin\""""",
         )
     }
 }

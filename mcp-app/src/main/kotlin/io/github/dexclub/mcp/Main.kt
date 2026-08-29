@@ -27,7 +27,7 @@ fun main() {
 
     McpRuntimeDiagnostics.startupConsole(
         "DexClub MCP listening on http://${config.host}:${config.port}${config.path} " +
-            "(stateless streamable HTTP, trace=${config.traceEnabled})",
+                "(stateless streamable HTTP, trace=${config.traceEnabled})",
     )
 
     try {
@@ -151,21 +151,22 @@ internal fun isLoopbackHost(host: String): Boolean {
     }
     val ipv4Parts = normalized.split('.')
     return ipv4Parts.size == 4 &&
-        ipv4Parts.all { part -> part.toIntOrNull()?.let { it in 0..255 } == true } &&
-        ipv4Parts.first() == "127"
+            ipv4Parts.all { part -> part.toIntOrNull()?.let { it in 0..255 } == true } &&
+            ipv4Parts.first() == "127"
 }
 
+private const val MCP_RUNTIME_FILES_DIR_PROPERTY = "dexclub.mcp.runtime.files.dir"
+
 internal fun resolveRuntimeFilesDir(
-    appHomeRaw: String? = System.getenv("APP_HOME"),
+    configuredDirRaw: String? = System.getProperty(MCP_RUNTIME_FILES_DIR_PROPERTY),
     fallbackWorkingDir: Path = Paths.get("").toAbsolutePath().normalize(),
 ): Path =
-    appHomeRaw
+    configuredDirRaw
         ?.trim()
         ?.ifEmpty { null }
         ?.let { raw ->
             runCatching {
                 Paths.get(raw)
-                    .resolve("bin")
                     .toAbsolutePath()
                     .normalize()
             }.getOrNull()
