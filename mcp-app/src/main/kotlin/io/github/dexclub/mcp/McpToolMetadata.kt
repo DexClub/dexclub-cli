@@ -20,17 +20,43 @@ internal data class McpToolMetadata(
     val inputProperties: List<McpToolInputProperty> = emptyList(),
     val required: Set<String> = emptySet(),
     val defs: JsonObject? = null,
+    val requiresVersion: Boolean = true,
+    val acquiresContextLease: Boolean = true,
 ) {
+    init {
+        require(inputProperties.none { it.name == VERSION_ARGUMENT }) {
+            "$VERSION_ARGUMENT is reserved for the DexClub MCP version gate: $name"
+        }
+    }
+
+    val effectiveInputProperties: List<McpToolInputProperty>
+        get() = if (requiresVersion) listOf(VERSION_INPUT_PROPERTY) + inputProperties else inputProperties
+
+    val effectiveRequired: Set<String>
+        get() = if (requiresVersion) required + VERSION_ARGUMENT else required
+
     fun toToolSchema(): ToolSchema =
         ToolSchema(
             properties = buildJsonObject {
-                inputProperties.forEach { property ->
+                effectiveInputProperties.forEach { property ->
                     put(property.name, property.schema)
                 }
             },
-            required = required.toList(),
+            required = effectiveRequired.toList(),
             defs = defs,
         )
+
+    private companion object {
+        const val VERSION_ARGUMENT = "version"
+        val VERSION_INPUT_PROPERTY = McpToolInputProperty(
+            name = VERSION_ARGUMENT,
+            schema = buildJsonObject {
+                put("type", "string")
+                put("description", "DexClub MCP version embedded in the calling skill.")
+            },
+            signature = "string",
+        )
+    }
 }
 
 internal object McpToolInputProperties {
@@ -100,7 +126,8 @@ internal fun contextualInputProperties(vararg properties: McpToolInputProperty):
 
 internal object McpToolCatalogs {
     val tools: List<McpToolMetadata> =
-        McpSessionToolCatalog.tools +
+        McpSystemToolCatalog.tools +
+            McpSessionToolCatalog.tools +
             McpDexToolCatalog.tools +
             McpResourceToolCatalog.tools
 }
@@ -114,6 +141,8 @@ internal fun McpApp.registerCatalogTool(
         name = metadata.name,
         description = metadata.description,
         inputSchema = metadata.toToolSchema(),
+        requiresVersion = metadata.requiresVersion,
+        acquiresContextLease = metadata.acquiresContextLease,
         handler = handler,
     )
 }

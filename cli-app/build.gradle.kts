@@ -5,7 +5,6 @@ import org.gradle.api.tasks.bundling.Zip
 import org.gradle.api.tasks.testing.Test
 import org.gradle.jvm.tasks.Jar
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 plugins {
     alias(libs.plugins.kotlin.jvm)
@@ -26,25 +25,21 @@ application {
 
 val vendoredDexKitDir = rootProject.layout.projectDirectory.dir("dexkit-binding/vendor/DexKit")
 val externalDexKitNativeDir = providers.gradleProperty("dexkit.native.dir")
+val dexClubBuildMetadata = dexClubBuildMetadata()
 
-fun resolveCliVersion(): String {
-    val configured = project.version.toString()
-    if (configured.isNotBlank() && configured != "unspecified") {
-        return configured
-    }
+val generateCliBuildInfo = tasks.register<GenerateDexClubBuildInfo>("generateCliBuildInfo") {
+    packageName.set("io.github.dexclub.cli")
+    objectName.set("CliBuildInfo")
+    visibility.set("internal")
+    version.set(dexClubBuildMetadata.version)
+    mcpContractVersion.set(dexClubBuildMetadata.mcpContractVersion)
+    commit.set(dexClubBuildMetadata.commit)
+    dirty.set(dexClubBuildMetadata.dirty)
+    outputDirectory.set(layout.buildDirectory.dir("generated/sources/buildInfo/kotlin"))
+}
 
-    return try {
-        val process = ProcessBuilder("git", "describe", "--tags", "--always", "--dirty")
-            .directory(rootDir)
-            .redirectErrorStream(true)
-            .start()
-        process.waitFor(10, TimeUnit.SECONDS)
-        process.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-            .trim()
-            .ifBlank { "dev" }
-    } catch (_: Exception) {
-        "dev"
-    }
+kotlin.sourceSets.named("main") {
+    kotlin.srcDir(generateCliBuildInfo)
 }
 
 dependencies {
@@ -148,25 +143,10 @@ tasks.register("testStructured") {
     )
 }
 
-val generateCliVersionResource = tasks.register("generateCliVersionResource") {
-    val outputDir = layout.buildDirectory.dir("generated/resources/cliBuildInfo")
-    outputs.dir(outputDir)
-    doLast {
-        val outputFile = outputDir.get().file("dexclub-version.txt").asFile
-        outputFile.parentFile.mkdirs()
-        outputFile.writeText(resolveCliVersion(), Charsets.UTF_8)
-    }
-}
-
-tasks.processResources {
-    dependsOn(generateCliVersionResource)
-    from(generateCliVersionResource)
-}
-
 tasks.named<Jar>("jar") {
     manifest {
         attributes["Main-Class"] = application.mainClass.get()
-        attributes["Implementation-Version"] = resolveCliVersion()
+        attributes["Implementation-Version"] = dexClubBuildMetadata.version
     }
 }
 
@@ -177,7 +157,7 @@ tasks.named<ShadowJar>("shadowJar") {
     archiveClassifier.set("all")
     manifest {
         attributes["Main-Class"] = application.mainClass.get()
-        attributes["Implementation-Version"] = resolveCliVersion()
+        attributes["Implementation-Version"] = dexClubBuildMetadata.version
     }
     mergeServiceFiles()
 }
@@ -246,6 +226,7 @@ val prepareDexKitNativeLibraries = tasks.register<Sync>("prepareDexKitNativeLibr
 distributions {
     named("shadow") {
         contents {
+            from(rootProject.tasks.named<GenerateDexClubVersionFile>("generateDexClubVersionFile"))
             from(generateWindowsPowerShellLauncher) {
                 into("bin")
             }

@@ -8,6 +8,20 @@ on:
         required: false
         type: string
         default: all
+      release_version:
+        description: "正式发行版本；非 tag 构建留空"
+        required: false
+        type: string
+        default: ""
+      release_commit:
+        description: "构建对应的完整 Git commit SHA"
+        required: true
+        type: string
+      release_dirty:
+        description: "构建输入是否包含未提交修改"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build-mcp-package:
@@ -99,6 +113,20 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Verify build metadata inputs
+        if: steps.filter.outputs.enabled == 'true'
+        shell: pwsh
+        env:
+          DEXCLUB_RELEASE_COMMIT: ${{ inputs.release_commit }}
+        run: |
+          $actualCommit = (git rev-parse HEAD).Trim()
+          if ($actualCommit -ne $env:DEXCLUB_RELEASE_COMMIT) {
+            throw "Checked out commit $actualCommit does not match release_commit."
+          }
+          if (git status --porcelain) {
+            throw "Checkout must be clean before build metadata is resolved."
+          }
+
       - name: Setup Java
         if: steps.filter.outputs.enabled == 'true'
         uses: actions/setup-java@v4
@@ -155,7 +183,21 @@ jobs:
       - name: Build MCP distribution
         if: steps.filter.outputs.enabled == 'true'
         shell: pwsh
+        env:
+          DEXCLUB_RELEASE_VERSION: ${{ inputs.release_version }}
+          DEXCLUB_RELEASE_COMMIT: ${{ inputs.release_commit }}
+          DEXCLUB_RELEASE_DIRTY: ${{ inputs.release_dirty }}
         run: |
+          $gradleArgs = @(
+            "--no-daemon"
+            "-PreleaseCommit=$env:DEXCLUB_RELEASE_COMMIT"
+            "-PreleaseDirty=$env:DEXCLUB_RELEASE_DIRTY"
+          )
+          if (![string]::IsNullOrWhiteSpace($env:DEXCLUB_RELEASE_VERSION)) {
+            $gradleArgs += "-PreleaseVersion=$env:DEXCLUB_RELEASE_VERSION"
+          }
+          $gradleArgs += ":mcp-app:installDist"
+
           if ($env:RUNNER_OS -eq 'Windows') {
             $msys2Location = "${{ steps.msys2.outputs.msys2-location }}"
             if ([string]::IsNullOrWhiteSpace($msys2Location)) {
@@ -168,9 +210,9 @@ jobs:
             }
 
             $env:PATH = "$toolchainBin;$env:PATH"
-            & ".\\gradlew.bat" --no-daemon :mcp-app:installDist
+            & ".\\gradlew.bat" @gradleArgs
           } else {
-            & "${{ matrix.gradle_command }}" --no-daemon :mcp-app:installDist
+            & "${{ matrix.gradle_command }}" @gradleArgs
           }
 
       - name: Package artifact
@@ -188,32 +230,9 @@ jobs:
             throw "Missing MCP install directory: $installDir"
           }
 
-          $skillsDir = Join-Path $PWD "skills"
-          if (!(Test-Path $skillsDir)) {
-            throw "Missing skills directory: $skillsDir"
-          }
-
           $licensePath = Join-Path $PWD "LICENSE"
           if (!(Test-Path $licensePath)) {
             throw "Missing LICENSE file: $licensePath"
-          }
-
-          $commit = "${{ github.sha }}".Trim()
-          if ([string]::IsNullOrWhiteSpace($commit)) {
-            $commit = (git rev-parse HEAD).Trim()
-          }
-          $shortCommit = if ($commit.Length -ge 7) { $commit.Substring(0, 7) } else { $commit }
-
-          $refType = "${{ github.ref_type }}"
-          $refName = "${{ github.ref_name }}"
-          if ($refType -eq "tag") {
-            if ($refName.StartsWith("v")) {
-              $version = $refName.Substring(1)
-            } else {
-              $version = $refName
-            }
-          } else {
-            $version = "dev-$shortCommit"
           }
 
           $artifactDir = Join-Path $PWD "artifacts"
@@ -229,11 +248,16 @@ jobs:
 
           $targetLibDir = Join-Path $packageDir "lib"
           Copy-Item $nativePath (Join-Path $targetLibDir "${{ matrix.native_file_name }}")
-          Copy-Item -Path $skillsDir -Destination (Join-Path $packageDir "skills") -Recurse -Force
-          Set-Content -Path (Join-Path $packageDir "VERSION") -Value @(
-            "commit: $commit"
-            "version: $version"
-          ) -Encoding ascii
+          if (!(Test-Path (Join-Path $packageDir "VERSION"))) {
+            throw "MCP distribution does not contain generated VERSION metadata."
+          }
+          $skillPath = Join-Path $packageDir "skills/dexclub-analysis/SKILL.md"
+          if (!(Test-Path $skillPath)) {
+            throw "MCP distribution does not contain the generated dexclub-analysis skill."
+          }
+          if (Select-String -Path $skillPath -Pattern '__DEXCLUB_(VERSION|MCP_CONTRACT_VERSION)__' -Quiet) {
+            throw "MCP distribution contains unresolved skill version placeholders."
+          }
           Copy-Item -Path $licensePath -Destination (Join-Path $packageDir "LICENSE") -Force
 
           $targetZip = Join-Path $artifactDir "$targetBaseName.zip"

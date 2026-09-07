@@ -40,6 +40,9 @@ jobs:
     uses: ./.github/workflows/build-cli.yml
     with:
       native_target: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.native_target || 'all' }}
+      release_version: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+      release_commit: ${{ github.sha }}
+      release_dirty: false
 
   build-mcp:
     needs: build-native
@@ -47,12 +50,67 @@ jobs:
     uses: ./.github/workflows/build-mcp.yml
     with:
       native_target: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.native_target || 'all' }}
+      release_version: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+      release_commit: ${{ github.sha }}
+      release_dirty: false
+
+  verify-package-metadata:
+    needs:
+      - build-cli
+      - build-mcp
+    name: verify-package-metadata
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dexclub*
+          path: package-artifacts
+
+      - name: Compare generated metadata
+        shell: pwsh
+        run: |
+          $archives = @(Get-ChildItem -Path package-artifacts -Recurse -Filter '*.zip' -File | Sort-Object FullName)
+          if ($archives.Count -eq 0) {
+            throw "No package archives were collected."
+          }
+
+          $metadata = @()
+          for ($index = 0; $index -lt $archives.Count; $index++) {
+            $archive = $archives[$index]
+            $extractDir = Join-Path $PWD ".ci/verify/$index"
+            New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
+            Expand-Archive -Path $archive.FullName -DestinationPath $extractDir -Force
+
+            $versionFile = Get-ChildItem -Path $extractDir -Recurse -Filter VERSION -File
+            if ($versionFile.Count -ne 1) {
+              throw "Expected exactly one VERSION in $($archive.Name), found $($versionFile.Count)."
+            }
+            $metadata += (Get-Content -Raw $versionFile[0].FullName).Trim()
+
+            if ($archive.Name -like 'dexclub-mcp-*') {
+              $skillFile = Get-ChildItem -Path $extractDir -Recurse -Filter SKILL.md -File |
+                Where-Object { $_.FullName -match 'dexclub-analysis' }
+              if ($skillFile.Count -ne 1) {
+                throw "Expected one generated dexclub-analysis skill in $($archive.Name)."
+              }
+              if (Select-String -Path $skillFile[0].FullName -Pattern '__DEXCLUB_(VERSION|MCP_CONTRACT_VERSION)__' -Quiet) {
+                throw "Unresolved skill version placeholder in $($archive.Name)."
+              }
+            }
+          }
+
+          if (@($metadata | Sort-Object -Unique).Count -ne 1) {
+            throw "CLI and MCP package metadata differ."
+          }
 
   release:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs:
       - build-cli
       - build-mcp
+      - verify-package-metadata
     name: release
     runs-on: ubuntu-24.04
 

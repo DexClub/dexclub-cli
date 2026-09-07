@@ -15,7 +15,7 @@ internal class CommandDispatcher(
                 exitCode = 0,
             )
             is CliRequest.Version -> CommandResult(
-                payload = RenderPayload.Version(CliBuildInfo.version),
+                payload = RenderPayload.Version(CliBuildInfo.VERSION),
                 outputFormat = OutputFormat.Text,
                 exitCode = 0,
             )

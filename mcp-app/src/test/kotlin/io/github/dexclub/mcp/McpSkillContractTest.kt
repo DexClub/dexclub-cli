@@ -32,6 +32,12 @@ class McpSkillContractTest {
         assertTrue("references/find-query-fields.md" in skillText)
         assertFalse("find_classes_using_strings" in skillText)
         assertFalse("find_methods_using_strings" in skillText)
+        assertTrue("__DEXCLUB_VERSION__" in skillText)
+        assertTrue("__DEXCLUB_MCP_CONTRACT_VERSION__" in skillText)
+        assertTrue("`get_server_info`" in skillText)
+        assertTrue("before any other DexClub tool" in skillText)
+        assertTrue("`mcp_contract_version`" in skillText)
+        assertTrue("Do not copy the version returned by the server" in skillText)
     }
 
     @Test

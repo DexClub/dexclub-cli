@@ -225,6 +225,32 @@ CLI 和 MCP 的交付路径应优先表达：
 - 打包产物边界清楚
 - 与 native 维护链区分清楚
 
+## 统一构建元数据
+
+当前实现已经将 CLI、MCP 和 `domain-core` 的版本来源收口到根工程解析的统一构建元数据。
+各模块仍使用各自的生成 `BuildInfo` 类，发行目录则携带同一格式的 `VERSION` 文件；这表示
+它们共享同一组构建输入，不要求新增一个运行时公共模块。
+
+构建元数据至少包含：
+
+- `version`
+- `mcpContractVersion`
+- `commit`
+- `dirty`
+
+本地没有显式发行版本时，Gradle 根据当前 Git 状态生成开发版本，例如
+`dev-<shortCommit>` 或 `dev-<shortCommit>-dirty`。因此本地编译、测试和直接启动 MCP 不依赖
+GitHub Actions。正式构建由 CI 显式传入版本、完整 commit 和 clean 状态，并在构建前校验
+checkout 与这些输入一致。
+
+MCP 发行目录中的 skill 不是直接复制仓库模板，而是由同一次构建生成并写入对应版本。业务
+tool 调用要求调用方声明该版本；`get_server_info` 用于启动后的版本诊断和本地联调。若本地
+使用 Agent skill，需要先生成并同步当前构建对应的 skill 副本，否则旧 skill 与当前 MCP
+不匹配时会被拒绝。
+
+本节记录当前已落地的边界和开发入口。更完整的构建元数据设计稿仍属于后续整理材料，不作为
+本轮交付文档或提交内容；后续若继续扩展 GUI、发布协调或兼容策略，再单独更新本节。
+
 ## CI 的位置
 
 CI 应至少承担两类职责：

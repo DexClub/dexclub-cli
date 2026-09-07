@@ -1,15 +1,44 @@
 package io.github.dexclub.mcp
 
-import kotlinx.serialization.json.buildJsonObject
+import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 
 class McpExecutionSupportTest {
+    @Test
+    fun toolVersionValidationAcceptsOnlyTheGeneratedVersion() {
+        val app = createTestApp()
+
+        assertNull(
+            app.validateToolVersion(
+                callToolRequest("find_methods", buildJsonObject { put("version", McpBuildInfo.VERSION) }),
+            ),
+        )
+        assertVersionError(app, buildJsonObject {}, "missing_argument")
+        assertVersionError(app, buildJsonObject { put("version", 1) }, "invalid_argument")
+        assertVersionError(app, buildJsonObject { put("version", " ${McpBuildInfo.VERSION} ") }, "version_mismatch")
+        val mismatch = assertVersionError(
+            app,
+            buildJsonObject { put("version", "different-version") },
+            "version_mismatch",
+        )
+        val details = mismatch.getValue("error").jsonObject.getValue("details").jsonObject
+        assertEquals(McpBuildInfo.VERSION, details.getValue("expected_version").jsonPrimitive.content)
+        assertEquals("different-version", details.getValue("received_version").jsonPrimitive.content)
+        assertEquals(
+            McpBuildInfo.MCP_CONTRACT_VERSION,
+            details.getValue("server_contract_version").jsonPrimitive.content.toInt(),
+        )
+    }
+
     @Test
     fun sessionLeaseStaysOwnedByRuntimeUntilSessionCloses() {
         val workspace = fakeWorkspaceContext()
@@ -137,8 +166,18 @@ class McpExecutionSupportTest {
         )
 
         val failed = assertIs<ExecutionContextResolution.Failed>(result)
-        val payload = Json.parseToJsonElement((failed.result.content.single() as io.modelcontextprotocol.kotlin.sdk.types.TextContent).text.orEmpty()).jsonObject
+        val payload = Json.parseToJsonElement((failed.result.content.single() as TextContent).text.orEmpty()).jsonObject
         assertEquals("internal_error", payload["error"]!!.jsonObject["code"]!!.jsonPrimitive.content)
         assertEquals("boom", payload["error"]!!.jsonObject["message"]!!.jsonPrimitive.content)
+    }
+
+    private fun assertVersionError(app: McpApp, arguments: JsonObject, expectedCode: String): JsonObject {
+        val result = checkNotNull(app.validateToolVersion(callToolRequest("find_methods", arguments)))
+        val payload = Json.parseToJsonElement(
+            (result.content.single() as TextContent).text.orEmpty(),
+        ).jsonObject
+        assertEquals(true, result.isError)
+        assertEquals(expectedCode, payload["error"]!!.jsonObject["code"]!!.jsonPrimitive.content)
+        return payload
     }
 }

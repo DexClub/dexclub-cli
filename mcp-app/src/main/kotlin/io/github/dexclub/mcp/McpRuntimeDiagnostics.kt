@@ -130,6 +130,10 @@ object McpRuntimeDiagnostics {
         val heapDumpDir = config.runtimeFilesDir.toAbsolutePath().normalize()
         val startup = buildString {
             append("DexClub MCP process started")
+            append(" version=${McpBuildInfo.VERSION}")
+            append(" contractVersion=${McpBuildInfo.MCP_CONTRACT_VERSION}")
+            append(" commit=${McpBuildInfo.COMMIT.take(12)}")
+            append(" dirty=${McpBuildInfo.DIRTY}")
             pid?.let { append(" pid=$it") }
             append(" crashFiles=$crashFile")
             append(" heapDumpPath=$heapDumpDir")

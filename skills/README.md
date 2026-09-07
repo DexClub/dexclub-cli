@@ -18,9 +18,14 @@
 
 ## 同步到运行时
 
-仓库中的 `skills/` 是源码目录，不一定会被当前机器上的 Codex 自动发现。
+仓库中的 `skills/` 是带版本占位符的模板源码，不应直接安装。先由 Gradle 生成绑定当前构建
+版本的副本：
 
-如果要在本机实际触发 skill，通常还需要把对应目录同步到：
+```powershell
+.\gradlew.bat :mcp-app:generateVersionedDexClubSkill
+```
+
+如果要在本机实际触发 skill，再把生成目录同步到：
 
 ```text
 $CODEX_HOME/skills/
@@ -35,12 +40,13 @@ C:\Users\<user>\.codex\skills\
 例如：
 
 ```powershell
-Copy-Item -Recurse -Force .\skills\dexclub-analysis C:\Users\<user>\.codex\skills\
+Copy-Item -Recurse -Force .\mcp-app\build\generated\skills\dexclub-analysis C:\Users\<user>\.codex\skills\
 ```
 
 如果运行时副本和仓库内源码不一致，真实行为应以 `$CODEX_HOME/skills` 中的副本为准。
 
-本仓库中的 `skills/` 源码是权威维护来源；但在未同步到 `$CODEX_HOME/skills` 之前，当前机器上的实际运行行为仍以运行时副本为准。
+本仓库中的 `skills/` 模板源码是权威维护来源；发行包和本地运行时必须使用 Gradle 生成的
+版本化副本。在未同步前，当前机器上的实际运行行为仍以 `$CODEX_HOME/skills` 中的副本为准。
 
 ## 最小验证
 
@@ -48,7 +54,8 @@ Copy-Item -Recurse -Force .\skills\dexclub-analysis C:\Users\<user>\.codex\skill
 
 1. `dexclub` MCP 已连接
 2. 当前会话能看到 `mcp__dexclub__`
-3. `dexclub-analysis` 已同步到 `$CODEX_HOME/skills`
+3. `dexclub-analysis` 已从生成目录同步到 `$CODEX_HOME/skills`
+4. `get_server_info` 与 skill metadata 中的版本一致
 
 然后可在一个无上下文新会话里显式要求：
 
@@ -59,6 +66,8 @@ Copy-Item -Recurse -Force .\skills\dexclub-analysis C:\Users\<user>\.codex\skill
 如果 skill 与 MCP 都生效，Codex 应优先：
 
 - 使用 `mcp__dexclub__`
+- 先调用 `get_server_info` 并完成版本预检
+- 每个后续 MCP 调用都传入 skill metadata 中的 `version`
 - 先 `open_target_session`
 - `open_target_session.input` 使用绝对路径，不要传相对路径
 - 首轮优先 `brief=true`，只有确有必要再显式 `fields`

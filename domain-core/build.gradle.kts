@@ -1,6 +1,5 @@
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.testing.Test
-import java.util.concurrent.TimeUnit
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
@@ -10,31 +9,26 @@ plugins {
 val dexkitBindingModule = "io.github.dexclub:dexkit-binding:0.0.0-local"
 val dexkitNativeLibraryDirProperty = "dexclub.dexkit.native.library.dir"
 val externalDexKitNativeDir = providers.gradleProperty("dexkit.native.dir")
+val dexClubBuildMetadata = dexClubBuildMetadata()
 
-fun resolveCoreVersion(): String {
-    val configured = project.version.toString()
-    if (configured.isNotBlank() && configured != "unspecified") {
-        return configured
-    }
-
-    return try {
-        val process = ProcessBuilder("git", "describe", "--tags", "--always", "--dirty")
-            .directory(rootDir)
-            .redirectErrorStream(true)
-            .start()
-        process.waitFor(10, TimeUnit.SECONDS)
-        process.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-            .trim()
-            .ifBlank { "dev" }
-    } catch (_: Exception) {
-        "dev"
-    }
+val generateCoreBuildInfo = tasks.register<GenerateDexClubBuildInfo>("generateCoreBuildInfo") {
+    packageName.set("io.github.dexclub.core.impl.shared")
+    objectName.set("CoreBuildInfo")
+    visibility.set("internal")
+    version.set(dexClubBuildMetadata.version)
+    mcpContractVersion.set(dexClubBuildMetadata.mcpContractVersion)
+    commit.set(dexClubBuildMetadata.commit)
+    dirty.set(dexClubBuildMetadata.dirty)
+    outputDirectory.set(layout.buildDirectory.dir("generated/sources/buildInfo/kotlin"))
 }
 
 kotlin {
     jvm()
 
     sourceSets {
+        jvmMain {
+            kotlin.srcDir(generateCoreBuildInfo)
+        }
         commonMain.dependencies {
             api(dexkitBindingModule)
             implementation(libs.kotlinx.serialization.json)
@@ -93,21 +87,6 @@ fun registerCoreJvmTestTask(
     filter {
         classNames.forEach(::includeTestsMatching)
     }
-}
-
-val generateCoreVersionResource = tasks.register("generateCoreVersionResource") {
-    val outputDir = layout.buildDirectory.dir("generated/resources/coreBuildInfo")
-    outputs.dir(outputDir)
-    doLast {
-        val outputFile = outputDir.get().file("dexclub-core-version.txt").asFile
-        outputFile.parentFile.mkdirs()
-        outputFile.writeText(resolveCoreVersion(), Charsets.UTF_8)
-    }
-}
-
-tasks.named("processJvmMainResources") {
-    dependsOn(generateCoreVersionResource)
-    (this as org.gradle.language.jvm.tasks.ProcessResources).from(generateCoreVersionResource)
 }
 
 tasks.named<Test>("jvmTest") {

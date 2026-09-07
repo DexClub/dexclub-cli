@@ -26,6 +26,7 @@ import kotlin.io.path.writeText
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -76,6 +77,10 @@ class McpHttpSmokeTest {
         assertEquals("previous process log\n", archived.single().readText())
         val currentLog = traceLog.readText()
         assertTrue(currentLog.contains("PROCESS START: DexClub MCP process started"))
+        assertTrue(currentLog.contains("version=${McpBuildInfo.VERSION}"))
+        assertTrue(currentLog.contains("contractVersion=${McpBuildInfo.MCP_CONTRACT_VERSION}"))
+        assertTrue(currentLog.contains("commit=${McpBuildInfo.COMMIT.take(12)}"))
+        assertTrue(currentLog.contains("dirty=${McpBuildInfo.DIRTY}"))
         assertTrue(!currentLog.contains("previous process log"))
     }
 
@@ -106,10 +111,13 @@ class McpHttpSmokeTest {
     }
 
     private suspend fun smoke(traceEnabled: Boolean) {
+        val workspace = fakeWorkspaceContext()
+        val workspaceService = FakeWorkspaceService(workspace)
+        val dexService = FakeDexAnalysisService()
         val app = McpApp(
             services = Services(
-                workspace = FakeWorkspaceService(fakeWorkspaceContext()),
-                dex = FakeDexAnalysisService(),
+                workspace = workspaceService,
+                dex = dexService,
                 resource = FakeResourceService(),
             ),
             sessionStore = TargetSessionService(),
@@ -150,7 +158,7 @@ class McpHttpSmokeTest {
             val initializeBody = json.parseToJsonElement(initializeResponse.bodyAsText()).jsonObject
             assertEquals("2.0", initializeBody["jsonrpc"]!!.jsonPrimitive.content)
             assertEquals("dexclub-mcp", initializeBody["result"]!!.jsonObject["serverInfo"]!!.jsonObject["name"]!!.jsonPrimitive.content)
-            assertEquals(McpBuildInfo.version, initializeBody["result"]!!.jsonObject["serverInfo"]!!.jsonObject["version"]!!.jsonPrimitive.content)
+            assertEquals(McpBuildInfo.VERSION, initializeBody["result"]!!.jsonObject["serverInfo"]!!.jsonObject["version"]!!.jsonPrimitive.content)
 
             val listToolsResponse = it.post(baseUrl) {
                 headers.append(HttpHeaders.ContentType, ContentType.Application.Json.toString())
@@ -171,6 +179,46 @@ class McpHttpSmokeTest {
             assertTrue("find_methods_using_strings" !in toolNames)
             assertMcpToolInputContracts(tools)
 
+            // System metadata must not inspect target-shaped arguments.
+            val serverInfoResponse = it.post(baseUrl) {
+                headers.append(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                accept(ContentType.Application.Json)
+                headers.append("Mcp-Protocol-Version", "2025-11-25")
+                setBody("""{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"get_server_info","arguments":{"session_id":{}}}}""")
+            }
+            assertEquals(HttpStatusCode.OK, serverInfoResponse.status)
+            val serverInfoText = json.parseToJsonElement(serverInfoResponse.bodyAsText()).jsonObject["result"]!!
+                .jsonObject["content"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content
+            val serverInfo = json.parseToJsonElement(serverInfoText).jsonObject
+            assertEquals(McpBuildInfo.VERSION, serverInfo["version"]!!.jsonPrimitive.content)
+            assertEquals(McpBuildInfo.MCP_CONTRACT_VERSION, serverInfo["mcp_contract_version"]!!.jsonPrimitive.content.toInt())
+            assertEquals(McpBuildInfo.COMMIT, serverInfo["commit"]!!.jsonPrimitive.content)
+            assertEquals(McpBuildInfo.DIRTY, serverInfo["dirty"]!!.jsonPrimitive.content.toBooleanStrict())
+
+            val mismatchedResponse = it.post(baseUrl) {
+                headers.append(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                accept(ContentType.Application.Json)
+                headers.append("Mcp-Protocol-Version", "2025-11-25")
+                setBody(
+                    buildJsonObject {
+                        put("jsonrpc", "2.0")
+                        put("id", 8)
+                        put("method", "tools/call")
+                        put("params", buildJsonObject {
+                            put("name", "find_methods")
+                            put("arguments", buildJsonObject {
+                                put("version", "wrong")
+                                put("workdir", workspace.workdir)
+                            })
+                        })
+                    }.toString(),
+                )
+            }
+            assertEquals(HttpStatusCode.OK, mismatchedResponse.status)
+            assertTrue(mismatchedResponse.bodyAsText().contains("version_mismatch"))
+            assertNull(workspaceService.openedRef)
+            assertNull(dexService.lastFindMethodsRequest)
+
             val openSessionResponse = it.post(baseUrl) {
                 headers.append(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                 accept(ContentType.Application.Json)
@@ -187,6 +235,7 @@ class McpHttpSmokeTest {
                                 put(
                                     "arguments",
                                     buildJsonObject {
+                                        put("version", McpBuildInfo.VERSION)
                                         put("input", "sample.apk")
                                     },
                                 )
@@ -221,7 +270,10 @@ class McpHttpSmokeTest {
                             "params",
                             buildJsonObject {
                                 put("name", "get_target_session")
-                                put("arguments", buildJsonObject { put("session_id", sessionId) })
+                                put("arguments", buildJsonObject {
+                                    put("version", McpBuildInfo.VERSION)
+                                    put("session_id", sessionId)
+                                })
                             },
                         )
                     }.toString(),
@@ -243,7 +295,10 @@ class McpHttpSmokeTest {
                             "params",
                             buildJsonObject {
                                 put("name", "close_target_session")
-                                put("arguments", buildJsonObject { put("session_id", sessionId) })
+                                put("arguments", buildJsonObject {
+                                    put("version", McpBuildInfo.VERSION)
+                                    put("session_id", sessionId)
+                                })
                             },
                         )
                     }.toString(),
@@ -272,7 +327,10 @@ class McpHttpSmokeTest {
                             "params",
                             buildJsonObject {
                                 put("name", "get_target_session")
-                                put("arguments", buildJsonObject { put("session_id", sessionId) })
+                                put("arguments", buildJsonObject {
+                                    put("version", McpBuildInfo.VERSION)
+                                    put("session_id", sessionId)
+                                })
                             },
                         )
                     }.toString(),

@@ -47,7 +47,7 @@ class McpApp(
         val server = Server(
             serverInfo = Implementation(
                 name = "dexclub-mcp",
-                version = McpBuildInfo.version,
+                version = McpBuildInfo.VERSION,
             ),
             options = ServerOptions(
                 capabilities = ServerCapabilities(
@@ -55,6 +55,7 @@ class McpApp(
                 ),
             ),
         )
+        registerSystemTools(server)
         registerSessionTools(server)
         registerDexTools(server)
         registerResourceTools(server)
@@ -66,6 +67,8 @@ class McpApp(
         name: String,
         description: String,
         inputSchema: io.modelcontextprotocol.kotlin.sdk.types.ToolSchema,
+        requiresVersion: Boolean,
+        acquiresContextLease: Boolean,
         handler: suspend (CallToolRequest) -> CallToolResult,
     ) {
         addTool(
@@ -73,9 +76,18 @@ class McpApp(
             description = description,
             inputSchema = inputSchema,
         ) { request ->
-            val summary = summarizeToolArguments(request.arguments)
+            val versionFailure = if (requiresVersion) validateToolVersion(request) else null
+            val summary = if (versionFailure == null && acquiresContextLease) {
+                summarizeToolArguments(request.arguments)
+            } else {
+                ""
+            }
             McpRuntimeDiagnostics.toolStarted(name, summary)
-            val contextLease = acquireToolContextLease(request)
+            if (versionFailure != null) {
+                McpRuntimeDiagnostics.toolFinished(name, isError = true)
+                return@addTool versionFailure
+            }
+            val contextLease = if (acquiresContextLease) acquireToolContextLease(request) else null
             try {
                 handler(request).also { result ->
                     McpRuntimeDiagnostics.toolFinished(name, result.isError == true)

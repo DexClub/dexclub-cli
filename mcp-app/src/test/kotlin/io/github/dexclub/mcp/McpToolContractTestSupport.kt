@@ -6,6 +6,8 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 private data class ToolInputContract(
     val properties: Map<String, String>,
@@ -28,6 +30,14 @@ fun assertMcpToolInputContracts(tools: JsonArray) {
     }
 
     assertEquals(expectedToolInputContracts, actual)
+
+    val serverInfoContract = actual.getValue("get_server_info")
+    assertFalse("version" in serverInfoContract.properties)
+    assertFalse("version" in serverInfoContract.required)
+    actual.filterKeys { it != "get_server_info" }.forEach { (name, contract) ->
+        assertEquals("string", contract.properties["version"], "$name must expose version as a string")
+        assertTrue("version" in contract.required, "$name must require version")
+    }
 }
 
 private fun JsonObject.signature(): String {
@@ -62,8 +72,8 @@ private fun contract(
 private val expectedToolInputContracts = mapOf(
     *McpToolCatalogs.tools.associate { tool ->
         tool.name to contract(
-            properties = tool.inputProperties.associate { it.name to it.signature },
-            required = tool.required,
+            properties = tool.effectiveInputProperties.associate { it.name to it.signature },
+            required = tool.effectiveRequired,
         )
     }.toList().toTypedArray(),
 )

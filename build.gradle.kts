@@ -6,6 +6,21 @@ plugins {
     alias(libs.plugins.shadow) apply false
 }
 
+val dexClubBuildMetadata = resolveDexClubBuildMetadata(mcpContractVersion = 1)
+extensions.extraProperties[DEXCLUB_BUILD_METADATA_KEY] = dexClubBuildMetadata
+
+allprojects {
+    version = dexClubBuildMetadata.version
+}
+
+tasks.register<GenerateDexClubVersionFile>("generateDexClubVersionFile") {
+    version.set(dexClubBuildMetadata.version)
+    mcpContractVersion.set(dexClubBuildMetadata.mcpContractVersion)
+    commit.set(dexClubBuildMetadata.commit)
+    dirty.set(dexClubBuildMetadata.dirty)
+    outputFile.set(layout.buildDirectory.file("generated/distribution/VERSION"))
+}
+
 val cleanVendoredDexKitAndroidCxxCache = tasks.register<Delete>("cleanVendoredDexKitAndroidCxxCache") {
     group = "build"
     description = "Clear vendored DexKit Android CMake/.cxx caches so clean does not hit stale absolute paths after moving the repo"

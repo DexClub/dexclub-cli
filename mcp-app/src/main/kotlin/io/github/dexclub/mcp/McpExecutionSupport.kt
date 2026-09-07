@@ -8,6 +8,7 @@ import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -18,6 +19,27 @@ internal sealed interface ExecutionContextResolution {
     data class Ready(val context: TargetExecutionContext) : ExecutionContextResolution
 
     data class Failed(val result: CallToolResult) : ExecutionContextResolution
+}
+
+internal fun McpApp.validateToolVersion(request: CallToolRequest): CallToolResult? {
+    val value = request.arguments?.get("version")
+        ?: return errorResult("version is required", code = "missing_argument")
+    val received = (value as? JsonPrimitive)
+        ?.takeIf(JsonPrimitive::isString)
+        ?.content
+        ?.takeIf(String::isNotBlank)
+        ?: return errorResult("version must be a non-empty string", code = "invalid_argument")
+    if (received == McpBuildInfo.VERSION) return null
+
+    return errorResult(
+        message = "DexClub MCP version mismatch. Update the MCP server and dexclub-analysis skill from the same release.",
+        code = "version_mismatch",
+        details = buildJsonObject {
+            put("expected_version", McpBuildInfo.VERSION)
+            put("received_version", received)
+            put("server_contract_version", McpBuildInfo.MCP_CONTRACT_VERSION)
+        },
+    )
 }
 
 internal fun McpApp.acquireToolContextLease(request: CallToolRequest): DexContextLease? {

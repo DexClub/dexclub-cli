@@ -1,6 +1,9 @@
 ---
 name: dexclub-analysis
 description: Use when Codex needs to analyze APK, Dex, manifest, resources, classes, fields, or methods through dexclub MCP, especially for black-box Android reverse-engineering, feature location, implementation tracing, and competitor analysis. This skill runs only when `mcp__dexclub__` is available at execution time.
+metadata:
+  dexclub_mcp_version: "__DEXCLUB_VERSION__"
+  dexclub_mcp_contract_version: "__DEXCLUB_MCP_CONTRACT_VERSION__"
 ---
 
 # DexClub Analysis
@@ -11,15 +14,20 @@ Drive `mcp__dexclub__` as the primary APK, Dex, manifest, and resource analysis 
 
 ## Hard Gate
 
-Before analysis, confirm that `mcp__dexclub__` is available in the current tool list.
+Before analysis, confirm that `mcp__dexclub__` is available in the current tool list. Then call
+`get_server_info` before any other DexClub tool and compare its `version` and
+`mcp_contract_version` with this skill's `dexclub_mcp_version` and
+`dexclub_mcp_contract_version` metadata.
 
-If it is unavailable:
+If the MCP is unavailable, `get_server_info` is unavailable, or either version differs:
 
 - stop
-- tell the user dexclub MCP is required
-- ask them to configure, start, or reconnect the server
+- tell the user the DexClub MCP and skill must come from the same release
+- ask them to install or reconnect the matching release
 
 Do not fall back to shell reverse engineering, local decompiled output, or dexclub CLI. This skill is MCP-first.
+Do not copy the version returned by the server into later calls to bypass a mismatch. Every DexClub
+business tool call must include `version` set to this skill's `dexclub_mcp_version` metadata value.
 
 ## Default Workflow
 
@@ -313,6 +321,10 @@ End an analysis round with:
 3. remaining uncertainty
 
 ## Useful MCP Surface
+
+Version discovery tool:
+
+- `get_server_info`
 
 Core session tools:
 

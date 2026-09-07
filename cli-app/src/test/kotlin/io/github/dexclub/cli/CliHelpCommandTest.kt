@@ -70,7 +70,7 @@ class CliHelpCommandTest {
 
         val output = runCli(app, listOf("--version"))
         assertEquals(0, output.exitCode)
-        assertEquals(CliBuildInfo.version, output.stdout.trim())
+        assertEquals(CliBuildInfo.VERSION, output.stdout.trim())
     }
 
     @Test

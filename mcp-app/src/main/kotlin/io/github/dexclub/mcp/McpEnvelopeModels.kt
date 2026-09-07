@@ -1,5 +1,6 @@
 package io.github.dexclub.mcp
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 
@@ -13,6 +14,15 @@ internal data class McpErrorDetail(
 @Serializable
 internal data class McpErrorEnvelope(
     val error: McpErrorDetail,
+)
+
+@Serializable
+internal data class ServerInfoResult(
+    val version: String,
+    @SerialName("mcp_contract_version")
+    val mcpContractVersion: Int,
+    val commit: String,
+    val dirty: Boolean,
 )
 
 @Serializable

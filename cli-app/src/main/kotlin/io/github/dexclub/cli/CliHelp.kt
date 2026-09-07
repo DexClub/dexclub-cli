@@ -289,7 +289,7 @@ internal object CliHelp {
     private fun renderGeneralHelp(): String =
         buildString {
             appendLine("DexClub")
-            appendLine("Version: ${CliBuildInfo.version}")
+            appendLine("Version: ${CliBuildInfo.VERSION}")
             appendLine()
             appendLine("Usage:")
             appendLine("  cli <command> [args]")

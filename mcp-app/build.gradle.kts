@@ -1,7 +1,6 @@
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.testing.Test
 import org.gradle.jvm.application.tasks.CreateStartScripts
-import java.util.concurrent.TimeUnit
 
 plugins {
     alias(libs.plugins.kotlin.jvm)
@@ -18,6 +17,40 @@ kotlin {
 }
 
 val dexkitBindingModule = "io.github.dexclub:dexkit-binding:0.0.0-local"
+val dexClubBuildMetadata = dexClubBuildMetadata()
+
+val generateMcpBuildInfo = tasks.register<GenerateDexClubBuildInfo>("generateMcpBuildInfo") {
+    packageName.set("io.github.dexclub.mcp")
+    objectName.set("McpBuildInfo")
+    visibility.set("public")
+    version.set(dexClubBuildMetadata.version)
+    mcpContractVersion.set(dexClubBuildMetadata.mcpContractVersion)
+    commit.set(dexClubBuildMetadata.commit)
+    dirty.set(dexClubBuildMetadata.dirty)
+    outputDirectory.set(layout.buildDirectory.dir("generated/sources/buildInfo/kotlin"))
+}
+
+val generateVersionedDexClubSkill = tasks.register<GenerateDexClubSkill>("generateVersionedDexClubSkill") {
+    sourceDirectory.set(rootProject.layout.projectDirectory.dir("skills/dexclub-analysis"))
+    version.set(dexClubBuildMetadata.version)
+    mcpContractVersion.set(dexClubBuildMetadata.mcpContractVersion)
+    outputDirectory.set(layout.buildDirectory.dir("generated/skills/dexclub-analysis"))
+}
+
+kotlin.sourceSets.named("main") {
+    kotlin.srcDir(generateMcpBuildInfo)
+}
+
+distributions {
+    named("main") {
+        contents {
+            from(rootProject.tasks.named<GenerateDexClubVersionFile>("generateDexClubVersionFile"))
+            from(generateVersionedDexClubSkill) {
+                into("skills/dexclub-analysis")
+            }
+        }
+    }
+}
 
 application {
     applicationName = "mcp"
@@ -51,26 +84,6 @@ tasks.named<CreateStartScripts>("startScripts") {
             replacement =
                 $$"""DEFAULT_JVM_OPTS="\"-D$$mcpRuntimeFilesDirProperty=$APP_HOME/bin\" \"-XX:ErrorFile=$APP_HOME/bin/hs_err_pid%p.log\" \"-XX:+HeapDumpOnOutOfMemoryError\" \"-XX:HeapDumpPath=$APP_HOME/bin\""""",
         )
-    }
-}
-
-fun resolveMcpVersion(): String {
-    val configured = project.version.toString()
-    if (configured.isNotBlank() && configured != "unspecified") {
-        return configured
-    }
-
-    return try {
-        val process = ProcessBuilder("git", "describe", "--tags", "--always", "--dirty")
-            .directory(rootDir)
-            .redirectErrorStream(true)
-            .start()
-        process.waitFor(10, TimeUnit.SECONDS)
-        process.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-            .trim()
-            .ifBlank { "dev" }
-    } catch (_: Exception) {
-        "dev"
     }
 }
 
@@ -182,19 +195,4 @@ tasks.register("testStructured") {
 
 tasks.check {
     dependsOn(testSmoke)
-}
-
-val generateMcpVersionResource = tasks.register("generateMcpVersionResource") {
-    val outputDir = layout.buildDirectory.dir("generated/resources/mcpBuildInfo")
-    outputs.dir(outputDir)
-    doLast {
-        val outputFile = outputDir.get().file("dexclub-mcp-version.txt").asFile
-        outputFile.parentFile.mkdirs()
-        outputFile.writeText(resolveMcpVersion(), Charsets.UTF_8)
-    }
-}
-
-tasks.processResources {
-    dependsOn(generateMcpVersionResource)
-    from(generateMcpVersionResource)
 }

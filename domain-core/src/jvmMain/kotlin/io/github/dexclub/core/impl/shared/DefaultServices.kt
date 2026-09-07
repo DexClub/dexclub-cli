@@ -27,7 +27,7 @@ import io.github.dexclub.core.impl.workspace.store.DefaultWorkspaceStore
 import io.github.dexclub.core.impl.workspace.DefaultWorkspaceService
 
 actual fun createDefaultServices(): Services {
-    val toolVersion = CoreBuildInfo.version
+    val toolVersion = CoreBuildInfo.VERSION
     val store = DefaultWorkspaceStore()
     val workspaceDependencies = createWorkspaceDependencies(store, toolVersion)
     val workspace = createWorkspaceService(store, workspaceDependencies)
