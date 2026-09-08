@@ -13,21 +13,43 @@ Use this reference when constructing or repairing `find_classes`, `find_methods`
 
 ## Contract Shape
 
-Pass a JSON object in the tool's required `query` argument:
+Construct a `dexclub-query` JSON document and write it to a file before calling the MCP tool.
+The examples below show the document's `query` value; wrap the selected value as follows:
+
+```json
+{
+  "format": "dexclub-query",
+  "formatVersion": 1,
+  "kind": "find_methods",
+  "query": { ... }
+}
+```
+
+Pass the absolute path to that file in the tool's required `query_file` argument. For example:
 
 ```json
 {
   "session_id": "session-id",
-  "query": {
-    "searchPackages": ["com.example"],
-    "matcher": {}
-  },
-  "brief": true,
-  "limit": 20
+  "query_file": "D:/analysis/.dexclub/queries/find-login.query.json",
+  "version": "<skill version>"
 }
 ```
 
-The object shown above is the complete tool argument object. The recipes below show only the value of `query`.
+The file itself contains:
+
+```json
+{
+  "format": "dexclub-query",
+  "formatVersion": 1,
+  "kind": "find_methods",
+  "query": {
+    "searchPackages": ["com.example"],
+    "matcher": {}
+  }
+}
+```
+
+The file document shown above is the complete query document. Pass `brief`, `limit`, `offset`, and `fields` as MCP tool arguments, not document fields. The recipes below show only the value of `query`.
 
 All three query roots support:
 
@@ -252,7 +274,7 @@ Add a package, owner, name, string, number, type, annotation, field, caller, or 
 
 Use this mode when missing a candidate is more costly than several additional calls and the result set is manageable.
 
-1. Keep the same `session_id`, target snapshot, `query`, `brief`, and `fields` across pages.
+1. Keep the same `session_id`, target snapshot, `query_file` document, `brief`, and `fields` across pages.
 2. Prefer `brief=true`, minimal projection, and `limit=200`.
 3. Start at `offset=0` and advance by the number of returned items until `hasMore=false`.
 4. Track candidates by their complete identity, including source location when duplicate descriptors can occur.
@@ -278,7 +300,7 @@ Stratified exploration does not establish absence, uniqueness, prevalence, or co
 ## Repairing Rejected Queries
 
 1. Inspect the current tool schema.
-2. Confirm `query` is an object rather than an escaped JSON string.
+2. Confirm `query_file` points to a UTF-8 query document whose envelope `query` value is an object, not an escaped JSON string.
 3. Remove unknown root properties and all `searchIn*` properties.
 4. Check exact property spelling and enum casing.
 5. Reduce recursive matchers to one valid constraint.

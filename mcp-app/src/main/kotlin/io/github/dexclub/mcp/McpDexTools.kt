@@ -36,13 +36,15 @@ internal fun McpApp.registerDexTools(server: Server) {
         exportClassTextTool(request = request, view = "smali")
     }
 
-    registerCatalogTool(server, McpDexToolCatalog.require("find_classes")) { request ->
+    registerPreflightedCatalogTool(server, McpDexToolCatalog.require("find_classes"), preflight = { request ->
+        loadQueryFile(request, expectedKind = "find_classes")
+    }) { request, query ->
         runToolCatching {
             val target = request.dexToolTarget()
             val execution = findClassesExecution(
                 sessionId = target.sessionId,
                 workdir = target.workdir,
-                query = request.requiredJsonObjectArgument("query"),
+                query = query,
                 offset = request.findOffset(),
                 limit = request.findLimit(),
             )
@@ -59,13 +61,15 @@ internal fun McpApp.registerDexTools(server: Server) {
         }
     }
 
-    registerCatalogTool(server, McpDexToolCatalog.require("find_methods")) { request ->
+    registerPreflightedCatalogTool(server, McpDexToolCatalog.require("find_methods"), preflight = { request ->
+        loadQueryFile(request, expectedKind = "find_methods")
+    }) { request, query ->
         runToolCatching {
             val target = request.dexToolTarget()
             val execution = findMethodsExecution(
                 sessionId = target.sessionId,
                 workdir = target.workdir,
-                query = request.requiredJsonObjectArgument("query"),
+                query = query,
                 offset = request.findOffset(),
                 limit = request.findLimit(),
             )
@@ -82,13 +86,15 @@ internal fun McpApp.registerDexTools(server: Server) {
         }
     }
 
-    registerCatalogTool(server, McpDexToolCatalog.require("find_fields")) { request ->
+    registerPreflightedCatalogTool(server, McpDexToolCatalog.require("find_fields"), preflight = { request ->
+        loadQueryFile(request, expectedKind = "find_fields")
+    }) { request, query ->
         runToolCatching {
             val target = request.dexToolTarget()
             val execution = findFieldsExecution(
                 sessionId = target.sessionId,
                 workdir = target.workdir,
-                query = request.requiredJsonObjectArgument("query"),
+                query = query,
                 offset = request.findOffset(),
                 limit = request.findLimit(),
             )

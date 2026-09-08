@@ -94,6 +94,7 @@ internal fun createTestApp(
     dexService: FakeDexAnalysisService = FakeDexAnalysisService(),
     resourceService: FakeResourceService = FakeResourceService(),
     sessionStore: TargetSessionService = TargetSessionService(),
+    queryFilePolicy: McpQueryFilePolicy = McpQueryFilePolicy(loopback = true, allowedRoots = emptyList()),
 ): McpApp =
     McpApp(
         services = Services(
@@ -102,6 +103,7 @@ internal fun createTestApp(
             resource = resourceService,
         ),
         sessionStore = sessionStore,
+        queryFilePolicy = queryFilePolicy,
     )
 
 internal fun callToolRequest(

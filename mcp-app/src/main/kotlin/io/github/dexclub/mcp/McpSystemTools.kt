@@ -14,4 +14,7 @@ internal fun McpApp.registerSystemTools(server: Server) {
             ),
         )
     }
+    registerCatalogTool(server, McpSystemToolCatalog.require("validate_skill_compatibility")) { request ->
+        validateSkillCompatibility(request)
+    }
 }

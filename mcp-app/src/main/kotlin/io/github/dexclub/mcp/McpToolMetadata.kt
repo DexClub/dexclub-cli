@@ -24,16 +24,16 @@ internal data class McpToolMetadata(
     val acquiresContextLease: Boolean = true,
 ) {
     init {
-        require(inputProperties.none { it.name == VERSION_ARGUMENT }) {
-            "$VERSION_ARGUMENT is reserved for the DexClub MCP version gate: $name"
+        require(inputProperties.none { it.name == VERSION_ARGUMENT || it.name == CONTRACT_VERSION_ARGUMENT }) {
+            "$VERSION_ARGUMENT and $CONTRACT_VERSION_ARGUMENT are reserved for the DexClub MCP compatibility gate: $name"
         }
     }
 
     val effectiveInputProperties: List<McpToolInputProperty>
-        get() = if (requiresVersion) listOf(VERSION_INPUT_PROPERTY) + inputProperties else inputProperties
+        get() = if (requiresVersion) listOf(VERSION_INPUT_PROPERTY, CONTRACT_VERSION_INPUT_PROPERTY) + inputProperties else inputProperties
 
     val effectiveRequired: Set<String>
-        get() = if (requiresVersion) required + VERSION_ARGUMENT else required
+        get() = if (requiresVersion) required + setOf(VERSION_ARGUMENT, CONTRACT_VERSION_ARGUMENT) else required
 
     fun toToolSchema(): ToolSchema =
         ToolSchema(
@@ -48,6 +48,7 @@ internal data class McpToolMetadata(
 
     private companion object {
         const val VERSION_ARGUMENT = "version"
+        const val CONTRACT_VERSION_ARGUMENT = "mcp_contract_version"
         val VERSION_INPUT_PROPERTY = McpToolInputProperty(
             name = VERSION_ARGUMENT,
             schema = buildJsonObject {
@@ -56,14 +57,25 @@ internal data class McpToolMetadata(
             },
             signature = "string",
         )
+        val CONTRACT_VERSION_INPUT_PROPERTY = McpToolInputProperty(
+            name = CONTRACT_VERSION_ARGUMENT,
+            schema = buildJsonObject {
+                put("type", "integer")
+                put("description", "DexClub MCP tool contract version embedded in the calling skill.")
+            },
+            signature = "integer",
+        )
     }
 }
 
 internal object McpToolInputProperties {
-    fun string(name: String): McpToolInputProperty =
+    fun string(name: String, description: String? = null): McpToolInputProperty =
         McpToolInputProperty(
             name = name,
-            schema = stringSchema(),
+            schema = buildJsonObject {
+                put("type", "string")
+                description?.let { put("description", it) }
+            },
             signature = "string",
         )
 
@@ -143,6 +155,22 @@ internal fun McpApp.registerCatalogTool(
         inputSchema = metadata.toToolSchema(),
         requiresVersion = metadata.requiresVersion,
         acquiresContextLease = metadata.acquiresContextLease,
+        handler = handler,
+    )
+}
+
+internal fun <T> McpApp.registerPreflightedCatalogTool(
+    server: Server,
+    metadata: McpToolMetadata,
+    preflight: (CallToolRequest) -> T,
+    handler: suspend (CallToolRequest, T) -> CallToolResult,
+) {
+    server.addPreflightedLoggedTool(
+        name = metadata.name,
+        description = metadata.description,
+        inputSchema = metadata.toToolSchema(),
+        requiresVersion = metadata.requiresVersion,
+        preflight = preflight,
         handler = handler,
     )
 }

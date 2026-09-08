@@ -208,6 +208,7 @@ class McpHttpSmokeTest {
                             put("name", "find_methods")
                             put("arguments", buildJsonObject {
                                 put("version", "wrong")
+                                put("mcp_contract_version", McpBuildInfo.MCP_CONTRACT_VERSION)
                                 put("workdir", workspace.workdir)
                             })
                         })
@@ -236,6 +237,7 @@ class McpHttpSmokeTest {
                                     "arguments",
                                     buildJsonObject {
                                         put("version", McpBuildInfo.VERSION)
+                                        put("mcp_contract_version", McpBuildInfo.MCP_CONTRACT_VERSION)
                                         put("input", "sample.apk")
                                     },
                                 )
@@ -272,6 +274,7 @@ class McpHttpSmokeTest {
                                 put("name", "get_target_session")
                                 put("arguments", buildJsonObject {
                                     put("version", McpBuildInfo.VERSION)
+                                    put("mcp_contract_version", McpBuildInfo.MCP_CONTRACT_VERSION)
                                     put("session_id", sessionId)
                                 })
                             },
@@ -297,6 +300,7 @@ class McpHttpSmokeTest {
                                 put("name", "close_target_session")
                                 put("arguments", buildJsonObject {
                                     put("version", McpBuildInfo.VERSION)
+                                    put("mcp_contract_version", McpBuildInfo.MCP_CONTRACT_VERSION)
                                     put("session_id", sessionId)
                                 })
                             },
@@ -329,6 +333,7 @@ class McpHttpSmokeTest {
                                 put("name", "get_target_session")
                                 put("arguments", buildJsonObject {
                                     put("version", McpBuildInfo.VERSION)
+                                    put("mcp_contract_version", McpBuildInfo.MCP_CONTRACT_VERSION)
                                     put("session_id", sessionId)
                                 })
                             },

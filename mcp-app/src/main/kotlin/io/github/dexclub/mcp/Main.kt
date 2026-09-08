@@ -22,6 +22,7 @@ fun main() {
                 maxHandlesPerSession = config.maxHandlesPerSession,
             ),
         ),
+        queryFilePolicy = McpQueryFilePolicy.fromConfig(config),
     )
     val server = app.createServer()
 
@@ -50,6 +51,7 @@ data class HttpServerConfig(
     val maxSessions: Int = 5,
     val maxHandlesPerSession: Int = 1_000,
     val maxTraceArchives: Int = 10,
+    val queryRoots: List<Path> = emptyList(),
 )
 
 private object McpEnv {
@@ -62,6 +64,7 @@ private object McpEnv {
     const val MAX_SESSIONS = "DEXCLUB_MCP_MAX_SESSIONS"
     const val MAX_HANDLES_PER_SESSION = "DEXCLUB_MCP_MAX_HANDLES_PER_SESSION"
     const val MAX_TRACE_ARCHIVES = "DEXCLUB_MCP_MAX_TRACE_ARCHIVES"
+    const val QUERY_ROOTS = "DEXCLUB_MCP_QUERY_ROOTS"
 
     const val DEFAULT_SESSION_IDLE_TIMEOUT_MINUTES = 10L
     const val DEFAULT_MAX_SESSIONS = 5
@@ -102,6 +105,12 @@ internal fun loadHttpServerConfig(): HttpServerConfig {
             name = McpEnv.MAX_TRACE_ARCHIVES,
             defaultValue = McpEnv.DEFAULT_MAX_TRACE_ARCHIVES,
         ),
+        queryRoots = System.getenv(McpEnv.QUERY_ROOTS)
+            ?.split(java.io.File.pathSeparator)
+            ?.map(String::trim)
+            ?.filter(String::isNotEmpty)
+            ?.mapNotNull { raw -> runCatching { Paths.get(raw) }.getOrNull() }
+            .orEmpty(),
     )
 }
 

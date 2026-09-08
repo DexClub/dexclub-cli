@@ -7,6 +7,7 @@ import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
@@ -29,15 +30,70 @@ internal fun McpApp.validateToolVersion(request: CallToolRequest): CallToolResul
         ?.content
         ?.takeIf(String::isNotBlank)
         ?: return errorResult("version must be a non-empty string", code = "invalid_argument")
-    if (received == McpBuildInfo.VERSION) return null
+    val contractValue = request.arguments?.get("mcp_contract_version")
+        ?: return errorResult("mcp_contract_version is required", code = "missing_argument")
+    val receivedContractVersion = contractValue.contractVersionOrNull()
+        ?: return errorResult("mcp_contract_version must be an integer", code = "invalid_argument")
+    if (received != McpBuildInfo.VERSION) {
+        return versionMismatchResult(received, receivedContractVersion)
+    }
+    if (receivedContractVersion != McpBuildInfo.MCP_CONTRACT_VERSION) {
+        return versionMismatchResult(received, receivedContractVersion)
+    }
+    return null
+}
 
-    return errorResult(
-        message = "DexClub MCP version mismatch. Update the MCP server and dexclub-analysis skill from the same release.",
+private fun McpApp.versionMismatchResult(received: String, receivedContractVersion: Int?): CallToolResult =
+    errorResult(
+        message = "DexClub MCP version or contract version mismatch. Update the MCP server and dexclub-analysis skill from the same release.",
         code = "version_mismatch",
         details = buildJsonObject {
             put("expected_version", McpBuildInfo.VERSION)
             put("received_version", received)
             put("server_contract_version", McpBuildInfo.MCP_CONTRACT_VERSION)
+            receivedContractVersion?.let { put("received_contract_version", it) }
+        },
+    )
+
+private fun JsonElement?.contractVersionOrNull(): Int? =
+    (this as? JsonPrimitive)
+        ?.takeIf { !it.isString && it.content.toIntOrNull() != null }
+        ?.content
+        ?.toIntOrNull()
+
+internal fun McpApp.validateSkillCompatibility(request: CallToolRequest): CallToolResult {
+    val skillVersionValue = request.arguments?.get("skill_version")
+        ?: return errorResult("skill_version is required", code = "missing_argument")
+    val skillVersion = (skillVersionValue as? JsonPrimitive)
+        ?.takeIf(JsonPrimitive::isString)
+        ?.content
+        ?.takeIf(String::isNotBlank)
+        ?: return errorResult("skill_version must be a non-empty string", code = "invalid_argument")
+    val skillContractValue = request.arguments?.get("skill_contract_version")
+        ?: return errorResult("skill_contract_version is required", code = "missing_argument")
+    val skillContractVersion = skillContractValue.contractVersionOrNull()
+        ?: return errorResult("skill_contract_version must be an integer", code = "invalid_argument")
+    if (skillVersion == McpBuildInfo.VERSION && skillContractVersion == McpBuildInfo.MCP_CONTRACT_VERSION) {
+        return successResult(
+            SkillCompatibilityResult.serializer(),
+            SkillCompatibilityResult(
+                compatible = true,
+                skillVersion = skillVersion,
+                skillContractVersion = skillContractVersion,
+                serverVersion = McpBuildInfo.VERSION,
+                serverContractVersion = McpBuildInfo.MCP_CONTRACT_VERSION,
+            ),
+        )
+    }
+
+    return errorResult(
+        message = "DexClub MCP and skill versions do not match. Stop the current analysis and update both from the same release.",
+        code = "version_mismatch",
+        details = buildJsonObject {
+            put("server_version", McpBuildInfo.VERSION)
+            put("skill_version", skillVersion)
+            put("server_contract_version", McpBuildInfo.MCP_CONTRACT_VERSION)
+            put("skill_contract_version", skillContractVersion)
         },
     )
 }

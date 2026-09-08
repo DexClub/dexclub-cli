@@ -180,6 +180,10 @@ object McpRuntimeDiagnostics {
         currentOperation.set(null)
     }
 
+    fun queryFileRead(path: Path, bytes: Int, sha256: String) {
+        trace("MCP query file: path=${path.toAbsolutePath().normalize()} bytes=$bytes sha256=$sha256")
+    }
+
     fun console(message: String) {
         if (!stderrEnabled.get()) return
         System.err.println(message)

@@ -1,14 +1,6 @@
 package io.github.dexclub.mcp
 
-import io.github.dexclub.core.api.dex.FindClassQuery
-import io.github.dexclub.core.api.dex.FindFieldQuery
-import io.github.dexclub.core.api.dex.FindMethodQuery
-
 internal object McpDexToolCatalog {
-    private val findClassSchema = jsonSchemaFor(FindClassQuery.serializer().descriptor)
-    private val findMethodSchema = jsonSchemaFor(FindMethodQuery.serializer().descriptor)
-    private val findFieldSchema = jsonSchemaFor(FindFieldQuery.serializer().descriptor)
-
     val tools: List<McpToolMetadata> = listOf(
         McpToolMetadata(
             name = "inspect_method",
@@ -63,20 +55,17 @@ internal object McpDexToolCatalog {
         ),
         findTool(
             name = "find_classes",
-            description = "Find class candidates with the complete public FindClassQuery and Matcher JSON structure. classHandle is only available with session_id.",
-            schema = findClassSchema,
+            description = "Find class candidates from an absolute-path dexclub-query JSON file. classHandle is only available with session_id.",
             fields = classFieldNamesWithHandle,
         ),
         findTool(
             name = "find_methods",
-            description = "Find method candidates with the complete public FindMethodQuery and Matcher JSON structure. methodHandle is only available with session_id.",
-            schema = findMethodSchema,
+            description = "Find method candidates from an absolute-path dexclub-query JSON file. methodHandle is only available with session_id.",
             fields = methodFieldNamesWithHandle,
         ),
         findTool(
             name = "find_fields",
-            description = "Find field candidates with the complete public FindFieldQuery and Matcher JSON structure.",
-            schema = findFieldSchema,
+            description = "Find field candidates from an absolute-path dexclub-query JSON file.",
             fields = fieldFieldNames,
         ),
     )
@@ -89,20 +78,21 @@ internal object McpDexToolCatalog {
     private fun findTool(
         name: String,
         description: String,
-        schema: JsonSchemaBundle,
         fields: Set<String>,
     ) = McpToolMetadata(
         name = name,
         description = description,
         inputProperties = contextualInputProperties(
-            McpToolInputProperties.jsonObject("query", schema.root),
+            McpToolInputProperties.string(
+                "query_file",
+                "Absolute UTF-8 path to a dexclub-query JSON file readable by the MCP server.",
+            ),
             McpToolInputProperties.integer("offset", minimum = 0),
             McpToolInputProperties.integer("limit", minimum = 1, maximum = MCP_FIND_MAX_LIMIT),
             McpToolInputProperties.enumStringArray("fields", fields),
             McpToolInputProperties.boolean("brief"),
         ),
-        required = setOf("query"),
-        defs = schema.defs,
+        required = setOf("query_file"),
     )
 }
 

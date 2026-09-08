@@ -16,15 +16,18 @@ import kotlinx.serialization.json.Json
 
 class McpApp(
     internal val runtime: SessionAppRuntime = createSessionAppRuntime(),
+    internal val queryFilePolicy: McpQueryFilePolicy = McpQueryFilePolicy(loopback = true, allowedRoots = emptyList()),
 ) {
     constructor(
         services: Services,
         sessionStore: TargetSessionService = TargetSessionService(),
+        queryFilePolicy: McpQueryFilePolicy = McpQueryFilePolicy(loopback = true, allowedRoots = emptyList()),
     ) : this(
         runtime = createSessionAppRuntime(
             services = services,
             sessionService = sessionStore,
         ),
+        queryFilePolicy = queryFilePolicy,
     )
 
     internal val services: Services
@@ -90,6 +93,52 @@ class McpApp(
             val contextLease = if (acquiresContextLease) acquireToolContextLease(request) else null
             try {
                 handler(request).also { result ->
+                    McpRuntimeDiagnostics.toolFinished(name, result.isError == true)
+                }
+            } catch (cause: Throwable) {
+                McpRuntimeDiagnostics.toolFailed(name, cause)
+                throw cause
+            } finally {
+                contextLease?.close()
+            }
+        }
+    }
+
+    internal fun <T> Server.addPreflightedLoggedTool(
+        name: String,
+        description: String,
+        inputSchema: io.modelcontextprotocol.kotlin.sdk.types.ToolSchema,
+        requiresVersion: Boolean,
+        preflight: (CallToolRequest) -> T,
+        handler: suspend (CallToolRequest, T) -> CallToolResult,
+    ) {
+        addTool(
+            name = name,
+            description = description,
+            inputSchema = inputSchema,
+        ) { request ->
+            val versionFailure = if (requiresVersion) validateToolVersion(request) else null
+            if (versionFailure != null) {
+                McpRuntimeDiagnostics.toolStarted(name, "")
+                McpRuntimeDiagnostics.toolFinished(name, isError = true)
+                return@addTool versionFailure
+            }
+            val prepared = try {
+                preflight(request)
+            } catch (cause: McpQueryFileException) {
+                McpRuntimeDiagnostics.toolStarted(name, "")
+                McpRuntimeDiagnostics.toolFinished(name, isError = true)
+                return@addTool errorResult(cause.message, code = cause.code, details = cause.details)
+            } catch (cause: IllegalArgumentException) {
+                McpRuntimeDiagnostics.toolStarted(name, "")
+                McpRuntimeDiagnostics.toolFinished(name, isError = true)
+                return@addTool errorResult(cause.message.orEmpty(), code = "invalid_argument")
+            }
+            val summary = summarizeToolArguments(request.arguments)
+            McpRuntimeDiagnostics.toolStarted(name, summary)
+            val contextLease = acquireToolContextLease(request)
+            try {
+                handler(request, prepared).also { result ->
                     McpRuntimeDiagnostics.toolFinished(name, result.isError == true)
                 }
             } catch (cause: Throwable) {

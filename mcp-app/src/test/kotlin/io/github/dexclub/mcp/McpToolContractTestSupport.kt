@@ -34,9 +34,16 @@ fun assertMcpToolInputContracts(tools: JsonArray) {
     val serverInfoContract = actual.getValue("get_server_info")
     assertFalse("version" in serverInfoContract.properties)
     assertFalse("version" in serverInfoContract.required)
-    actual.filterKeys { it != "get_server_info" }.forEach { (name, contract) ->
+    val compatibilityContract = actual.getValue("validate_skill_compatibility")
+    assertEquals("string", compatibilityContract.properties["skill_version"])
+    assertEquals("integer", compatibilityContract.properties["skill_contract_version"])
+    assertTrue("skill_version" in compatibilityContract.required)
+    assertTrue("skill_contract_version" in compatibilityContract.required)
+    actual.filterKeys { it !in setOf("get_server_info", "validate_skill_compatibility") }.forEach { (name, contract) ->
         assertEquals("string", contract.properties["version"], "$name must expose version as a string")
         assertTrue("version" in contract.required, "$name must require version")
+        assertEquals("integer", contract.properties["mcp_contract_version"], "$name must expose contract version as an integer")
+        assertTrue("mcp_contract_version" in contract.required, "$name must require contract version")
     }
 }
 

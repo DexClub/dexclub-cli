@@ -55,7 +55,7 @@ Copy-Item -Recurse -Force .\mcp-app\build\generated\skills\dexclub-analysis C:\U
 1. `dexclub` MCP 已连接
 2. 当前会话能看到 `mcp__dexclub__`
 3. `dexclub-analysis` 已从生成目录同步到 `$CODEX_HOME/skills`
-4. `get_server_info` 与 skill metadata 中的版本一致
+4. 第一个 DexClub 调用是 `validate_skill_compatibility`，并使用 skill metadata 返回 `compatible=true`
 
 然后可在一个无上下文新会话里显式要求：
 
@@ -66,13 +66,13 @@ Copy-Item -Recurse -Force .\mcp-app\build\generated\skills\dexclub-analysis C:\U
 如果 skill 与 MCP 都生效，Codex 应优先：
 
 - 使用 `mcp__dexclub__`
-- 先调用 `get_server_info` 并完成版本预检
-- 每个后续 MCP 调用都传入 skill metadata 中的 `version`
+- 第一个 DexClub 调用必须是 `validate_skill_compatibility`；`get_server_info` 只用于预检成功后的诊断
+- 每个后续业务 MCP 调用都传入 skill metadata 中的 `version` 和 `mcp_contract_version`
 - 先 `open_target_session`
 - `open_target_session.input` 使用绝对路径，不要传相对路径
 - 首轮优先 `brief=true`，只有确有必要再显式 `fields`
 - 根据字符串、类、方法、字段、manifest 或 resource 线索选择对应入口
-- `find_classes`、`find_methods`、`find_fields` 的 `query` 使用完整 JSON object
+- `find_classes`、`find_methods`、`find_fields` 使用 `.dexclub/queries/*.query.json` 中的 `query_file`
 - 不使用已删除的 using-strings 工具、旧简化参数或 `searchIn*`
 - 先 `inspect_method` 后 `export_*`
 

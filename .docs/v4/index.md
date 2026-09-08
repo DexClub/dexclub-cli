@@ -40,6 +40,8 @@
    - 当前采用的模块结构结论
 10. [module-rollout.md](./module-rollout.md)
    - 这套模块结构按什么顺序落地，以及为什么这样落
+11. [dex-query-contract.md](./dex-query-contract.md)
+   - MCP `query_file` 查询合同、文件边界与破坏性迁移规则
 
 ## 按状态看
 
@@ -83,6 +85,7 @@
 - [build-and-delivery.md](./build-and-delivery.md)
 - [first-cut.md](./first-cut.md)
 - [gui.md](./gui.md)
+- [dex-query-contract.md](./dex-query-contract.md)
 
 ### 历史归档
 

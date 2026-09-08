@@ -19,15 +19,31 @@ class McpExecutionSupportTest {
 
         assertNull(
             app.validateToolVersion(
-                callToolRequest("find_methods", buildJsonObject { put("version", McpBuildInfo.VERSION) }),
+                callToolRequest("find_methods", buildJsonObject {
+                    put("version", McpBuildInfo.VERSION)
+                    put("mcp_contract_version", McpBuildInfo.MCP_CONTRACT_VERSION)
+                }),
             ),
         )
         assertVersionError(app, buildJsonObject {}, "missing_argument")
         assertVersionError(app, buildJsonObject { put("version", 1) }, "invalid_argument")
-        assertVersionError(app, buildJsonObject { put("version", " ${McpBuildInfo.VERSION} ") }, "version_mismatch")
+        assertVersionError(app, buildJsonObject {
+            put("version", McpBuildInfo.VERSION)
+        }, "missing_argument")
+        assertVersionError(app, buildJsonObject {
+            put("version", McpBuildInfo.VERSION)
+            put("mcp_contract_version", "${McpBuildInfo.MCP_CONTRACT_VERSION}")
+        }, "invalid_argument")
+        assertVersionError(app, buildJsonObject {
+            put("version", McpBuildInfo.VERSION)
+            put("mcp_contract_version", McpBuildInfo.MCP_CONTRACT_VERSION + 1)
+        }, "version_mismatch")
         val mismatch = assertVersionError(
             app,
-            buildJsonObject { put("version", "different-version") },
+            buildJsonObject {
+                put("version", "different-version")
+                put("mcp_contract_version", McpBuildInfo.MCP_CONTRACT_VERSION)
+            },
             "version_mismatch",
         )
         val details = mismatch.getValue("error").jsonObject.getValue("details").jsonObject
@@ -37,6 +53,40 @@ class McpExecutionSupportTest {
             McpBuildInfo.MCP_CONTRACT_VERSION,
             details.getValue("server_contract_version").jsonPrimitive.content.toInt(),
         )
+    }
+
+    @Test
+    fun skillCompatibilityRequiresBothMatchingMetadataFields() {
+        val app = createTestApp()
+        val compatible = app.validateSkillCompatibility(
+            callToolRequest("validate_skill_compatibility", buildJsonObject {
+                put("skill_version", McpBuildInfo.VERSION)
+                put("skill_contract_version", McpBuildInfo.MCP_CONTRACT_VERSION)
+            }),
+        )
+        assertEquals(null, compatible.isError)
+        val compatiblePayload = Json.parseToJsonElement((compatible.content.single() as TextContent).text.orEmpty()).jsonObject
+        assertEquals(true, compatiblePayload.getValue("compatible").jsonPrimitive.content.toBoolean())
+
+        val mismatch = app.validateSkillCompatibility(
+            callToolRequest("validate_skill_compatibility", buildJsonObject {
+                put("skill_version", "different-version")
+                put("skill_contract_version", McpBuildInfo.MCP_CONTRACT_VERSION)
+            }),
+        )
+        assertEquals(true, mismatch.isError)
+        val payload = Json.parseToJsonElement((mismatch.content.single() as TextContent).text.orEmpty()).jsonObject
+        assertEquals("version_mismatch", payload.getValue("error").jsonObject.getValue("code").jsonPrimitive.content)
+
+        val invalid = app.validateSkillCompatibility(
+            callToolRequest("validate_skill_compatibility", buildJsonObject {
+                put("skill_version", McpBuildInfo.VERSION)
+                put("skill_contract_version", "${McpBuildInfo.MCP_CONTRACT_VERSION}")
+            }),
+        )
+        assertEquals(true, invalid.isError)
+        val invalidPayload = Json.parseToJsonElement((invalid.content.single() as TextContent).text.orEmpty()).jsonObject
+        assertEquals("invalid_argument", invalidPayload.getValue("error").jsonObject.getValue("code").jsonPrimitive.content)
     }
 
     @Test

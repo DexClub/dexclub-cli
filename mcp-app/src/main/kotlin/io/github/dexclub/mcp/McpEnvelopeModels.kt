@@ -26,6 +26,15 @@ internal data class ServerInfoResult(
 )
 
 @Serializable
+internal data class SkillCompatibilityResult(
+    val compatible: Boolean,
+    @SerialName("skill_version") val skillVersion: String,
+    @SerialName("skill_contract_version") val skillContractVersion: Int,
+    @SerialName("server_version") val serverVersion: String,
+    @SerialName("server_contract_version") val serverContractVersion: Int,
+)
+
+@Serializable
 internal data class OpenTargetSessionResult(
     val sessionId: String,
     val createdAt: String,

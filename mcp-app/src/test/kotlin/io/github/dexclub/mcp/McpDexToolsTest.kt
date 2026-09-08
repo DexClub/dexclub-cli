@@ -11,6 +11,7 @@ import io.github.dexclub.core.api.shared.MethodSmaliMode
 import io.github.dexclub.core.api.shared.SourceLocator
 import io.github.dexclub.core.api.workspace.WorkspaceRef
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -19,6 +20,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.io.path.createTempFile
+import kotlin.io.path.writeText
 
 class McpDexToolsTest {
     @Test
@@ -94,13 +97,27 @@ class McpDexToolsTest {
     }
 
     @Test
-    fun requiredQueryMustBeJsonObject() {
+    fun queryFileLoaderRejectsLegacyArguments() {
         val request = callToolRequest("find_methods", buildJsonObject { put("query", "{}") })
 
-        assertEquals(
-            "query must be a JSON object",
-            assertFailsWith<IllegalArgumentException> { request.requiredJsonObjectArgument("query") }.message,
+        val error = assertFailsWith<McpQueryFileException> {
+            createTestApp().loadQueryFile(request, "find_methods")
+        }
+        assertEquals("query_contract_removed", error.code)
+    }
+
+    @Test
+    fun queryFileLoaderReadsEnvelopeAndPreservesJsonStrings() {
+        val file = createTempFile(suffix = ".query.json")
+        file.writeText(
+            """{"format":"dexclub-query","formatVersion":1,"kind":"find_methods","query":{"matcher":{"usingStrings":[{"value":"{\"event\":\"login\"}"}]}}}""",
         )
+
+        val query = createTestApp().loadQueryFile(
+            callToolRequest("find_methods", buildJsonObject { put("query_file", file.toAbsolutePath().toString()) }),
+            "find_methods",
+        )
+        assertEquals("{\"event\":\"login\"}", query["matcher"]!!.jsonObject["usingStrings"]!!.jsonArray.single().jsonObject["value"]!!.jsonPrimitive.content)
     }
 
     @Test

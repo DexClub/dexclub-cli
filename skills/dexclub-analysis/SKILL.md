@@ -15,11 +15,12 @@ Drive `mcp__dexclub__` as the primary APK, Dex, manifest, and resource analysis 
 ## Hard Gate
 
 Before analysis, confirm that `mcp__dexclub__` is available in the current tool list. Then call
-`get_server_info` before any other DexClub tool and compare its `version` and
-`mcp_contract_version` with this skill's `dexclub_mcp_version` and
-`dexclub_mcp_contract_version` metadata.
+`validate_skill_compatibility` as the first DexClub tool, before `get_server_info` or any business
+DexClub tool. Pass this skill's `dexclub_mcp_version` as `skill_version` and
+`dexclub_mcp_contract_version` as `skill_contract_version`.
 
-If the MCP is unavailable, `get_server_info` is unavailable, or either version differs:
+Continue only when `validate_skill_compatibility` returns `compatible=true`. If the MCP is
+unavailable, the compatibility tool is unavailable, or it returns an error:
 
 - stop
 - tell the user the DexClub MCP and skill must come from the same release
@@ -27,7 +28,9 @@ If the MCP is unavailable, `get_server_info` is unavailable, or either version d
 
 Do not fall back to shell reverse engineering, local decompiled output, or dexclub CLI. This skill is MCP-first.
 Do not copy the version returned by the server into later calls to bypass a mismatch. Every DexClub
-business tool call must include `version` set to this skill's `dexclub_mcp_version` metadata value.
+business tool call must include `version` set to this skill's `dexclub_mcp_version` metadata value
+and `mcp_contract_version` set to this skill's `dexclub_mcp_contract_version` metadata value.
+Use `get_server_info` only for diagnostics after compatibility succeeds; it is not a preflight step.
 
 ## Default Workflow
 
@@ -63,7 +66,7 @@ verify supported operations; do not report the top-level counts as an extraction
 Choose the entry tool by clue type instead of following one global tool priority.
 
 - exact method descriptor: `inspect_method`
-- code string or literal: `find_methods` with `query.matcher.usingStrings`
+- code string or literal: `find_methods` with the query document's `query.matcher.usingStrings`
 - class-level string or class structure: `find_classes`
 - class or method name: `find_classes` or `find_methods` with the corresponding matcher
 - field name, type, owner, reader, or writer: `find_fields`
@@ -72,7 +75,7 @@ Choose the entry tool by clue type instead of following one global tool priority
 - resource name or identity: `list_res`
 - concrete resource value: `get_resource_value`
 - decoded, raw, reference, or bag-item resource value clue: `find_resource_values`
-- resource ID usage in Dex: convert the hexadecimal resId to its signed 32-bit decimal value, then use `find_methods` with `query.matcher.usingNumbers[].intValue`
+- resource ID usage in Dex: convert the hexadecimal resId to its signed 32-bit decimal value, then use `find_methods` with the query document's `query.matcher.usingNumbers[].intValue`
 
 Do not start several broad paths in parallel. Test the strongest clue first, then backtrack when that path stops adding facts.
 
@@ -94,10 +97,11 @@ Use only these unified Dex search tools:
 
 For each tool:
 
-- pass `query` as a required JSON object, never a JSON string
-- construct `query` from the exact recursive schema advertised by the tool
-- keep root filters such as `searchPackages`, `excludePackages`, `ignorePackagesCase`, and `findFirst` inside `query`
-- keep structural conditions under `query.matcher`
+- construct a `dexclub-query` document with `format: "dexclub-query"`, `formatVersion: 1`, the current tool `kind`, and the complete recursive query under `query`
+- write the document to `<analysis-root>/.dexclub/queries/*.query.json`
+- pass the absolute path as the required `query_file` string; never pass `query` or `query_json`
+- keep root filters such as `searchPackages`, `excludePackages`, `ignorePackagesCase`, and `findFirst` inside the document's `query`
+- keep structural conditions under the document's `query.matcher`
 - never pass `searchInClasses`, `searchInMethods`, or `searchInFields`
 - never use BatchFind or removed using-strings tools
 - never use legacy flattened inputs such as `class_name_contains`, `method_name_contains`, or `descriptor_contains`
@@ -106,6 +110,12 @@ Read [references/find-queries.md](references/find-queries.md) whenever construct
 
 Read the required query reference before the first `find_*` call. A rejected exploratory query is
 a failed attempt, not a valid endpoint check, even when a corrected retry later succeeds.
+
+The MCP server reads the query file as UTF-8 JSON, accepts an optional UTF-8 BOM, and enforces a
+1 MiB file limit. The file must be visible to the MCP process and use an absolute path. Keep the
+file unchanged across pagination; when the query changes, create or explicitly replace the file
+and restart from `offset=0`. A JSON document stored inside a matcher string remains a string and
+must not be recursively parsed.
 
 Start recursive relationship matchers one layer deep. Add another layer only when it tests a concrete hypothesis and materially narrows candidates.
 
@@ -162,7 +172,7 @@ When `hasMore=true`:
 - narrow only with evidence independent of superficial similarity in the current window
 - report incomplete coverage as `examined/total` when stopping before `hasMore=false`
 
-Use exhaustive coverage for a manageable result set: keep the same `session_id`, `query`, projection, and target snapshot; use `brief=true` with `limit=200`; advance `offset` until `hasMore=false`; inspect only the resulting shortlist. For a result set too large to exhaust, sample separated offsets only to discover clusters and better Matcher constraints. Never use sampling to prove a negative or complete result.
+Use exhaustive coverage for a manageable result set: keep the same `session_id`, `query_file`, projection, and target snapshot; use `brief=true` with `limit=200`; advance `offset` until `hasMore=false`; inspect only the resulting shortlist. For a result set too large to exhaust, sample separated offsets only to discover clusters and better Matcher constraints. Never use sampling to prove a negative or complete result.
 
 Read the paging modes and stopping rules in [references/find-queries.md](references/find-queries.md) before drawing conclusions from a truncated `find_*` result.
 
@@ -229,7 +239,7 @@ exact `list_res` request already answered in the same target snapshot.
 - `qualifier` limits matches to one configuration
 - results can project `qualifier`, `valueKind`, `matchTarget`, `bagIndex`, and `bagKey` to locate the exact match
 
-For a resource-to-code chain, preserve the hexadecimal resource ID from Manifest, XML, `list_res`, or a typed reference. Resolve variants or bag items first, then convert that ID to signed 32-bit decimal and search Dex with `find_methods.query.matcher.usingNumbers[].intValue`.
+For a resource-to-code chain, preserve the hexadecimal resource ID from Manifest, XML, `list_res`, or a typed reference. Resolve variants or bag items first, then convert that ID to signed 32-bit decimal and search Dex with the `find_methods` query document's `query.matcher.usingNumbers[].intValue`.
 
 Use only schema-advertised resource projection fields. Common fields are:
 
@@ -291,7 +301,7 @@ Recover in this order:
 
 1. determine whether context was lost or the request violates the current schema
 2. rebuild the session or reacquire handles for context loss
-3. inspect the live tool schema and repair `query`, `fields`, or `include`
+3. inspect the live tool schema and repair `query_file`, `fields`, or `include`
 4. retry through MCP
 
 If a recursive query is rejected, remove guessed fields and reduce it to the smallest valid matcher, then add constraints back one at a time. Do not switch to shell or CLI because of a recoverable MCP error.
@@ -325,6 +335,7 @@ End an analysis round with:
 Version discovery tool:
 
 - `get_server_info`
+- `validate_skill_compatibility`
 
 Core session tools:
 
