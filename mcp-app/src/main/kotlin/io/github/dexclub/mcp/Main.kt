@@ -27,8 +27,11 @@ fun main() {
     val server = app.createServer()
 
     McpRuntimeDiagnostics.startupConsole(
-        "DexClub MCP listening on http://${config.host}:${config.port}${config.path} " +
-                "(stateless streamable HTTP, trace=${config.traceEnabled})",
+        buildString {
+            appendLine("--------")
+            append("DexClub MCP listening on http://${config.host}:${config.port}${config.path} ")
+            append("(stateless streamable HTTP, trace=${config.traceEnabled})")
+        },
     )
 
     try {

@@ -129,20 +129,21 @@ object McpRuntimeDiagnostics {
         val crashFile = config.runtimeFilesDir.resolve("hs_err_pid${pid ?: "%p"}.log").toAbsolutePath().normalize()
         val heapDumpDir = config.runtimeFilesDir.toAbsolutePath().normalize()
         val startup = buildString {
-            append("DexClub MCP process started")
-            append(" version=${McpBuildInfo.VERSION}")
-            append(" contractVersion=${McpBuildInfo.MCP_CONTRACT_VERSION}")
-            append(" commit=${McpBuildInfo.COMMIT.take(12)}")
-            append(" dirty=${McpBuildInfo.DIRTY}")
-            pid?.let { append(" pid=$it") }
-            append(" crashFiles=$crashFile")
-            append(" heapDumpPath=$heapDumpDir")
+            appendLine("DexClub MCP process started")
+            appendLine("version=${McpBuildInfo.VERSION}")
+            appendLine("contractVersion=${McpBuildInfo.MCP_CONTRACT_VERSION}")
+            appendLine("commit=${McpBuildInfo.COMMIT.take(12)}")
+            appendLine("dirty=${McpBuildInfo.DIRTY}")
+            pid?.let { appendLine("pid=$it") }
+            appendLine("crashFiles=$crashFile")
+            appendLine("heapDumpPath=$heapDumpDir")
             config.traceLogFile?.let {
-                append(" traceFile=${it.toDisplayPath(config.runtimeFilesDir)}")
+                appendLine("traceFile=${it.toDisplayPath(config.runtimeFilesDir)}")
             }
         }
-        startupConsole(startup)
-        trace("PROCESS START: $startup")
+        val startupText = startup.trimEnd()
+        startupConsole(startupText)
+        trace("PROCESS START: $startupText")
 
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             val message =
