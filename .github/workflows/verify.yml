@@ -77,6 +77,7 @@ jobs:
 
           $env:DEXCLUB_DEXKIT_NATIVE_LIBRARY_DIR = $nativeDir
           & "./gradlew" --no-daemon --console=plain "-Pdexkit.native.dir=$nativeDir" `
+            :buildSrc:test `
             :app-service:test `
             :domain-core:jvmTest `
             :cli-app:test `

@@ -20,22 +20,44 @@ fun Project.resolveDexClubBuildMetadata(mcpContractVersion: Int): DexClubBuildMe
     val explicitDirty = providers.gradleProperty("releaseDirty").orNull
         ?.trim()
         ?.takeIf(String::isNotEmpty)
-        ?.let(::parseDirty)
 
+    val gitCommit = gitOutput("rev-parse", "HEAD")
+    return resolveDexClubBuildMetadataValues(
+        mcpContractVersion = mcpContractVersion,
+        explicitVersion = explicitVersion,
+        explicitCommit = explicitCommit,
+        explicitDirty = explicitDirty,
+        gitCommit = gitCommit,
+        gitDirty = if (explicitDirty == null) {
+            gitOutput("status", "--porcelain")?.isNotEmpty()
+        } else {
+            null
+        },
+    )
+}
+
+internal fun resolveDexClubBuildMetadataValues(
+    mcpContractVersion: Int,
+    explicitVersion: String?,
+    explicitCommit: String?,
+    explicitDirty: String?,
+    gitCommit: String?,
+    gitDirty: Boolean?,
+): DexClubBuildMetadata {
+    require(mcpContractVersion > 0) { "MCP contract version must be greater than zero" }
     if (explicitCommit != null) {
         require(COMMIT_PATTERN.matches(explicitCommit)) {
             "releaseCommit must be a full 40-character Git SHA: $explicitCommit"
         }
     }
 
-    val gitCommit = gitOutput("rev-parse", "HEAD")
     val commit = explicitCommit ?: gitCommit ?: "unknown"
     require(commit == "unknown" || COMMIT_PATTERN.matches(commit)) {
         "releaseCommit must be a full 40-character Git SHA or 'unknown': $commit"
     }
 
-    val dirty = explicitDirty ?: gitOutput("status", "--porcelain")?.isNotEmpty() ?: false
-    val version = explicitVersion?.let(::normalizeReleaseVersion)
+    val dirty = parseDirty(explicitDirty) ?: gitDirty ?: false
+    val version = explicitVersion?.trim()?.takeIf(String::isNotEmpty)?.let(::normalizeReleaseVersion)
         ?: buildString {
             append("dev-")
             append(if (commit == "unknown") commit else commit.take(12))
@@ -46,12 +68,7 @@ fun Project.resolveDexClubBuildMetadata(mcpContractVersion: Int): DexClubBuildMe
         require(!dirty) { "A releaseVersion build requires releaseDirty=false and a clean checkout" }
     }
 
-    return DexClubBuildMetadata(
-        version = version,
-        mcpContractVersion = mcpContractVersion,
-        commit = commit,
-        dirty = dirty,
-    )
+    return DexClubBuildMetadata(version, mcpContractVersion, commit, dirty)
 }
 
 fun Project.dexClubBuildMetadata(): DexClubBuildMetadata =
@@ -71,10 +88,12 @@ private fun normalizeReleaseVersion(raw: String): String {
     return normalized
 }
 
-private fun parseDirty(raw: String): Boolean = when (raw.lowercase()) {
-    "true" -> true
-    "false" -> false
-    else -> error("releaseDirty must be 'true' or 'false': $raw")
+private fun parseDirty(raw: String?): Boolean? = raw?.trim()?.takeIf(String::isNotEmpty)?.let {
+    when (it.lowercase()) {
+        "true" -> true
+        "false" -> false
+        else -> error("releaseDirty must be 'true' or 'false': $it")
+    }
 }
 
 private fun Project.gitOutput(vararg arguments: String): String? = try {

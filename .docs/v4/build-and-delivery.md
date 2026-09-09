@@ -238,6 +238,13 @@ CLI 和 MCP 的交付路径应优先表达：
 - `commit`
 - `dirty`
 
+根工程的解析优先级为：显式 `-PreleaseVersion`、本地 Git 开发版本、`dev-unknown`；commit
+优先使用显式 `-PreleaseCommit`，再回退到 `git rev-parse HEAD` 和 `unknown`；dirty 优先使用
+显式 `-PreleaseDirty`，再读取 `git status --porcelain`，无 Git 时默认为 `false`。正式版本会
+去除单个前导 `v`，非法版本、非法完整 SHA、非法 dirty 值和正式版本 dirty 状态都会使构建失败。
+正式版本与开发版本均由同一份 `DexClubBuildMetadata` 提供给 CLI、MCP、domain-core、发行包
+和版本化 skill；`MCP_CONTRACT_VERSION` 是根工程维护的固定合同版本，不从 tag 或 commit 推导。
+
 本地没有显式发行版本时，Gradle 根据当前 Git 状态生成开发版本，例如
 `dev-<shortCommit>` 或 `dev-<shortCommit>-dirty`。因此本地编译、测试和直接启动 MCP 不依赖
 GitHub Actions。正式构建由 CI 显式传入版本、完整 commit 和 clean 状态，并在构建前校验
@@ -248,8 +255,17 @@ tool 调用要求调用方声明该版本；`get_server_info` 用于启动后的
 使用 Agent skill，需要先生成并同步当前构建对应的 skill 副本，否则旧 skill 与当前 MCP
 不匹配时会被拒绝。
 
-本节记录当前已落地的边界和开发入口。更完整的构建元数据设计稿仍属于后续整理材料，不作为
-本轮交付文档或提交内容；后续若继续扩展 GUI、发布协调或兼容策略，再单独更新本节。
+CLI/MCP 的发行 workflow 接收统一的版本、完整 commit 和 clean 状态输入，并在聚合 job 中解包
+最终 zip，校验每个包恰好包含一份 `VERSION`，且 CLI 与 MCP 的完整元数据逐字段一致。MCP 包还
+必须包含已经替换占位符的 `dexclub-analysis` skill；CI 不会在 Gradle 构建后重新推导或改写版本。
+
+构建元数据测试位于 `buildSrc/src/test`，覆盖解析校验、Git/dirty/unknown 回退、生成内容和
+字节稳定性；Gradle TestKit 进一步验证版本或模板输入变化时无需 `clean` 即重新生成，验证入口
+为 `./gradlew :buildSrc:test`，并已接入 CI。当前本地 skill 同步仍使用生成任务加手动复制命令，
+自动写入 `$CODEX_HOME/skills` 暂不实现，以避免跨平台路径和覆盖策略扩大构建任务职责。
+
+本节记录当前已落地的边界和开发入口。未来扩展 GUI、发布协调或兼容策略时，继续复用根工程
+metadata provider，并按平台生成对应的 BuildInfo；不应恢复模块各自解析版本的实现。
 
 ## CI 的位置
 
